@@ -1,0 +1,19 @@
+{
+  "server_name": "agent-mcp",
+  "tool_prefix": "",
+  "transport": "dual",
+  "host": "127.0.0.1",
+  "port": 8000,
+  "auth_mode": "bearer",
+  "api_key": "REPLACE_WITH_YOUR_SECRET_TOKEN",
+  "oauth_base_url": "",
+  "oauth_client_id": "",
+  "oauth_client_secret": "",
+  "oauth_redirect_uris": [],
+  "roots": [],
+  "read_only": false,
+  "allow_secrets": false,
+  "default_timeout": 60,
+  "log_level": "INFO",
+  "log_file": null
+}

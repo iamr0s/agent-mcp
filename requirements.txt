@@ -1,0 +1,12 @@
+# Core MCP server (required for CLI & Web GUI)
+fastmcp>=2.11.0
+
+# Native frameless desktop window (Windows / macOS / Linux)
+pywebview>=5.0
+
+# System tray icon & menu (Windows also works natively via pywin32, Linux/macOS use pystray)
+pillow>=10.0.0
+pystray>=0.19.5
+
+# Fullscreen Claude-style Terminal UI (`agent-mcp tui`)
+textual>=1.0.0

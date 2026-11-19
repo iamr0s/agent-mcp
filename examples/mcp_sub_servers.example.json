@@ -1,0 +1,13 @@
+{
+  "servers": [
+    {
+      "name": "example-stdio-mcp",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {},
+      "description": "Example nested stdio Sub-MCP server"
+    }
+  ]
+}

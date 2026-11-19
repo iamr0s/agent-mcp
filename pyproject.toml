@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-mcp"
+version = "1.2.0"
+description = "Cross-platform Local Agent MCP Server (Filesystem + Command Execution + Sub-MCP Gateway + Claude-style Desktop GUI)"
+readme = "README.md"
+license = { text = "GPL-3.0-only" }
+requires-python = ">=3.10"
+authors = [
+    { name = "iamr0s" },
+]
+dependencies = [
+    "fastmcp>=2.11.0",
+]
+
+[project.optional-dependencies]
+desktop = [
+    "pywebview>=5.0",
+]
+tray = [
+    "pystray>=0.19.5",
+    "pillow>=10.0.0",
+]
+tui = [
+    "textual>=1.0.0",
+]
+full = [
+    "pywebview>=5.0",
+    "pystray>=0.19.5",
+    "pillow>=10.0.0",
+    "textual>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/iamr0s/agent-mcp"
+Repository = "https://github.com/iamr0s/agent-mcp"
+Issues = "https://github.com/iamr0s/agent-mcp/issues"
+
+[project.scripts]
+agent-mcp = "agent_mcp.cli:main"
+agent-mcp-gui = "agent_mcp.cli:main_gui"
+
+[tool.setuptools.packages.find]
+include = ["agent_mcp*"]
+
+[tool.setuptools.package-data]
+agent_mcp = ["assets/*"]
