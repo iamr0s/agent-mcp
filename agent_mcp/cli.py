@@ -537,6 +537,7 @@ def parse_cli(argv: list[str]) -> tuple[ServerConfig, str, int, list[str], bool]
 
     read_only = args.read_only if args.read_only is not None else bool(saved.get("read_only", False))
     allow_secrets = args.allow_secrets if args.allow_secrets is not None else bool(saved.get("allow_secrets", False))
+    relaxed_command_annotations = bool(saved.get("relaxed_command_annotations", False))
     timeout = int(args.timeout or saved.get("default_timeout") or 60)
 
     cfg = ServerConfig(
@@ -562,6 +563,7 @@ def parse_cli(argv: list[str]) -> tuple[ServerConfig, str, int, list[str], bool]
         roots=roots,
         read_only=read_only,
         allow_secrets=allow_secrets,
+        relaxed_command_annotations=relaxed_command_annotations,
         default_timeout=timeout,
         stateless_http=not args.stateful,
         log_level=(args.log_level or os.environ.get("MCP_LOG_LEVEL") or saved.get("log_level") or "INFO").upper(),

@@ -119,6 +119,7 @@ class AccessPolicy:
     host: str = ""
     read_only: bool = False
     allow_secrets: bool = False
+    relaxed_command_annotations: bool = False
     roots: list[Path] = dataclasses.field(default_factory=list)
 
 
@@ -145,6 +146,7 @@ def get_effective_policy(config: ServerConfig) -> AccessPolicy:
         host="",
         read_only=config.read_only,
         allow_secrets=config.allow_secrets,
+        relaxed_command_annotations=config.relaxed_command_annotations,
         roots=list(config.roots),
     )
 
@@ -171,6 +173,7 @@ class ServerConfig:
     roots: list[Path] = dataclasses.field(default_factory=list)
     read_only: bool = False
     allow_secrets: bool = False
+    relaxed_command_annotations: bool = False
     max_read_chars: int = 60_000
     max_cmd_chars: int = 15_000
     default_timeout: int = 60
@@ -221,6 +224,7 @@ def normalize_profile(raw: dict[str, Any], idx: int = 0) -> dict[str, Any]:
         "inherit_permissions": bool(raw.get("inherit_permissions", True)),
         "read_only": bool(raw.get("read_only", False)),
         "allow_secrets": bool(raw.get("allow_secrets", False)),
+        "relaxed_command_annotations": bool(raw.get("relaxed_command_annotations", False)),
         "roots": [str(r).strip() for r in roots_raw if str(r).strip()],
     }
 
@@ -264,6 +268,7 @@ def ensure_profiles_in_config(data: dict[str, Any]) -> list[dict[str, Any]]:
                     "inherit_permissions": True,
                     "read_only": bool(data.get("read_only", False)),
                     "allow_secrets": bool(data.get("allow_secrets", False)),
+                    "relaxed_command_annotations": bool(data.get("relaxed_command_annotations", False)),
                     "roots": list(data.get("roots") or []),
                 },
                 idx,

@@ -74,6 +74,33 @@ def build_server(config: ServerConfig) -> Any:
 
     prefix = sanitize_prefix(config.tool_prefix)
 
+    try:
+        from fastmcp.server.middleware import Middleware
+        from mcp.types import ToolAnnotations
+
+        _run_cmd_name = f"{prefix}run_command" if prefix else "run_command"
+        _safe_write_ann = ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+
+        class _PolicyAnnotationsMiddleware(Middleware):
+            async def on_list_tools(self, context: Any, call_next: Any) -> Any:
+                tools = await call_next(context)
+                policy = get_effective_policy(config)
+                if not policy.relaxed_command_annotations:
+                    return tools
+                return [
+                    t.model_copy(update={"annotations": _safe_write_ann}) if getattr(t, "name", None) == _run_cmd_name else t
+                    for t in tools
+                ]
+
+        mcp.add_middleware(_PolicyAnnotationsMiddleware())
+    except Exception:
+        pass
+
     def tool(annotations: dict[str, Any]):
         def _decorator(fn: Any) -> Any:
             tname = f"{prefix}{fn.__name__}" if prefix else fn.__name__
@@ -293,6 +320,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
         raw_profiles: list[dict[str, Any]],
         global_ro: bool,
         global_sec: bool,
+        global_relaxed: bool,
         global_roots: list[Path],
         global_auth_mode: str,
         global_api_key: str | None,
@@ -358,6 +386,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
             "require_bearer_only": req_bearer,
             "global_ro": global_ro,
             "global_sec": global_sec,
+            "global_relaxed": global_relaxed,
             "global_roots": global_roots,
         }
 
@@ -367,6 +396,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
             list(config.profiles or []),
             config.read_only,
             config.allow_secrets,
+            config.relaxed_command_annotations,
             list(config.roots),
             config.auth_mode,
             config.api_key,
@@ -407,6 +437,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
                     profs,
                     bool(saved.get("read_only", config.read_only)),
                     bool(saved.get("allow_secrets", config.allow_secrets)),
+                    bool(saved.get("relaxed_command_annotations", config.relaxed_command_annotations)),
                     g_roots,
                     str(saved.get("auth_mode") or config.auth_mode),
                     saved.get("api_key") or config.api_key,
@@ -427,6 +458,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
                 host=host_str,
                 read_only=st["global_ro"],
                 allow_secrets=st["global_sec"],
+                relaxed_command_annotations=st["global_relaxed"],
                 roots=list(st["global_roots"]),
             )
         roots = [Path(r).expanduser().resolve() for r in (prof.get("roots") or []) if str(r).strip()]
@@ -436,6 +468,7 @@ def run_server(mcp: Any, config: ServerConfig) -> None:
             host=host_str,
             read_only=bool(prof.get("read_only", False)),
             allow_secrets=bool(prof.get("allow_secrets", False)),
+            relaxed_command_annotations=bool(prof.get("relaxed_command_annotations", False)),
             roots=roots,
         )
 

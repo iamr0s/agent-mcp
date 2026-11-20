@@ -1016,8 +1016,9 @@ body.dashboard-mode .dash-only{display:inline-flex}
         <div class="card" id="card-perm">
           <h2>全局默认权限与日志</h2>
           <div class="row-inline">
-            <label class="chk"><input id="c-ro" type="checkbox" /> 默认只读模式 (--read-only)</label>
-            <label class="chk"><input id="c-sec" type="checkbox" /> 默认允许读取敏感文件</label>
+            <label class="chk"><input id="c-writable" type="checkbox" checked /> 允许写入与执行</label>
+            <label class="chk"><input id="c-sec" type="checkbox" /> 允许读取敏感文件</label>
+            <label class="chk" title="将 run_command 声明为常规写操作而非高危破坏操作，减少客户端反复确认弹窗"><input id="c-relaxed-cmd" type="checkbox" /> 命令免高危声明</label>
           </div>
           <div class="grid">
             <label>默认目录白名单 (留空=全盘)</label>
@@ -1234,8 +1235,9 @@ body.dashboard-mode .dash-only{display:inline-flex}
         <label class="chk"><input id="pf-inherit" type="checkbox" checked onchange="togglePfPerm()" /> 继承全局默认权限（取消勾选可为该入口单独指定权限）</label>
         <div id="pf-perm-box" style="display:none;flex-direction:column;gap:10px">
           <div class="row-inline">
-            <label class="chk"><input id="pf-ro" type="checkbox" /> 仅只读模式（禁止写文件与执行命令）</label>
+            <label class="chk"><input id="pf-writable" type="checkbox" checked /> 允许写入与执行</label>
             <label class="chk"><input id="pf-sec" type="checkbox" /> 允许读取敏感文件</label>
+            <label class="chk" title="将 run_command 声明为常规写操作而非高危破坏操作，减少客户端反复确认弹窗"><input id="pf-relaxed-cmd" type="checkbox" /> 命令免高危声明</label>
           </div>
           <div class="sub-form-row" style="align-items:start"><label style="margin-top:8px">目录白名单</label><textarea id="pf-roots" class="textarea" rows="2" placeholder="每行一个允许访问的目录，留空允许全盘"></textarea></div>
         </div>
@@ -1818,8 +1820,9 @@ function renderProfiles(){
       : (p.base_url || localFallback);
     const permTags = p.inherit_permissions
       ? `<span class="meta-pill">继承全局权限</span>`
-      : `<span class="meta-pill">${p.read_only ? '🔒 只读' : '✏️ 读写执行'}</span>`
-        + (p.allow_secrets ? `<span class="meta-pill">⚠️ 含敏感文件</span>` : '')
+      : `<span class="meta-pill">${p.read_only ? '🔒 仅只读' : '✏️ 可写执行'}</span>`
+        + (p.allow_secrets ? `<span class="meta-pill">⚠️ 允许敏感文件</span>` : '')
+        + (p.relaxed_command_annotations ? `<span class="meta-pill">⚡ 命令免高危声明</span>` : '')
         + (p.roots && p.roots.length ? `<span class="meta-pill">📁 限定 ${p.roots.length} 个目录</span>` : `<span class="meta-pill">🌐 全盘</span>`);
     const tunPill = hasTun
       ? (tState.running
@@ -1983,8 +1986,9 @@ function openProfileModal(idx){
   document.getElementById('pf-ruris').value = p ? (p.oauth_redirect_uris||[]).join('\n') : '';
   document.getElementById('pf-apikey').value = p ? (p.api_key||'') : genRand('sk-mcp-',28);
   document.getElementById('pf-inherit').checked = p ? (p.inherit_permissions !== false) : true;
-  document.getElementById('pf-ro').checked = p ? !!p.read_only : false;
+  document.getElementById('pf-writable').checked = p ? !p.read_only : true;
   document.getElementById('pf-sec').checked = p ? !!p.allow_secrets : false;
+  document.getElementById('pf-relaxed-cmd').checked = p ? !!p.relaxed_command_annotations : false;
   document.getElementById('pf-roots').value = p ? (p.roots||[]).join('\n') : '';
   togglePfPerm();
   initEyeIcons();
@@ -2014,8 +2018,9 @@ async function submitProfileModal(){
     oauth_redirect_uris: splitList(document.getElementById('pf-ruris').value),
     api_key: document.getElementById('pf-apikey').value.trim() || null,
     inherit_permissions: document.getElementById('pf-inherit').checked,
-    read_only: document.getElementById('pf-ro').checked,
+    read_only: !document.getElementById('pf-writable').checked,
     allow_secrets: document.getElementById('pf-sec').checked,
+    relaxed_command_annotations: document.getElementById('pf-relaxed-cmd').checked,
     roots: splitList(document.getElementById('pf-roots').value),
   };
   if(_pfEditIdx !== null) profiles[_pfEditIdx] = item;
@@ -2241,8 +2246,9 @@ async function loadStatus(syncForm = false){
     markCardDirty('basic', false);
   }
   if(syncAll || syncForm === 'perm' || (cfgChanged && !_dirtyPerm)){
-    document.getElementById('c-ro').checked=!!cfg.read_only;
+    document.getElementById('c-writable').checked=!cfg.read_only;
     document.getElementById('c-sec').checked=!!cfg.allow_secrets;
+    document.getElementById('c-relaxed-cmd').checked=!!cfg.relaxed_command_annotations;
     document.getElementById('c-roots').value=(cfg.roots||[]).join('\n');
     document.getElementById('c-loglvl').value=cfg.log_level||'INFO';
     document.getElementById('c-logfile').value=cfg.log_file||'';
@@ -2278,8 +2284,9 @@ async function saveBasicCard(restartAfter){
 async function savePermCard(){
   const splitList = s => s.split(/[\r\n,]+/).map(x=>x.trim()).filter(Boolean);
   const payload={
-    read_only:document.getElementById('c-ro').checked,
+    read_only:!document.getElementById('c-writable').checked,
     allow_secrets:document.getElementById('c-sec').checked,
+    relaxed_command_annotations:document.getElementById('c-relaxed-cmd').checked,
     roots:splitList(document.getElementById('c-roots').value),
     log_level:document.getElementById('c-loglvl').value,
     log_file:document.getElementById('c-logfile').value.trim()||null,
