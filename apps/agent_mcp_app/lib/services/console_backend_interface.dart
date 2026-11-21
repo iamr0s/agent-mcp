@@ -273,6 +273,7 @@ abstract class ConsoleBackend {
 
   Future<Map<String, dynamic>> openExposure({
     required String target,
+    String mode = 'auto',
     int? port,
     String scope = 'auto',
     String? label,
@@ -280,6 +281,8 @@ abstract class ConsoleBackend {
     bool spa = false,
   }) async =>
       const {'ok': false, 'error': 'Unsupported'};
+
+  Future<String?> pickLocalSharePath({required bool directory}) async => null;
 
   Future<Map<String, dynamic>> closeExposure(String id) async =>
       const {'ok': false};

@@ -720,7 +720,7 @@ class _InlineTelemetryRibbon extends StatelessWidget {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: c.recessed,
-        shape: StadiumBorder(side: BorderSide(color: c.hairline)),
+        shape: const StadiumBorder(),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),

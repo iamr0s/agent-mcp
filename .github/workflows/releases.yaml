@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v2.0.0)'
+        description: 'Release tag to publish (e.g. v2.1.0)'
         required: true
-        default: 'v2.0.0'
+        default: 'v2.1.0'
 
 permissions:
   contents: write
@@ -206,7 +206,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Cross-Device Remote Server, Android Dual-Mode & Programmable MCP Edition"
+          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Relaxed Studio UI & 4-Mode External Sharing Edition"
           generate_release_notes: true
           files: |
             dist_artifacts/AgentMCP-*

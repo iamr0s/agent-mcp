@@ -372,6 +372,15 @@ class DashboardHandler {
       return _json({'ok': true, 'tailscale': st.toJson()});
     }
 
+    if (apiPath == '/exposures/pick-path' && req.method == 'POST') {
+      final body = Map<String, dynamic>.from(
+        (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+      );
+      final isDir = body['directory'] == true;
+      final picked = await pickNativeLocalPath(directory: isDir);
+      return _json({'ok': picked != null, 'path': picked ?? ''});
+    }
+
     if (apiPath == '/exposures/open' && req.method == 'POST') {
       try {
         final body = Map<String, dynamic>.from(
@@ -380,6 +389,7 @@ class DashboardHandler {
         final created = await ExposureManager.instance.openExposure(
           config: config,
           rawTarget: (body['target'] ?? '').toString(),
+          mode: (body['mode'] ?? 'auto').toString(),
           portOverride: int.tryParse('${body['port'] ?? ''}'),
           scope: (body['scope'] ?? 'auto').toString(),
           label: body['label']?.toString(),

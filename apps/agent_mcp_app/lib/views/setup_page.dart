@@ -835,10 +835,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                           ),
                           decoration: ShapeDecoration(
                             color: c.recessed,
-                            shape: claudeSuperellipse(
-                              14,
-                              side: BorderSide(color: c.hairline),
-                            ),
+                            shape: claudeSuperellipse(16),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1312,10 +1309,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         padding: const EdgeInsets.all(16),
         decoration: ShapeDecoration(
           color: c.recessed,
-          shape: claudeSuperellipse(
-            15,
-            side: BorderSide(color: c.hairline),
-          ),
+          shape: claudeSuperellipse(17),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1470,10 +1464,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
               decoration: ShapeDecoration(
                 color: c.paper2,
-                shape: claudeSuperellipse(
-                  10,
-                  side: BorderSide(color: c.hairline),
-                ),
+                shape: claudeSuperellipse(12),
               ),
               child: SelectableText(
                 endpointText,

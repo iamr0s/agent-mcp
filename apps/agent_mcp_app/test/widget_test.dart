@@ -92,7 +92,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
         'ok': true,
         'authenticated': true,
         'server_name': 'Omen Desktop Mcp',
-        'version': '2.0.0',
+        'version': '2.1.0',
         'dashboard_mode': false,
       };
 
@@ -105,7 +105,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
   @override
   Future<Map<String, dynamic>> getStatus() async => {
         'running': true,
-        'version': '2.0.0',
+        'version': '2.1.0',
         'dashboard_mode': false,
         'tunnels': {
           'installed': true,
@@ -724,6 +724,8 @@ void main() {
     expect(find.text('新建外网映射与分享'), findsOneWidget);
     expect(find.text('本地网站端口'), findsOneWidget);
     expect(find.text('单个视频 / 文件'), findsOneWidget);
+    expect(find.text('文件夹目录'), findsOneWidget);
+    expect(find.text('静态网站 / HTML'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pump(const Duration(milliseconds: 300));
 

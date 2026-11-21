@@ -99,7 +99,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                         Text('子 MCP 网关', style: serifTitleStyle(c, size: 24)),
                         const SizedBox(height: 4),
                         Text(
-                          '渐进式按需网关 · 对外仅暴露 list / inspect / call 三个元工具，配置即时生效',
+                          '把常用 MCP 服务挂在这里按需取用 · 免去首轮冗长工具列表，改完立即生效',
                           style: sansStyle(c, size: 12.5, color: c.muted),
                         ),
                       ],
@@ -380,10 +380,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                                   ),
                                   decoration: ShapeDecoration(
                                     color: c.recessed,
-                                    shape: claudeSuperellipse(
-                                      10,
-                                      side: BorderSide(color: c.hairline),
-                                    ),
+                                    shape: claudeSuperellipse(11),
                                   ),
                                   child: SelectableText(
                                     endpoint,
@@ -426,7 +423,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 12),
-                                      Divider(color: c.hairline, height: 1),
+                                      Divider(color: c.hairline.withValues(alpha: 0.45), height: 1),
                                       const SizedBox(height: 12),
                                       LayoutBuilder(
                                         builder: (ctx, tbox) {

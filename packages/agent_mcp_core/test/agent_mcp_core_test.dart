@@ -452,4 +452,131 @@ void main() {
       await srv.close(force: true);
     }
   });
+
+  test('4-mode manage_expose: folder drill-down to single-file preview, zip download, and single HTML site', () async {
+    const loopback = '127.0' '.0.1';
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    saveConfigFile(cfgFile, {
+      'server_name': 'expose-4mode-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'none',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg =
+        ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+          ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final server = await engine.serveHttp();
+    saveUpdatedConfigMap(cfgFile, {'port': server.port});
+    final authority = '${server.address.address}:${server.port}';
+
+    try {
+      // Create folder with index.html AND nested subfolder + mp4 + markdown
+      final courseDir = Directory(p.join(sandboxDir.path, 'physics_pack'))
+        ..createSync(recursive: true);
+      File(p.join(courseDir.path, 'index.html'))
+          .writeAsStringSync('<h1>Interactive Optics Website</h1>');
+      File(p.join(courseDir.path, 'guide.md'))
+          .writeAsStringSync('# Lens Formula Notes');
+      final subDir = Directory(p.join(courseDir.path, '01_videos'))
+        ..createSync(recursive: true);
+      File(p.join(subDir.path, 'lens_demo.mp4'))
+          .writeAsBytesSync(List<int>.generate(64, (i) => i));
+
+      Future<Map<String, dynamic>> openMode(String target, String mode) async {
+        final rpc = await engine.handleJsonRpcMessage({
+          'jsonrpc': '2.0',
+          'id': 201,
+          'method': 'tools/call',
+          'params': {
+            'name': 'manage_expose',
+            'arguments': {
+              'action': 'open',
+              'target': target,
+              'mode': mode,
+              'scope': 'lan',
+            },
+          },
+        });
+        final txt =
+            ((rpc!['result'] as Map)['content'] as List).first['text'] as String;
+        return (jsonDecode(txt) as Map<String, dynamic>)['exposure']
+            as Map<String, dynamic>;
+      }
+
+      // 1. Folder mode ALWAYS shows directory listing (even when index.html exists!)
+      final folderExp = await openMode(courseDir.path, 'folder');
+      expect(folderExp['kind'], equals('folder'));
+      final folderId = folderExp['id'] as String;
+
+      final rootListResp = await http.get(
+        Uri.http(authority, '/share/$folderId/'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(rootListResp.statusCode, equals(200));
+      expect(rootListResp.body, contains('01_videos/'));
+      expect(rootListResp.body, contains('guide.md'));
+
+      // Enter subfolder -> lists lens_demo.mp4
+      final subListResp = await http.get(
+        Uri.http(authority, '/share/$folderId/01_videos/'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(subListResp.statusCode, equals(200));
+      expect(subListResp.body, contains('lens_demo.mp4'));
+
+      // Click file inside subfolder -> opens Unified Single-File Preview with Back-to-Folder button!
+      final filePreviewResp = await http.get(
+        Uri.http(authority, '/share/$folderId/01_videos/lens_demo.mp4'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(filePreviewResp.statusCode, equals(200));
+      expect(filePreviewResp.body, contains('<video controls'));
+      expect(filePreviewResp.body, contains('返回所在文件夹'));
+
+      // Zip download of subfolder works cleanly
+      final zipResp = await http.get(
+        Uri.http(authority, '/share/$folderId/01_videos/', {'zip': '1'}),
+      );
+      expect(zipResp.statusCode, equals(200));
+      expect(zipResp.headers['content-type'], equals('application/zip'));
+      expect(zipResp.bodyBytes.length, greaterThan(20));
+
+      // 2. Site mode on the exact same directory renders index.html directly!
+      final siteDirExp = await openMode(courseDir.path, 'site');
+      expect(siteDirExp['kind'], equals('site'));
+      final siteDirResp = await http.get(
+        Uri.http(authority, '/share/${siteDirExp['id']}/'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(siteDirResp.statusCode, equals(200));
+      expect(siteDirResp.body, equals('<h1>Interactive Optics Website</h1>'));
+
+      // 3. Single .html file shared in site mode renders full-screen webpage + sibling CSS!
+      final singleHtml = File(p.join(sandboxDir.path, 'standalone_lab.html'))
+        ..writeAsStringSync('<!doctype html><link rel="stylesheet" href="lab.css"><h2>Single HTML Lab</h2>');
+      File(p.join(sandboxDir.path, 'lab.css')).writeAsStringSync('body { color: #c96442; }');
+      final singleSiteExp = await openMode(singleHtml.path, 'site');
+      expect(singleSiteExp['kind'], equals('site'));
+      final singleHtmlResp = await http.get(
+        Uri.http(authority, '/share/${singleSiteExp['id']}/'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(singleHtmlResp.statusCode, equals(200));
+      expect(singleHtmlResp.body, contains('Single HTML Lab'));
+      final siblingCssResp = await http.get(
+        Uri.http(authority, '/share/${singleSiteExp['id']}/lab.css'),
+      );
+      expect(siblingCssResp.statusCode, equals(200));
+      expect(siblingCssResp.body, contains('#c96442'));
+    } finally {
+      await ExposureManager.instance.closeAllExposures();
+      await server.close(force: true);
+    }
+  });
 }

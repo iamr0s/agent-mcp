@@ -425,8 +425,21 @@ class _WebConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<String?> pickLocalSharePath({required bool directory}) async {
+    final r = await http.post(
+      _uri('/exposures/pick-path'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'directory': directory}),
+    );
+    final d = _decodeResp(r);
+    final pth = (d['path'] ?? '').toString().trim();
+    return (d['ok'] == true && pth.isNotEmpty) ? pth : null;
+  }
+
+  @override
   Future<Map<String, dynamic>> openExposure({
     required String target,
+    String mode = 'auto',
     int? port,
     String scope = 'auto',
     String? label,
@@ -438,6 +451,7 @@ class _WebConsoleBackend extends ConsoleBackend {
       headers: const {'content-type': 'application/json'},
       body: jsonEncode({
         'target': target,
+        'mode': mode,
         if (port != null) 'port': port,
         'scope': scope,
         if (label != null && label.isNotEmpty) 'label': label,

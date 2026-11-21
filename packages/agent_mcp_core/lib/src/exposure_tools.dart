@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 
@@ -23,10 +24,20 @@ const Map<String, String> _mimeByExt = {
   '.js': 'application/javascript; charset=utf-8',
   '.mjs': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.yaml': 'text/yaml; charset=utf-8',
+  '.yml': 'text/yaml; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8',
+  '.py': 'text/plain; charset=utf-8',
+  '.dart': 'text/plain; charset=utf-8',
+  '.ts': 'text/plain; charset=utf-8',
+  '.tsx': 'text/plain; charset=utf-8',
+  '.jsx': 'text/plain; charset=utf-8',
+  '.sh': 'text/plain; charset=utf-8',
+  '.ps1': 'text/plain; charset=utf-8',
+  '.log': 'text/plain; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -62,6 +73,44 @@ bool _isAudioExt(String ext) =>
     const {'.mp3', '.wav', '.m4a', '.ogg'}.contains(ext);
 bool _isImageExt(String ext) =>
     const {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}.contains(ext);
+bool _isPdfExt(String ext) => ext == '.pdf';
+bool _isTextPreviewExt(String ext) => const {
+      '.txt',
+      '.md',
+      '.json',
+      '.yaml',
+      '.yml',
+      '.csv',
+      '.xml',
+      '.py',
+      '.dart',
+      '.js',
+      '.mjs',
+      '.ts',
+      '.tsx',
+      '.jsx',
+      '.sh',
+      '.ps1',
+      '.log',
+      '.html',
+      '.htm',
+      '.css',
+    }.contains(ext);
+
+bool _isSensitiveShareFile(String filePath) {
+  final base = p.basename(filePath).toLowerCase();
+  if (base == '.env' ||
+      (base.startsWith('.env.') && base != '.env.example') ||
+      base == 'id_rsa' ||
+      base == 'id_ed25519' ||
+      base == 'mcp_config.json' ||
+      base == 'oauth_state.json' ||
+      base.endsWith('.pem') ||
+      base.endsWith('.key')) {
+    return true;
+  }
+  return false;
+}
 
 String _htmlEscape(String s) => const HtmlEscape().convert(s);
 
@@ -77,6 +126,62 @@ String _generateShareId() {
   final rng = Random.secure();
   final body = List.generate(12, (_) => chars[rng.nextInt(chars.length)]).join();
   return 'sh_$body';
+}
+
+/// Probes common local web/dev ports on loopback to power 1-click port chips.
+Future<List<int>> scanActiveLocalDevPorts({int? excludePort}) async {
+  const candidates = <int>[3000, 4173, 5000, 5173, 7860, 8000, 8080, 8888];
+  final checks = candidates.where((pt) => pt != excludePort).map((pt) async {
+    try {
+      final sock = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        pt,
+        timeout: const Duration(milliseconds: 110),
+      );
+      await sock.close();
+      return pt;
+    } catch (_) {
+      return null;
+    }
+  });
+  final resolved = await Future.wait(checks);
+  return resolved.whereType<int>().toList();
+}
+
+/// Opens a native OS file or folder dialog on Desktop (Windows/macOS/Linux)
+/// without requiring any third-party native Flutter plugin dependencies.
+Future<String?> pickNativeLocalPath({required bool directory}) async {
+  if (Platform.isAndroid || Platform.isIOS) return null;
+  try {
+    if (Platform.isWindows) {
+      final script = directory
+          ? r'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "选择要分享的文件夹"; if ($f.ShowDialog() -eq "OK") { [Console]::Out.Write($f.SelectedPath) }'
+          : r'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = "选择要分享的文件或网页"; if ($f.ShowDialog() -eq "OK") { [Console]::Out.Write($f.FileName) }';
+      final res = await Process.run(
+        'powershell',
+        ['-NoProfile', '-STA', '-Command', script],
+      ).timeout(const Duration(minutes: 3));
+      final picked = res.stdout.toString().trim();
+      return picked.isEmpty ? null : picked;
+    } else if (Platform.isMacOS) {
+      final prompt = directory
+          ? 'POSIX path of (choose folder with prompt "选择要分享的文件夹")'
+          : 'POSIX path of (choose file with prompt "选择要分享的文件")';
+      final res = await Process.run('osascript', ['-e', prompt])
+          .timeout(const Duration(minutes: 3));
+      final picked = res.stdout.toString().trim();
+      return (res.exitCode == 0 && picked.isNotEmpty) ? picked : null;
+    } else if (Platform.isLinux) {
+      final args = directory
+          ? ['--file-selection', '--directory', '--title=选择要分享的文件夹']
+          : ['--file-selection', '--title=选择要分享的文件'];
+      final res = await Process.run('zenity', args)
+          .timeout(const Duration(minutes: 3));
+      final picked = res.stdout.toString().trim();
+      return (res.exitCode == 0 && picked.isNotEmpty) ? picked : null;
+    }
+  } catch (_) {}
+  return null;
 }
 
 File? findTailscaleCli() {
@@ -152,8 +257,15 @@ class TailscaleRuntimeStatus {
 
 class ExposureItem {
   final String id;
-  final String kind; // 'file' | 'dir' | 'port'
+
+  /// One of the 4 user-facing share archetypes:
+  /// - `'file'`   : Single File Share (opens rich single-file preview/download card)
+  /// - `'folder'` : Folder Directory Explorer (breadcrumbs + subfolders + click file -> single-file preview)
+  /// - `'site'`   : Static Website / HTML Share (renders single `.html` or static website folder directly)
+  /// - `'port'`   : Local Port Forwarding (`127.0.0.1:<port>` reverse proxy)
+  final String kind;
   final String target;
+  final bool targetIsDirectory;
   final int? targetPort;
   final String label;
   final String scope; // 'auto' | 'tailscale' | 'public' | 'lan'
@@ -176,6 +288,7 @@ class ExposureItem {
     required this.id,
     required this.kind,
     required this.target,
+    this.targetIsDirectory = false,
     this.targetPort,
     required this.label,
     required this.scope,
@@ -183,6 +296,8 @@ class ExposureItem {
     required this.createdAtMs,
     this.expiresAtMs,
   });
+
+  bool get needsTrailingSlash => kind == 'folder' || kind == 'site';
 
   bool get isExpired =>
       expiresAtMs != null &&
@@ -465,6 +580,7 @@ class ExposureManager {
       return (null, '', '启动临时公网隧道失败: $e');
     }
   }
+
   List<String> _discoverActivePublicGatewayBases(Map<String, dynamic> saved) {
     final out = <String>[];
     final tunnelStatuses = TunnelManager.instance.getStatuses();
@@ -519,7 +635,7 @@ class ExposureManager {
     final bindsAll = bindHosts.contains('0.0.0.0') || bindHosts.contains('::');
 
     final shareSuffix =
-        item.kind == 'dir' ? '/share/${item.id}/' : '/share/${item.id}';
+        item.needsTrailingSlash ? '/share/${item.id}/' : '/share/${item.id}';
     final rawFileSuffix = item.kind == 'file'
         ? '/share/${item.id}/${Uri.encodeComponent(p.basename(item.target))}'
         : shareSuffix;
@@ -536,9 +652,10 @@ class ExposureManager {
     }
 
     if (tsEnabled && item.tailscaleHttpsUrl.isNotEmpty) {
-      final u = item.kind == 'dir' && !item.tailscaleHttpsUrl.endsWith('/')
-          ? '${item.tailscaleHttpsUrl}/'
-          : item.tailscaleHttpsUrl;
+      final u =
+          item.needsTrailingSlash && !item.tailscaleHttpsUrl.endsWith('/')
+              ? '${item.tailscaleHttpsUrl}/'
+              : item.tailscaleHttpsUrl;
       if (item.tailscaleCleanupArgs != null &&
           item.tailscaleCleanupArgs!.isNotEmpty &&
           item.tailscaleCleanupArgs!.first == 'funnel') {
@@ -624,6 +741,7 @@ class ExposureManager {
     return {
       'id': item.id,
       'kind': item.kind,
+      'target_is_dir': item.targetIsDirectory,
       'label': item.label,
       'target': item.target,
       if (item.targetPort != null) 'port': item.targetPort,
@@ -650,6 +768,7 @@ class ExposureManager {
   Future<Map<String, dynamic>> openExposure({
     required ServerConfig config,
     required String rawTarget,
+    String mode = 'auto',
     int? portOverride,
     String scope = 'auto',
     String? label,
@@ -662,7 +781,7 @@ class ExposureManager {
 
     final saved = loadSavedConfig(config.configFile);
     if (!isExposureEnabledInSaved(saved)) {
-      throw StateError('外网分享功能已在控制台「服务配置」中关闭，请先开启后再创建分享。');
+      throw StateError('外链分享功能已在偏好设置中关闭，请先开启后再创建分享。');
     }
 
     final normScope = scope.trim().toLowerCase();
@@ -671,17 +790,21 @@ class ExposureManager {
             ? normScope
             : 'auto';
 
+    final reqMode = mode.trim().toLowerCase();
     final effTtl = ttlMinutes ?? defaultTtlMinutesInSaved(saved);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final expMs = effTtl > 0 ? nowMs + effTtl * 60 * 1000 : null;
 
     String kind;
     String resolvedTarget;
+    var targetIsDir = false;
     int? targetPort = portOverride;
     String defaultLabel;
 
-    final trimmed = rawTarget.trim();
-    final portOnly = targetPort ?? int.tryParse(trimmed);
+    final trimmed = rawTarget.trim().replaceAll(RegExp(r'^:+'), '');
+    final portOnly = targetPort ??
+        ((reqMode == 'port' || reqMode == 'auto') ? int.tryParse(trimmed) : null);
+
     if (portOnly != null && portOnly >= 1 && portOnly <= 65535) {
       kind = 'port';
       targetPort = portOnly;
@@ -695,27 +818,49 @@ class ExposureManager {
       resolvedTarget = 'http://127.0.0.1:$targetPort';
       defaultLabel = '本地服务 :$targetPort';
     } else {
-      if (trimmed.isEmpty) {
-        throw ArgumentError('请填写要分享的本地文件路径、网页文件夹或本地端口号（如 3000）。');
+      final rawPath = rawTarget.trim();
+      if (rawPath.isEmpty) {
+        throw ArgumentError('请选择或拖入要分享的文件、文件夹、静态网页或本地端口号（如 5173）。');
       }
       final policy = getEffectivePolicy(config);
-      final checkedPath = normalizePath(trimmed, policy.roots);
+      final checkedPath = normalizePath(rawPath, policy.roots);
       if (validateWithPolicy) {
         final deny = checkAccess(checkedPath, config);
         if (deny != null) throw FileSystemException(deny, checkedPath);
       }
       final st = await PrivFs.stat(checkedPath);
       if (!st.exists) {
-        throw FileSystemException('找不到目标文件或目录', checkedPath);
+        throw FileSystemException('找不到目标文件或文件夹', checkedPath);
       }
+      resolvedTarget = checkedPath;
+      targetIsDir = st.isDirectory;
+
       if (st.isDirectory) {
-        kind = 'dir';
-        resolvedTarget = checkedPath;
-        defaultLabel = '网页目录 ${p.basename(checkedPath)}';
+        final hasIndex =
+            (await PrivFs.stat(p.join(checkedPath, 'index.html'))).isFile;
+        if (reqMode == 'folder') {
+          kind = 'folder';
+        } else if (reqMode == 'site' || reqMode == 'dir' && (spa || hasIndex)) {
+          kind = 'site';
+        } else if (reqMode == 'dir') {
+          kind = 'folder';
+        } else {
+          // auto: directory with index.html -> static website, otherwise folder explorer
+          kind = (spa || hasIndex) ? 'site' : 'folder';
+        }
+        defaultLabel = kind == 'site'
+            ? '静态网站 ${p.basename(checkedPath)}'
+            : '文件夹 ${p.basename(checkedPath)}';
       } else {
-        kind = 'file';
-        resolvedTarget = checkedPath;
-        defaultLabel = p.basename(checkedPath);
+        final ext = p.extension(checkedPath).toLowerCase();
+        final isHtmlFile = ext == '.html' || ext == '.htm';
+        if (reqMode == 'site' || (reqMode == 'auto' && isHtmlFile)) {
+          kind = 'site';
+          defaultLabel = '静态网页 ${p.basename(checkedPath)}';
+        } else {
+          kind = 'file';
+          defaultLabel = p.basename(checkedPath);
+        }
       }
     }
 
@@ -724,6 +869,7 @@ class ExposureManager {
       id: id,
       kind: kind,
       target: resolvedTarget,
+      targetIsDirectory: targetIsDir,
       targetPort: targetPort,
       label:
           (label != null && label.trim().isNotEmpty) ? label.trim() : defaultLabel,
@@ -790,9 +936,9 @@ class ExposureManager {
 
     StructuredEventBus.instance.emit({
       'kind': 'info',
-      'badge': '外网分享',
+      'badge': '随手分享',
       'level': 'INFO',
-      'summary': '已开启外网分享 [${item.label}] -> ${serialized['primary_url']}',
+      'summary': '已开启分享 [${item.label}] -> ${serialized['primary_url']}',
     });
 
     return serialized;
@@ -822,10 +968,10 @@ class ExposureManager {
 
     StructuredEventBus.instance.emit({
       'kind': 'info',
-      'badge': '外网分享',
+      'badge': '随手分享',
       'level': 'INFO',
       'summary':
-          '已关闭外网分享 [${item.label}] (${reason == 'expired' ? '到期自动回收' : '手动关闭'})',
+          '已收起分享 [${item.label}] (${reason == 'expired' ? '到期自动收起' : '手动收起'})',
     });
     return true;
   }
@@ -842,10 +988,13 @@ class ExposureManager {
   Future<Map<String, dynamic>> getDashboardSummary(ServerConfig config) async {
     await purgeExpired();
     final saved = loadSavedConfig(config.configFile);
+    final livePort =
+        int.tryParse('${saved['port'] ?? config.port}') ?? config.port;
     final ts = await probeTailscaleStatus();
     final ifaces = await listHostNetworkInterfaces();
     final pubBases = _discoverActivePublicGatewayBases(saved);
     final cfInstalled = findCloudflared() != null;
+    final activePorts = await scanActiveLocalDevPorts(excludePort: livePort);
 
     final list = <Map<String, dynamic>>[];
     final sorted = _items.values.toList()
@@ -871,10 +1020,12 @@ class ExposureManager {
       'tailscale_status': ts.toJson(),
       'public_gateway_bases': pubBases,
       'cloudflared_installed': cfInstalled,
+      'active_local_ports': activePorts,
       'active_count': list.length,
       'items': list,
     };
   }
+
   Future<Response?> tryHandleShareRequest(
     Request req, {
     required ServerConfig config,
@@ -887,7 +1038,7 @@ class ExposureManager {
     final saved = loadSavedConfig(config.configFile);
     if (!isExposureEnabledInSaved(saved)) {
       return Response.forbidden(
-        '外网分享功能已在控制台设置中关闭。',
+        '外链分享功能已在偏好设置中关闭。',
         headers: const {'content-type': 'text/plain; charset=utf-8'},
       );
     }
@@ -931,13 +1082,21 @@ class ExposureManager {
     if (item.kind == 'file') {
       return _serveSingleFile(req, item, subSegments);
     }
-    if (item.kind == 'dir') {
+    if (item.kind == 'folder') {
       final rawReqPath = req.requestedUri.path;
       if (subSegments.isEmpty && !rawReqPath.endsWith('/')) {
         final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
         return Response.found('$rawReqPath/$q');
       }
-      return _serveDirectory(req, item, subSegments);
+      return _serveFolderExplorer(req, item, subSegments);
+    }
+    if (item.kind == 'site') {
+      final rawReqPath = req.requestedUri.path;
+      if (subSegments.isEmpty && !rawReqPath.endsWith('/')) {
+        final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
+        return Response.found('$rawReqPath/$q');
+      }
+      return _serveStaticWebsite(req, item, subSegments);
     }
     if (item.kind == 'port' && item.targetPort != null) {
       return _proxyLocalPort(req, item, subSegments);
@@ -946,45 +1105,31 @@ class ExposureManager {
     return Response.notFound('Unsupported share item.');
   }
 
+  /// Mode 1: Single File Share -> Rich Unified Single-File Preview Card
   Future<Response> _serveSingleFile(
     Request req,
     ExposureItem item,
     List<String> subSegments,
   ) async {
     final fileName = p.basename(item.target);
-    final ext = p.extension(fileName).toLowerCase();
-    final wantRaw = req.url.queryParameters['raw'] == '1' ||
-        req.url.queryParameters['download'] == '1' ||
-        subSegments.isNotEmpty ||
-        !(req.headers['accept'] ?? '').contains('text/html') ||
-        ext == '.html' ||
-        ext == '.htm';
-
     final forceDownload = req.url.queryParameters['download'] == '1';
+    final wantRaw = req.url.queryParameters['raw'] == '1' ||
+        forceDownload ||
+        subSegments.isNotEmpty ||
+        !(req.headers['accept'] ?? '').contains('text/html');
 
-    if (!wantRaw &&
-        (_isVideoExt(ext) || _isAudioExt(ext) || _isImageExt(ext))) {
-      final stat = await PrivFs.stat(item.target);
+    if (!wantRaw) {
       final rawHref =
           '/share/${item.id}/${Uri.encodeComponent(fileName)}?raw=1';
       final dlHref =
           '/share/${item.id}/${Uri.encodeComponent(fileName)}?download=1';
-      final html = _renderMediaLandingHtml(
-        title: item.label,
-        fileName: fileName,
-        sizeHuman: _formatHumanBytes(stat.size),
-        ext: ext,
+      return _renderUnifiedSingleFilePage(
+        item: item,
+        filePath: item.target,
+        displayTitle: item.label,
         rawHref: rawHref,
         dlHref: dlHref,
-      );
-      final bytes = utf8.encode(html);
-      item.bytesSent += bytes.length;
-      return Response.ok(
-        bytes,
-        headers: const {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-        },
+        backToFolderHref: null,
       );
     }
 
@@ -996,7 +1141,8 @@ class ExposureManager {
     );
   }
 
-  Future<Response> _serveDirectory(
+  /// Mode 2: Folder Directory Explorer -> Subfolder Navigation -> Click File = Unified Single-File Preview!
+  Future<Response> _serveFolderExplorer(
     Request req,
     ExposureItem item,
     List<String> subSegments,
@@ -1010,14 +1156,119 @@ class ExposureManager {
     if (candidatePath != rootPath && !p.isWithin(rootPath, candidatePath)) {
       return Response.forbidden('Forbidden path traversal.');
     }
+    if (_isSensitiveShareFile(candidatePath)) {
+      return Response.forbidden('Sensitive file hidden.');
+    }
 
     final candStat = await PrivFs.stat(candidatePath);
     if (candStat.isDirectory) {
-      final indexHtml = p.join(candidatePath, 'index.html');
-      if ((await PrivFs.stat(indexHtml)).isFile) {
-        return _streamFileWithRange(req, item, indexHtml);
+      final rawReqPath = req.requestedUri.path;
+      if (!rawReqPath.endsWith('/')) {
+        final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
+        return Response.found('$rawReqPath/$q');
+      }
+      if (req.url.queryParameters['zip'] == '1') {
+        return _serveDirectoryAsZip(item, candidatePath, relParts);
       }
       return _renderDirectoryListing(item, candidatePath, relParts);
+    }
+
+    if (!candStat.isFile) {
+      return Response.notFound('File not found.');
+    }
+
+    final forceDownload = req.url.queryParameters['download'] == '1';
+    final wantRaw = req.url.queryParameters['raw'] == '1' ||
+        forceDownload ||
+        !(req.headers['accept'] ?? '').contains('text/html');
+
+    if (!wantRaw) {
+      final encodedRel = relParts.map(Uri.encodeComponent).join('/');
+      final baseFileHref = '/share/${item.id}/$encodedRel';
+      final parentHref = relParts.length <= 1
+          ? '/share/${item.id}/'
+          : '/share/${item.id}/${relParts.sublist(0, relParts.length - 1).map(Uri.encodeComponent).join('/')}/';
+      return _renderUnifiedSingleFilePage(
+        item: item,
+        filePath: candidatePath,
+        displayTitle: p.basename(candidatePath),
+        rawHref: '$baseFileHref?raw=1',
+        dlHref: '$baseFileHref?download=1',
+        backToFolderHref: parentHref,
+      );
+    }
+
+    return _streamFileWithRange(
+      req,
+      item,
+      candidatePath,
+      forceDownload: forceDownload,
+    );
+  }
+
+  /// Mode 3: Static Website / Single-Page HTML Share (renders website directly, never exposes directory list)
+  Future<Response> _serveStaticWebsite(
+    Request req,
+    ExposureItem item,
+    List<String> subSegments,
+  ) async {
+    final relParts = subSegments.where((s) => s.isNotEmpty).toList();
+
+    // Case 3A: Single `.html` file shared as a live webpage (+ safe sibling asset resolution)
+    if (!item.targetIsDirectory) {
+      if (relParts.isEmpty) {
+        return _streamFileWithRange(req, item, item.target);
+      }
+      final parentRoot = p.canonicalize(p.dirname(item.target));
+      final assetPath = p.normalize(p.joinAll([parentRoot, ...relParts]));
+      if (assetPath == parentRoot ||
+          !p.isWithin(parentRoot, assetPath) ||
+          _isSensitiveShareFile(assetPath)) {
+        return Response.forbidden('Forbidden asset path.');
+      }
+      final assetStat = await PrivFs.stat(assetPath);
+      if (assetStat.isFile) {
+        return _streamFileWithRange(req, item, assetPath);
+      }
+      return Response.notFound('Static asset not found.');
+    }
+
+    // Case 3B: Website Directory (`index.html` + static assets + optional SPA fallback)
+    final rootPath = p.canonicalize(item.target);
+    final candidatePath = relParts.isEmpty
+        ? rootPath
+        : p.normalize(p.joinAll([rootPath, ...relParts]));
+
+    if (candidatePath != rootPath && !p.isWithin(rootPath, candidatePath)) {
+      return Response.forbidden('Forbidden path traversal.');
+    }
+    if (_isSensitiveShareFile(candidatePath)) {
+      return Response.forbidden('Forbidden.');
+    }
+
+    final candStat = await PrivFs.stat(candidatePath);
+    if (candStat.isDirectory) {
+      for (final idxName in const ['index.html', 'index.htm']) {
+        final idxFile = p.join(candidatePath, idxName);
+        if ((await PrivFs.stat(idxFile)).isFile) {
+          return _streamFileWithRange(req, item, idxFile);
+        }
+      }
+      if (item.spa) {
+        final spaIndex = p.join(rootPath, 'index.html');
+        if ((await PrivFs.stat(spaIndex)).isFile) {
+          return _streamFileWithRange(req, item, spaIndex);
+        }
+      }
+      return Response.notFound(
+        '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
+        '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F4EC;color:#1F1E1B;font-family:sans-serif">'
+        '<div style="background:#FFF;padding:28px 32px;border-radius:20px;max-width:440px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
+        '<h3 style="margin:0 0 8px">未找到网页入口 index.html</h3>'
+        '<p style="margin:0;color:#6E6A61;font-size:14px;line-height:1.6">当前为「静态网站分享」模式（不会暴露目录文件列表）。如果你想展示文件夹目录，请在分享页切换为「文件夹目录」模式。</p>'
+        '</div></body></html>',
+        headers: const {'content-type': 'text/html; charset=utf-8'},
+      );
     }
 
     if (!candStat.exists && item.spa) {
@@ -1034,47 +1285,219 @@ class ExposureManager {
     return _streamFileWithRange(req, item, candidatePath);
   }
 
+  Future<Response> _serveDirectoryAsZip(
+    ExposureItem item,
+    String dirPath,
+    List<String> relParts,
+  ) async {
+    final archive = Archive();
+    var accumulatedBytes = 0;
+    const maxZipBytes = 120 * 1024 * 1024; // 120 MB safety cap
+
+    Future<void> walk(String currentDir, String relPrefix) async {
+      final entries = await PrivFs.listDir(currentDir);
+      for (final e in entries) {
+        if (e.name.startsWith('.') || defaultIgnoreDirs.contains(e.name)) {
+          continue;
+        }
+        final full = p.join(currentDir, e.name);
+        if (_isSensitiveShareFile(full)) continue;
+        final nextRel = relPrefix.isEmpty ? e.name : '$relPrefix/${e.name}';
+        if (e.isDirectory) {
+          await walk(full, nextRel);
+        } else if (!e.isDirectory) {
+          if (accumulatedBytes + e.size > maxZipBytes) continue;
+          final data = await PrivFs.readBytes(full);
+          accumulatedBytes += data.length;
+          archive.addFile(ArchiveFile(nextRel, data.length, data));
+        }
+      }
+    }
+
+    await walk(dirPath, '');
+    final zipped = ZipEncoder().encode(archive);
+    final zipName = relParts.isEmpty ? item.label : relParts.last;
+    final encodedZip = Uri.encodeComponent('$zipName.zip');
+    item.bytesSent += zipped.length;
+    return Response.ok(
+      zipped,
+      headers: {
+        'content-type': 'application/zip',
+        'content-length': '${zipped.length}',
+        'content-disposition': "attachment; filename*=UTF-8''$encodedZip",
+      },
+    );
+  }
+
   Future<Response> _renderDirectoryListing(
     ExposureItem item,
     String dirPath,
     List<String> relParts,
   ) async {
-    final entries = await PrivFs.listDir(dirPath);
-    entries.sort((a, b) {
-      if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    final rawEntries = await PrivFs.listDir(dirPath);
+    final entries = rawEntries
+        .where((e) => !e.name.startsWith('.') && !_isSensitiveShareFile(p.join(dirPath, e.name)))
+        .toList()
+      ..sort((a, b) {
+        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+
+    final crumbs = StringBuffer(
+      '<a href="/share/${item.id}/">全部文件</a>',
+    );
+    for (var i = 0; i < relParts.length; i++) {
+      final href =
+          '/share/${item.id}/${relParts.sublist(0, i + 1).map(Uri.encodeComponent).join('/')}/';
+      crumbs.write(
+        ' <span class="sep">/</span> <a href="$href">${_htmlEscape(relParts[i])}</a>',
+      );
+    }
 
     final rows = StringBuffer();
     if (relParts.isNotEmpty) {
-      rows.writeln('<li><a href="../">📁 .. (返回上级)</a><span></span></li>');
+      rows.writeln(
+        '<a class="item" data-name=".." href="../">'
+        '<span class="left"><span class="ico dir">↩</span><span class="nm">返回上一级目录</span></span>'
+        '<span class="meta">上级</span></a>',
+      );
     }
     for (final e in entries) {
       final slash = e.isDirectory ? '/' : '';
       final href = '${Uri.encodeComponent(e.name)}$slash';
-      final icon = e.isDirectory ? '📁' : '📄';
-      final meta = e.isDirectory ? '目录' : _formatHumanBytes(e.size);
+      final ico = e.isDirectory ? '📁' : '📄';
+      final meta = e.isDirectory
+          ? '进入子目录 →'
+          : '${_formatHumanBytes(e.size)} · 点开预览';
       rows.writeln(
-        '<li><a href="$href">$icon ${_htmlEscape(e.name)}$slash</a><span>$meta</span></li>',
+        '<a class="item" data-name="${_htmlEscape(e.name.toLowerCase())}" href="$href">'
+        '<span class="left"><span class="ico">$ico</span><span class="nm">${_htmlEscape(e.name)}$slash</span></span>'
+        '<span class="meta">$meta</span></a>',
       );
     }
 
-    final relDisplay = relParts.isEmpty ? '/' : '/${relParts.join('/')}/';
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>${_htmlEscape(item.label)} · 文件浏览</title>'
-        '<style>body{margin:0;padding:28px 16px;background:#FAF9F5;color:#141413;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}'
-        '.wrap{max-width:760px;margin:0 auto;background:#FFF;border:1px solid #E6E3DA;border-radius:18px;padding:22px 24px;box-shadow:0 6px 24px rgba(20,20,19,.05)}'
-        'h1{margin:0 0 4px;font-size:19px}.sub{color:#737068;font-size:13px;font-family:monospace;margin-bottom:16px}'
-        'ul{list-style:none;padding:0;margin:0}li{display:flex;justify-content:space-between;align-items:center;padding:10px 8px;border-top:1px solid #F0EEE6;font-size:14px}'
-        'a{color:#141413;text-decoration:none;word-break:break-all}a:hover{color:#D97757}span{color:#87847B;font-size:12px;font-family:monospace;margin-left:12px;white-space:nowrap}</style>'
-        '</head><body><div class="wrap"><h1>${_htmlEscape(item.label)}</h1>'
-        '<div class="sub">${_htmlEscape(relDisplay)}</div><ul>$rows</ul></div></body></html>';
+        '<title>${_htmlEscape(item.label)} · 文件夹分享</title>'
+        '<style>'
+        ':root{--bg:#F6F4EC;--card:#FFFFFF;--soft:#EFECE2;--hover:#E7E3D6;--ink:#1F1E1B;--muted:#6E6A61;--accent:#C96442}'
+        '@media(prefers-color-scheme:dark){:root{--bg:#161513;--card:#22211D;--soft:#2C2A25;--hover:#35332D;--ink:#F3F1E9;--muted:#A6A298;--accent:#E07A56}}'
+        '*{box-sizing:border-box}body{margin:0;padding:28px 16px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif}'
+        '.wrap{max-width:820px;margin:0 auto;background:var(--card);border-radius:24px;padding:26px;box-shadow:0 12px 36px rgba(0,0,0,.06)}'
+        '.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
+        'h1{margin:0;font-size:20px;font-weight:700}.crumbs{font-size:13.5px;color:var(--muted);margin-top:5px}'
+        '.crumbs a{color:var(--accent);text-decoration:none;font-weight:600}.sep{margin:0 4px;opacity:.5}'
+        '.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}'
+        'input{background:var(--soft);border:none;border-radius:99px;padding:8px 14px;color:var(--ink);font-size:13px;outline:none;width:180px}'
+        '.zbtn{background:var(--soft);color:var(--ink);text-decoration:none;padding:8px 14px;border-radius:99px;font-size:12.5px;font-weight:600}'
+        '.zbtn:hover{background:var(--hover)}'
+        '.list{display:flex;flex-direction:column;gap:8px;margin-top:8px}'
+        '.item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-radius:15px;background:var(--soft);color:var(--ink);text-decoration:none;transition:background .15s}'
+        '.item:hover{background:var(--hover)}.left{display:flex;align-items:center;gap:10px;min-width:0}'
+        '.nm{font-size:14.5px;font-weight:500;word-break:break-all}.meta{font-size:12.5px;color:var(--muted);font-family:ui-monospace,monospace;white-space:nowrap}'
+        '.empty{padding:32px;text-align:center;color:var(--muted);font-size:14px}'
+        '</style></head><body><div class="wrap">'
+        '<div class="head"><div><h1>${_htmlEscape(item.label)}</h1><div class="crumbs">$crumbs</div></div>'
+        '<div class="tools"><input id="q" type="search" placeholder="搜索文件名..." oninput="flt(this.value)">'
+        '<a class="zbtn" href="?zip=1">打包下载 (.zip)</a></div></div>'
+        '<div class="list" id="lst">${entries.isEmpty && relParts.isEmpty ? '<div class="empty">这个文件夹目前是空的</div>' : rows.toString()}</div>'
+        '</div><script>function flt(v){v=v.toLowerCase().trim();document.querySelectorAll(".item").forEach(el=>{const n=el.getAttribute("data-name")||"";el.style.display=(!v||n===".."||n.includes(v))?"flex":"none";});}</script>'
+        '</body></html>';
     final bytes = utf8.encode(html);
     item.bytesSent += bytes.length;
     return Response.ok(
       bytes,
-      headers: const {'content-type': 'text/html; charset=utf-8'},
+      headers: const {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    );
+  }
+
+  /// Unified Single-File Preview Page shared by BOTH Mode 1 (Single File Share)
+  /// AND clicking any file inside Mode 2 (Folder Explorer Share)!
+  Future<Response> _renderUnifiedSingleFilePage({
+    required ExposureItem item,
+    required String filePath,
+    required String displayTitle,
+    required String rawHref,
+    required String dlHref,
+    required String? backToFolderHref,
+  }) async {
+    final fileName = p.basename(filePath);
+    final ext = p.extension(fileName).toLowerCase();
+    final stat = await PrivFs.stat(filePath);
+    final sizeHuman = _formatHumanBytes(stat.size);
+
+    String stageHtml;
+    if (_isVideoExt(ext)) {
+      stageHtml =
+          '<video controls playsinline preload="metadata" src="$rawHref"></video>';
+    } else if (_isAudioExt(ext)) {
+      stageHtml =
+          '<div class="pad-box"><audio controls preload="metadata" src="$rawHref"></audio></div>';
+    } else if (_isImageExt(ext)) {
+      stageHtml =
+          '<div class="img-box"><img src="$rawHref" alt="${_htmlEscape(fileName)}"></div>';
+    } else if (_isPdfExt(ext)) {
+      stageHtml =
+          '<iframe class="pdf-frame" src="$rawHref" title="${_htmlEscape(fileName)}"></iframe>';
+    } else if (_isTextPreviewExt(ext) && stat.size <= 131072) {
+      String snippet = '';
+      try {
+        final rawBytes = await PrivFs.readBytes(filePath);
+        snippet = utf8.decode(rawBytes, allowMalformed: true);
+      } catch (_) {}
+      stageHtml = '<pre class="code-box">${_htmlEscape(snippet)}</pre>';
+    } else {
+      stageHtml = '<div class="dl-stage">'
+          '<div class="dl-name">${_htmlEscape(fileName)}</div>'
+          '<div class="dl-sub">文件大小 $sizeHuman · 点击下方按钮即可原速下载</div>'
+          '<a class="btn pri big" href="$dlHref">直接下载文件 ($sizeHuman)</a>'
+          '</div>';
+    }
+
+    final backLink = backToFolderHref != null
+        ? '<a class="btn ghost" href="$backToFolderHref">← 返回所在文件夹</a>'
+        : '';
+
+    final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>${_htmlEscape(displayTitle)} · 在线预览</title>'
+        '<style>'
+        ':root{--bg:#F6F4EC;--card:#FFFFFF;--soft:#EFECE2;--ink:#1F1E1B;--muted:#6E6A61;--accent:#C96442}'
+        '@media(prefers-color-scheme:dark){:root{--bg:#141413;--card:#1F1E1B;--soft:#2B2924;--ink:#FAF9F5;--muted:#A4A096;--accent:#D97757}}'
+        '*{box-sizing:border-box}body{margin:0;padding:24px 14px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;display:flex;justify-content:center}'
+        '.card{width:100%;max-width:940px;background:var(--card);border-radius:24px;padding:22px 24px;box-shadow:0 14px 44px rgba(0,0,0,.08)}'
+        '.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
+        '.title{font-size:18px;font-weight:700;word-break:break-all}.meta{font-size:12.5px;color:var(--muted);margin-top:4px;font-family:ui-monospace,monospace}'
+        '.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
+        '.btn{padding:8px 15px;border-radius:99px;text-decoration:none;font-size:13px;font-weight:600;background:var(--soft);color:var(--ink)}'
+        '.btn.pri{background:var(--accent);color:#FFF}.btn.big{padding:11px 22px;font-size:14px;margin-top:8px;display:inline-block}'
+        '.btn.ghost{color:var(--accent)}'
+        'video{width:100%;max-height:74vh;border-radius:16px;background:#000;display:block}'
+        '.img-box{background:var(--soft);border-radius:16px;padding:16px;text-align:center}img{max-width:100%;max-height:72vh;border-radius:10px}'
+        '.pad-box{background:var(--soft);border-radius:16px;padding:28px}audio{width:100%}'
+        '.pdf-frame{width:100%;height:74vh;border:none;border-radius:16px;background:var(--soft)}'
+        '.code-box{margin:0;padding:18px;border-radius:16px;background:#191816;color:#EDEAE2;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6;overflow:auto;max-height:70vh;white-space:pre-wrap;word-break:break-word}'
+        '.dl-stage{background:var(--soft);border-radius:18px;padding:42px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}'
+        '.dl-name{font-size:17px;font-weight:700}.dl-sub{font-size:13.5px;color:var(--muted)}'
+        '</style></head><body><div class="card"><div class="top"><div>'
+        '<div class="title">${_htmlEscape(displayTitle)}</div>'
+        '<div class="meta">${_htmlEscape(fileName)} · $sizeHuman</div>'
+        '</div><div class="btns">$backLink'
+        '<a class="btn" href="$rawHref" target="_blank">原始直链</a>'
+        '<a class="btn pri" href="$dlHref">下载文件</a>'
+        '</div></div>$stageHtml</div></body></html>';
+
+    final bytes = utf8.encode(html);
+    item.bytesSent += bytes.length;
+    return Response.ok(
+      bytes,
+      headers: const {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
     );
   }
 
@@ -1248,6 +1671,19 @@ class ExposureManager {
       );
     } catch (e) {
       client.close(force: true);
+      if ((req.headers['accept'] ?? '').contains('text/html')) {
+        return Response(
+          502,
+          body: '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
+              '<meta http-equiv="refresh" content="4">'
+              '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F4EC;color:#1F1E1B;font-family:sans-serif">'
+              '<div style="background:#FFF;padding:28px 32px;border-radius:22px;max-width:420px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
+              '<h3 style="margin:0 0 8px">正在等待本机端口 :$port 启动...</h3>'
+              '<p style="margin:0;color:#6E6A61;font-size:13.5px;line-height:1.6">当前尚未检测到 127.0.0.1:$port 的响应，本页面每 4 秒会自动刷新一次。</p>'
+              '</div></body></html>',
+          headers: const {'content-type': 'text/html; charset=utf-8'},
+        );
+      }
       return Response(
         502,
         body: '无法连接本地端口 127.0.0.1:$port — 请确认本地服务已启动 ($e)',
@@ -1256,52 +1692,15 @@ class ExposureManager {
     }
   }
 
-  String _renderMediaLandingHtml({
-    required String title,
-    required String fileName,
-    required String sizeHuman,
-    required String ext,
-    required String rawHref,
-    required String dlHref,
-  }) {
-    String playerBlock;
-    if (_isVideoExt(ext)) {
-      playerBlock =
-          '<video controls playsinline preload="metadata" src="$rawHref"></video>';
-    } else if (_isAudioExt(ext)) {
-      playerBlock = '<audio controls preload="metadata" src="$rawHref"></audio>';
-    } else {
-      playerBlock = '<img src="$rawHref" alt="${_htmlEscape(fileName)}">';
-    }
-
-    return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>${_htmlEscape(title)} · 在线预览</title>'
-        '<style>body{margin:0;padding:24px 14px;background:#141413;color:#FAF9F5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;justify-content:center}'
-        '.card{width:100%;max-width:940px;background:#1E1D1B;border:1px solid #33312C;border-radius:20px;padding:20px;box-sizing:border-box;box-shadow:0 16px 48px rgba(0,0,0,.45)}'
-        '.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
-        '.title{font-size:17px;font-weight:600;word-break:break-all}.meta{font-size:12.5px;color:#9C988E;margin-top:3px;font-family:monospace}'
-        '.btns{display:flex;gap:8px}.btn{padding:8px 15px;border-radius:11px;text-decoration:none;font-size:13px;font-weight:600;background:#D97757;color:#FAF9F5}'
-        '.btn.sec{background:#2B2925;color:#E8E5DC;border:1px solid #3D3A34}'
-        'video,img{width:100%;max-height:74vh;border-radius:13px;background:#000;display:block}audio{width:100%;margin:18px 0}</style>'
-        '</head><body><div class="card"><div class="top"><div>'
-        '<div class="title">${_htmlEscape(title)}</div>'
-        '<div class="meta">${_htmlEscape(fileName)} · $sizeHuman · 支持拖动进度条在线播放</div>'
-        '</div><div class="btns">'
-        '<a class="btn sec" href="$rawHref" target="_blank">直链</a>'
-        '<a class="btn" href="$dlHref">下载文件</a>'
-        '</div></div>$playerBlock</div></body></html>';
-  }
-
   String _renderExpiredHtml() =>
       '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
-      '<title>分享已关闭或已过期</title>'
-      '<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#FAF9F5;color:#141413;font-family:-apple-system,sans-serif;text-align:center}'
-      '.box{padding:28px 32px;background:#FFF;border:1px solid #E5E2D9;border-radius:18px;max-width:400px}'
-      'h2{margin:0 0 8px;font-size:18px}p{margin:0;color:#737068;font-size:13.5px;line-height:1.5}</style>'
-      '</head><body><div class="box"><h2>该分享链接已关闭或到期</h2>'
-      '<p>如需继续访问，请在控制台「外网分享」页重新开启，或直接告诉 AI 重新生成链接。</p></div></body></html>';
+      '<title>分享链接已收起</title>'
+      '<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F4EC;color:#1F1E1B;font-family:-apple-system,sans-serif;text-align:center}'
+      '.box{padding:28px 32px;background:#FFF;border-radius:22px;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.06)}'
+      'h2{margin:0 0 8px;font-size:18px}p{margin:0;color:#6E6A61;font-size:13.5px;line-height:1.55}</style>'
+      '</head><body><div class="box"><h2>这条分享链接已经收起或到期</h2>'
+      '<p>如果还需要查看，可以在「随手分享」页重新开启，或让 AI 再发一次。</p></div></body></html>';
 }
 
 void registerExposureTools(
@@ -1326,9 +1725,9 @@ void registerExposureTools(
   registerTool(
     name: 'manage_expose',
     description:
-        'Expose or close external access to a local file (MP4 video, HTML, APK, PDF), static website folder, or local web port (e.g. 3000) '
-        'combining Tailscale (Funnel/Serve/Tailnet IP), active public gateway domain, and temporary Cloudflare tunnel. '
-        'Actions: "open" (returns ready-to-open URLs immediately), "close" (by id), "close_all", "list".',
+        'Share a local single file (streaming video/PDF/APK preview), folder directory explorer (browse subfolders and click files to preview), '
+        'static website / single HTML page (renders directly as a live webpage), or local port (e.g. 3000/5173) via Tailscale, gateway domain, or temporary tunnel. '
+        'Actions: "open", "close", "close_all", "list".',
     annotations: cmdAnn,
     inputSchema: {
       'type': 'object',
@@ -1337,12 +1736,19 @@ void registerExposureTools(
           'type': 'string',
           'enum': ['open', 'close', 'close_all', 'list'],
           'description':
-              '"open" to generate live external links, "close" to stop an active link by id, "close_all" to stop all active links, or "list" to inspect active links and Tailscale status.',
+              '"open" to generate live external links, "close" to stop an active link by id, "close_all" to stop all active links, or "list" to inspect active links.',
         },
         'target': {
           'type': 'string',
           'description':
-              'For action="open": local file path (e.g. D:\\videos\\demo.mp4), website folder path, or local port/URL (e.g. "3000" or "http://127.0.0.1:3000").',
+              'For action="open": local file path (e.g. demo.mp4 or page.html), folder path, or local port/URL (e.g. "5173").',
+        },
+        'mode': {
+          'type': 'string',
+          'enum': ['auto', 'file', 'folder', 'site', 'port'],
+          'default': 'auto',
+          'description':
+              '"file" (single file preview/download), "folder" (directory browser with subfolder navigation -> single file preview), "site" (render single .html or website folder directly as live site), "port" (reverse proxy local port), or "auto".',
         },
         'port': {
           'type': 'integer',
@@ -1389,11 +1795,12 @@ void registerExposureTools(
       }
 
       if (policy.readOnly) {
-        throw const FileSystemException('当前入口为只读模式，不允许创建或关闭外网分享。');
+        throw const FileSystemException('当前入口为只读模式，不允许创建或关闭外链分享。');
       }
 
       if (action == 'open') {
         final rawTarget = (args['target'] ?? '').toString();
+        final mode = (args['mode'] ?? 'auto').toString();
         final portVal = args['port'] is int
             ? args['port'] as int
             : int.tryParse('${args['port'] ?? ''}');
@@ -1407,6 +1814,7 @@ void registerExposureTools(
         final created = await ExposureManager.instance.openExposure(
           config: config,
           rawTarget: rawTarget,
+          mode: mode,
           portOverride: portVal,
           scope: scope,
           label: label,
@@ -1429,7 +1837,7 @@ void registerExposureTools(
         return const JsonEncoder.withIndent('  ').convert({
           'ok': closed,
           'id': id,
-          'message': closed ? '已关闭该分享链接' : '未找到该活跃分享（可能已关闭或已到期）',
+          'message': closed ? '已收起该分享链接' : '未找到该活跃分享（可能已收起或到期）',
         });
       }
 

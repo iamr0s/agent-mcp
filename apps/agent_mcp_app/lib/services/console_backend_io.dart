@@ -1206,8 +1206,21 @@ class _IoConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<String?> pickLocalSharePath({required bool directory}) async {
+    if (isRemoteNodeActive) {
+      try {
+        return await _remoteClient?.pickLocalSharePath(directory: directory);
+      } catch (_) {
+        return null;
+      }
+    }
+    return pickNativeLocalPath(directory: directory);
+  }
+
+  @override
   Future<Map<String, dynamic>> openExposure({
     required String target,
+    String mode = 'auto',
     int? port,
     String scope = 'auto',
     String? label,
@@ -1218,6 +1231,7 @@ class _IoConsoleBackend extends ConsoleBackend {
       return _guardRemote(
         (c) => c.openExposure(
           target: target,
+          mode: mode,
           port: port,
           scope: scope,
           label: label,
@@ -1233,6 +1247,7 @@ class _IoConsoleBackend extends ConsoleBackend {
       final created = await ExposureManager.instance.openExposure(
         config: _ctrl.loadCurrentServerConfig(),
         rawTarget: target,
+        mode: mode,
         portOverride: port,
         scope: scope,
         label: label,

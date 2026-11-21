@@ -423,6 +423,7 @@ class RemoteHttpNodeClient {
 
   Future<Map<String, dynamic>> openExposure({
     required String target,
+    String mode = 'auto',
     int? port,
     String scope = 'auto',
     String? label,
@@ -434,6 +435,7 @@ class RemoteHttpNodeClient {
         '/exposures/open',
         jsonBody: {
           'target': target,
+          'mode': mode,
           if (port != null) 'port': port,
           'scope': scope,
           if (label != null && label.isNotEmpty) 'label': label,
@@ -441,6 +443,16 @@ class RemoteHttpNodeClient {
           'spa': spa,
         },
       );
+
+  Future<String?> pickLocalSharePath({required bool directory}) async {
+    final res = await _requestJson(
+      'POST',
+      '/exposures/pick-path',
+      jsonBody: {'directory': directory},
+    );
+    final pth = (res['path'] ?? '').toString().trim();
+    return (res['ok'] == true && pth.isNotEmpty) ? pth : null;
+  }
 
   Future<Map<String, dynamic>> closeExposure(String id) =>
       _requestJson('POST', '/exposures/close', jsonBody: {'id': id});

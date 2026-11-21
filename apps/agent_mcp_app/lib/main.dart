@@ -250,7 +250,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.0.0';
+  String _version = '2.1.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -362,7 +362,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.0.0').toString();
+      _version = (auth['version'] ?? '2.1.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -798,7 +798,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       child: ClaudeGlassBar(
         blurSigma: 18,
         tintColor: micaActive ? c.micaSidebarTint : c.glassBarTint,
-        border: Border(bottom: BorderSide(color: c.hairline)),
+        border: Border(bottom: BorderSide(color: c.hairline.withValues(alpha: 0.45))),
         child: Padding(
           padding: EdgeInsets.only(top: topSafe),
           child: Stack(
@@ -1102,7 +1102,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                               color:
                                   micaActive ? c.micaSidebarTint : c.sidebar,
                               border: Border(
-                                right: BorderSide(color: c.hairline),
+                                right: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
                               ),
                             ),
                             child: LayoutBuilder(
@@ -1259,7 +1259,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                   onSelect: _selectTab,
                                 ),
                                 const Spacer(),
-                                Divider(color: c.hairline, height: 22),
+                                Divider(color: c.hairline.withValues(alpha: 0.45), height: 22),
                                 ClaudeButton(
                                   label: t > 0.55
                                       ? (_togglingService

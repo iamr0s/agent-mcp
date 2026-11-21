@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -57,6 +59,17 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     return const <String>[];
   }
 
+  List<int> get _activePorts {
+    final raw = widget.exposureSummary['active_local_ports'];
+    if (raw is List) {
+      return raw
+          .map((e) => int.tryParse('$e'))
+          .whereType<int>()
+          .toList();
+    }
+    return const <int>[];
+  }
+
   List<Map<String, dynamic>> get _items {
     final raw = widget.exposureSummary['items'];
     if (raw is List) {
@@ -84,7 +97,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     try {
       await widget.backend.saveConfig({'expose_enabled': true});
       await widget.onRefresh();
-      widget.onToast('已开启外网映射与分享功能');
+      widget.onToast('已开启随手分享功能');
     } finally {
       if (mounted) setState(() => _togglingMaster = false);
     }
@@ -96,7 +109,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     try {
       await runWithMinDuration(() => widget.backend.closeExposure(id));
       await widget.onRefresh();
-      widget.onToast('已关闭分享：$label');
+      widget.onToast('已收起分享：$label');
     } finally {
       if (mounted) setState(() => _closingId = null);
     }
@@ -109,7 +122,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       final res = await runWithMinDuration(widget.backend.closeAllExposures);
       await widget.onRefresh();
       final cnt = res['closed_count'] ?? 0;
-      widget.onToast('已一键关闭全部 $cnt 条分享链接');
+      widget.onToast('已一键收起全部 $cnt 条分享链接');
     } finally {
       if (mounted) setState(() => _closingAll = false);
     }
@@ -120,12 +133,14 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     widget.onToast(tip);
   }
 
-  Future<void> _openCreateDialog() async {
+  Future<void> _openCreateDialog({String initialMode = 'file'}) async {
     final created = await showClaudeDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _CreateExposureDialog(
         backend: widget.backend,
         defaultTtlMinutes: _defaultTtl,
+        activeLocalPorts: _activePorts,
+        initialMode: initialMode,
       ),
     );
     if (created != null) {
@@ -133,11 +148,22 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       final url = (created['primary_url'] ?? '').toString();
       if (url.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: url));
-        widget.onToast('分享已开启并复制链接：$url');
+        widget.onToast('链接已生成并自动复制：$url');
       } else {
-        widget.onToast('已创建外网分享');
+        widget.onToast('已创建分享链接');
       }
     }
+  }
+
+  Future<void> _openQrModal(String title, String url) async {
+    await showClaudeDialog<void>(
+      context: context,
+      builder: (_) => _ShareQrDialog(
+        title: title,
+        url: url,
+        onCopy: () => _copyText(url, '已复制分享链接：$url'),
+      ),
+    );
   }
 
   @override
@@ -153,23 +179,23 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
 
     String tsSummary;
     if (!_tsEnabled) {
-      tsSummary = '已在设置中关闭联动（可在服务配置中随时打开）';
+      tsSummary = '已在设置中暂停（需要时可在服务配置里一键打开）';
     } else if (tsDns.isNotEmpty) {
       tsSummary =
-          '$tsDns · ${_tsMode == "funnel" ? "优先 Funnel 公网直连" : "仅组网内访问"}';
+          '$tsDns · ${_tsMode == "funnel" ? "优先 Funnel 公网直达" : "组网内设备直连"}';
     } else if (tsIps.isNotEmpty) {
-      tsSummary = '组网地址 ${tsIps.join(", ")} 已就绪，同账号手机可直接打开';
+      tsSummary = '组网地址 ${tsIps.join(", ")} 已就绪，同账号手机可直接点开';
     } else {
-      tsSummary = '当前未检测到活跃组网，启动 Tailscale 后自动识别';
+      tsSummary = '打开 Tailscale 后会自动识别组网地址';
     }
 
     final gwSummary = _pubBases.isNotEmpty
-        ? '已复用公网域名 ${_pubBases.first}，零等待直出外网链接'
-        : '本地与局域网直享已就绪；绑定隧道域名后可免开端口直享公网';
+        ? '已就绪公网域名 ${_pubBases.first}，秒出外网链接'
+        : '本机与局域网直享已就绪；配置隧道域名后可免端口公网直达';
 
     final cfSummary = _cfInstalled
-        ? '已就绪：分享本地网站端口或无固定域名时自动生成临时 HTTPS 链接'
-        : '未安装 cloudflared（需要临时公网域名时可在服务配置一键下载）';
+        ? '已就绪：无固定域名时自动拉起临时 HTTPS 链接'
+        : '按需可选：在服务配置下载 cloudflared 后可分配临时公网域名';
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(
@@ -186,19 +212,19 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             runSpacing: 10,
             children: [
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 650),
+                constraints: const BoxConstraints(maxWidth: 660),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('外网映射与链接分享', style: serifTitleStyle(c, size: 24)),
                     const SizedBox(height: 4),
                     Text(
-                      '将本地视频、静态网页或网站端口（如 :3000）生成临时外网链接，随时一键收回。',
+                      '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态，发给手机或朋友点开即看。',
                       style: sansStyle(
                         c,
-                        size: 12.8,
+                        size: 13,
                         color: c.muted,
-                        height: 1.4,
+                        height: 1.45,
                       ),
                     ),
                   ],
@@ -211,13 +237,14 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                   ClaudeButton(
                     label: _refreshing ? '刷新中...' : '刷新',
                     compact: true,
+                    variant: ClaudeBtnVariant.ghost,
                     loading: _refreshing,
                     leading: const Icon(Icons.refresh_rounded),
                     onPressed: _doRefresh,
                   ),
                   if (items.isNotEmpty)
                     ClaudeButton(
-                      label: _closingAll ? '关闭中...' : '全部关闭 (${items.length})',
+                      label: _closingAll ? '收起中...' : '全部关闭 (${items.length})',
                       compact: true,
                       loading: _closingAll,
                       leading: const Icon(Icons.link_off_rounded),
@@ -228,7 +255,8 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     compact: true,
                     variant: ClaudeBtnVariant.clay,
                     leading: const Icon(Icons.add_link_rounded),
-                    onPressed: _enabled ? _openCreateDialog : null,
+                    onPressed:
+                        _enabled ? () => _openCreateDialog(initialMode: 'port') : null,
                   ),
                 ],
               ),
@@ -237,7 +265,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
           const SizedBox(height: 16),
           if (!_enabled) ...[
             ClaudeCard(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               child: Row(
                 children: [
                   Icon(Icons.pause_circle_outline_rounded, color: c.clay, size: 22),
@@ -247,7 +275,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '外网分享当前处于关闭状态',
+                          '外链分享目前已暂停',
                           style: sansStyle(
                             c,
                             size: 14,
@@ -257,8 +285,8 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '关闭期间 AI 无法通过 manage_expose 创建新链接，已有外部链接也会暂停响应。',
-                          style: sansStyle(c, size: 12.4, color: c.muted),
+                          '暂停期间外部无法访问任何分享链接，点右侧按钮即可随时恢复。',
+                          style: sansStyle(c, size: 12.5, color: c.muted),
                         ),
                       ],
                     ),
@@ -276,13 +304,109 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             ),
             const SizedBox(height: 14),
           ],
+
+          // Relaxed 4-Mode Quick Launch Cards (Tap any card to open pre-selected!)
+          if (_enabled) ...[
+            LayoutBuilder(
+              builder: (ctx, qbox) {
+                final cols = qbox.maxWidth < 520
+                    ? 1
+                    : (qbox.maxWidth < 920 ? 2 : 4);
+                const gap = 10.0;
+                final cardW = (qbox.maxWidth - gap * (cols - 1)) / cols;
+                const modeCards = [
+                  (
+                    'file',
+                    Icons.smart_display_outlined,
+                    '1. 单个文件分享',
+                    '视频流式拖进度条播放，PDF/图片直接看，安装包直下',
+                  ),
+                  (
+                    'folder',
+                    Icons.folder_open_rounded,
+                    '2. 文件夹目录分享',
+                    '展示目录与子文件夹，点击文件无缝进入单文件预览态',
+                  ),
+                  (
+                    'site',
+                    Icons.web_rounded,
+                    '3. 静态网站 / HTML',
+                    '单个 .html 或前端目录直接作为正式网页全屏运行',
+                  ),
+                  (
+                    'port',
+                    Icons.podcasts_rounded,
+                    '4. 端口转发分享',
+                    '把本机 :3000 / :5173 等正在运行的服务实时映射出去',
+                  ),
+                ];
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final mc in modeCards)
+                      SizedBox(
+                        width: cardW,
+                        child: ClaudeCard(
+                          hoverable: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          onTap: () => _openCreateDialog(initialMode: mc.$1),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      mc.$3,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: sansStyle(
+                                        c,
+                                        size: 13.8,
+                                        weight: FontWeight.w600,
+                                        color: c.ink,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(mc.$2, size: 17, color: c.clay),
+                                ],
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                mc.$4,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: sansStyle(
+                                  c,
+                                  size: 12,
+                                  color: c.muted,
+                                  height: 1.42,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Quiet 1-line network readiness strip (borderless tonal surface)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: ShapeDecoration(
-              color: c.paper2,
-              shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline)),
-              shadows: c.whisperShadow,
+              color: c.recessed,
+              shape: claudeSuperellipse(15),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,7 +434,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Tailscale · ${!_tsEnabled ? '已关闭' : (tsReachable ? '已连通' : '待启动')}',
+                              'Tailscale · ${!_tsEnabled ? '未启用' : (tsReachable ? '已就绪' : '待连接')}',
                               style: sansStyle(
                                 c,
                                 size: 12.5,
@@ -331,7 +455,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              '网关直享 (/share) · ${_pubBases.isNotEmpty ? '公网秒出' : '局域网就绪'}',
+                              '直享通道 · ${_pubBases.isNotEmpty ? '公网秒开' : '局域网就绪'}',
                               style: sansStyle(c, size: 12.5, color: c.inkSoft),
                             ),
                           ],
@@ -345,7 +469,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              '临时隧道 · ${_cfInstalled ? '按需可用' : '未安装'}',
+                              '临时隧道 · ${_cfInstalled ? '按需可用' : '可选'}',
                               style: sansStyle(c, size: 12.5, color: c.muted),
                             ),
                           ],
@@ -448,6 +572,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     item: items[i],
                     closing: _closingId == items[i]['id']?.toString(),
                     onCopy: _copyText,
+                    onShowQr: (title, url) => _openQrModal(title, url),
                     onOpenBrowser: (url) async {
                       final ok = await widget.backend.openExternalUrl(url);
                       if (!ok) {
@@ -475,13 +600,13 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
         children: [
           Row(
             children: [
-              Icon(Icons.public_rounded, size: 20, color: c.clay),
+              Icon(Icons.send_rounded, size: 19, color: c.clay),
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
                   hasActiveItems
-                      ? '外网分享使用指南 · 两种方式随时调用'
-                      : '当前没有活跃的外网分享 · 两种方式随时用起来',
+                      ? '外链分享小贴士 · 一句话或点选卡片都能发'
+                      : '还没有正在分享的内容 · 点上方任意卡片或让 AI 帮你发',
                   style: serifTitleStyle(c, size: 17),
                 ),
               ),
@@ -489,23 +614,24 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
           ),
           const SizedBox(height: 14),
           _HowToUseStepRow(
-            step: '方式 1',
-            title: '直接对 AI 说一句话（最省心）',
+            step: '超省心用法',
+            title: '直接对 AI 说一句话就行',
             desc:
-                '做完视频、静态网页或跑起开发服务器后，直接告诉 AI：“把这个视频映射出来发我链接预览，我看完再关掉”。AI 会自动调用 manage_expose 工具并返回手机可直接点开的播放或预览地址。',
+                '比如：“把这个课件文件夹做成目录链接发我”、“把这个 html 当静态网页发我预览”或“把 5173 端口映射给手机看”，AI 会自动选好对应形态并返回可点开的链接。',
           ),
           const SizedBox(height: 10),
           _HowToUseStepRow(
-            step: '方式 2',
-            title: '点右上角「新建外网分享」手动创建',
+            step: '手动点选',
+            title: '点上方 4 张模式卡片直接选文件或文件夹',
             desc:
-                '填入本地端口（如 3000 / 5173）、单个文件（支持 MP4 拖动进度条在线播放、APK 安装包直下）或前端打包文件夹，系统会自动组合 Tailscale 与公网通道生成链接，并按设定时长自动到期关闭。',
+                '选「文件夹目录」时对方可层层点进子目录，点任意文件即进入单文件在线预览；选「静态网站 / HTML」时无论是单页 .html 还是前端目录都会直接作为正式网页全屏打开。',
           ),
         ],
       ),
     );
   }
 }
+
 class _ChannelStatusTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -588,10 +714,10 @@ class _HowToUseStepRow extends StatelessWidget {
     final c = ClaudePalette.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(15),
       decoration: ShapeDecoration(
         color: c.recessed,
-        shape: claudeSuperellipse(13, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(15),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -602,7 +728,7 @@ class _HowToUseStepRow extends StatelessWidget {
                 text: step,
                 mono: false,
                 fg: c.clay,
-                bg: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10),
+                bg: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.11),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -621,7 +747,7 @@ class _HowToUseStepRow extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             desc,
-            style: sansStyle(c, size: 12.4, color: c.muted, height: 1.5),
+            style: sansStyle(c, size: 12.5, color: c.muted, height: 1.52),
           ),
         ],
       ),
@@ -633,6 +759,7 @@ class _ActiveExposureCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool closing;
   final Future<void> Function(String text, String tip) onCopy;
+  final void Function(String title, String url) onShowQr;
   final ValueChanged<String> onOpenBrowser;
   final VoidCallback onClose;
 
@@ -640,6 +767,7 @@ class _ActiveExposureCard extends StatelessWidget {
     required this.item,
     required this.closing,
     required this.onCopy,
+    required this.onShowQr,
     required this.onOpenBrowser,
     required this.onClose,
   });
@@ -670,24 +798,25 @@ class _ActiveExposureCard extends StatelessWidget {
         .toList();
 
     final (IconData kindIcon, String kindLabel) = switch (kind) {
-      'port' => (Icons.lan_outlined, '本地端口'),
-      'dir' => (Icons.web_outlined, '静态网站'),
-      _ => (Icons.smart_display_outlined, '文件 / 视频'),
+      'port' => (Icons.podcasts_rounded, '端口转发'),
+      'folder' => (Icons.folder_open_rounded, '文件夹目录'),
+      'site' || 'dir' => (Icons.web_rounded, '静态网站 / HTML'),
+      _ => (Icons.smart_display_outlined, '单个文件'),
     };
 
     final scopeText = switch (scope) {
-      'tailscale' => '仅 Tailscale 组网',
-      'public' => '公网 HTTPS',
+      'tailscale' => '仅组网设备',
+      'public' => '公网直达',
       'lan' => '仅局域网',
-      _ => '自动优选通道',
+      _ => '自动优选',
     };
 
-    String ttlText = '手动关闭前有效';
+    String ttlText = '手动收起前有效';
     if (remSec != null) {
       final mins = (remSec / 60).ceil();
       ttlText = mins >= 60
-          ? '剩余 ${(mins / 60).toStringAsFixed(1)} 小时'
-          : '剩余 $mins 分钟';
+          ? '${(mins / 60).toStringAsFixed(1)} 小时后收起'
+          : '$mins 分钟后收起';
     }
 
     final copyOptions = <EndpointCopyOption>[];
@@ -768,13 +897,10 @@ class _ActiveExposureCard extends StatelessWidget {
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: ShapeDecoration(
               color: c.recessed,
-              shape: claudeSuperellipse(
-                12,
-                side: BorderSide(color: c.hairline),
-              ),
+              shape: claudeSuperellipse(14),
             ),
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
@@ -802,6 +928,12 @@ class _ActiveExposureCard extends StatelessWidget {
                       leading: const Icon(Icons.copy_rounded),
                       onPressed: () =>
                           onCopy(primaryUrl, '已复制分享链接：$primaryUrl'),
+                    ),
+                    ClaudeButton(
+                      label: '二维码',
+                      compact: true,
+                      leading: const Icon(Icons.qr_code_rounded),
+                      onPressed: () => onShowQr(label, primaryUrl),
                     ),
                     ClaudeButton(
                       label: '打开预览',
@@ -838,10 +970,14 @@ class _ActiveExposureCard extends StatelessWidget {
 class _CreateExposureDialog extends StatefulWidget {
   final ConsoleBackend backend;
   final int defaultTtlMinutes;
+  final List<int> activeLocalPorts;
+  final String initialMode;
 
   const _CreateExposureDialog({
     required this.backend,
     required this.defaultTtlMinutes,
+    this.activeLocalPorts = const <int>[],
+    this.initialMode = 'port',
   });
 
   @override
@@ -849,12 +985,19 @@ class _CreateExposureDialog extends StatefulWidget {
 }
 
 class _CreateExposureDialogState extends State<_CreateExposureDialog> {
-  String _mode = 'port'; // 'port' | 'file' | 'dir'
-  final TextEditingController _targetCtrl = TextEditingController(text: '3000');
+  late String _mode = widget.initialMode; // 'port' | 'file' | 'folder' | 'site'
+  late final TextEditingController _targetCtrl = TextEditingController(
+    text: widget.initialMode == 'port'
+        ? (widget.activeLocalPorts.isNotEmpty
+            ? '${widget.activeLocalPorts.first}'
+            : '3000')
+        : '',
+  );
   final TextEditingController _labelCtrl = TextEditingController();
   String _scope = 'auto';
   late int _ttlMinutes = widget.defaultTtlMinutes;
   bool _spa = false;
+  bool _picking = false;
   bool _submitting = false;
   String _error = '';
 
@@ -865,10 +1008,46 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
     super.dispose();
   }
 
+  void _onTargetChanged(String val) {
+    final trimmed = val.trim().toLowerCase();
+    setState(() {
+      _error = '';
+      // Smart hint auto-switch when user pastes an .html file into file mode
+      if ((trimmed.endsWith('.html') || trimmed.endsWith('.htm')) &&
+          _mode == 'port') {
+        _mode = 'site';
+      }
+    });
+  }
+
+  Future<void> _pickPath({required bool directory}) async {
+    if (_picking) return;
+    setState(() {
+      _picking = true;
+      _error = '';
+    });
+    try {
+      final picked =
+          await widget.backend.pickLocalSharePath(directory: directory);
+      if (!mounted || picked == null || picked.isEmpty) return;
+      setState(() {
+        _targetCtrl.text = picked;
+        final lower = picked.toLowerCase();
+        if (!directory &&
+            (lower.endsWith('.html') || lower.endsWith('.htm')) &&
+            _mode != 'file') {
+          _mode = 'site';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   Future<void> _submit() async {
     final raw = _targetCtrl.text.trim();
     if (raw.isEmpty) {
-      setState(() => _error = '请填写端口号或本地文件/目录路径');
+      setState(() => _error = '请选择或填入要分享的文件、文件夹或端口号');
       return;
     }
     setState(() {
@@ -878,11 +1057,14 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
     try {
       final res = await widget.backend.openExposure(
         target: raw,
-        port: _mode == 'port' ? int.tryParse(raw) : null,
+        mode: _mode,
+        port: _mode == 'port'
+            ? int.tryParse(raw.replaceAll(':', '').trim())
+            : null,
         scope: _scope,
         label: _labelCtrl.text.trim(),
         ttlMinutes: _ttlMinutes,
-        spa: _mode == 'dir' && _spa,
+        spa: _mode == 'site' && _spa,
       );
       if (!mounted) return;
       if (res['ok'] == true && res['exposure'] is Map) {
@@ -908,7 +1090,29 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
-    final compact = MediaQuery.sizeOf(context).width < 540;
+    final compact = MediaQuery.sizeOf(context).width < 560;
+    final curText = _targetCtrl.text.trim().toLowerCase();
+    final isHtmlTarget = curText.endsWith('.html') || curText.endsWith('.htm');
+
+    final modeHelp = switch (_mode) {
+      'port' => '填入本机正在运行的端口号（手机或外网打开即实时交互）',
+      'file' => '选择单个视频、PDF、图片或安装包（对方打开直接在线播放或下载）',
+      'folder' => '选择任意文件夹（对方打开可进入子目录，点里面的文件即进入单文件预览态）',
+      _ => '选择单个 .html 文件或含 index.html 的网站目录（直接全屏渲染运行网页）',
+    };
+
+    final hintText = switch (_mode) {
+      'port' => '例如 3000 或 5173',
+      'file' => '例如 D:\\视频\\demo.mp4（可点右侧按钮直接选文件）',
+      'folder' => '例如 D:\\教学资料\\实验包（可点右侧按钮直接选文件夹）',
+      _ => '例如 D:\\课件\\lab.html 或 D:\\web\\dist',
+    };
+
+    final defaultPorts = <int>[
+      ...widget.activeLocalPorts,
+      for (final p in const [3000, 5173, 8080, 8000, 4173])
+        if (!widget.activeLocalPorts.contains(p)) p,
+    ];
 
     return Dialog(
       backgroundColor: c.paper2,
@@ -917,15 +1121,15 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(22, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+        constraints: const BoxConstraints(maxWidth: 600),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             compact ? 18 : 26,
-            20,
+            22,
             compact ? 18 : 26,
-            18,
+            20,
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -941,7 +1145,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  '你要分享什么内容？',
+                  '选择打开形态',
                   style: sansStyle(
                     c,
                     size: 12.6,
@@ -955,73 +1159,121 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                   items: const [
                     ('port', '本地网站端口'),
                     ('file', '单个视频 / 文件'),
-                    ('dir', '静态网页目录'),
+                    ('folder', '文件夹目录'),
+                    ('site', '静态网站 / HTML'),
                   ],
                   onChanged: (v) {
                     setState(() {
                       _mode = v;
                       _error = '';
-                      if (v == 'port' && int.tryParse(_targetCtrl.text) == null) {
-                        _targetCtrl.text = '3000';
+                      if (v == 'port' &&
+                          int.tryParse(_targetCtrl.text.trim()) == null) {
+                        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
+                            ? '${widget.activeLocalPorts.first}'
+                            : '3000';
                       } else if (v != 'port' &&
-                          int.tryParse(_targetCtrl.text) != null) {
+                          int.tryParse(_targetCtrl.text.trim()) != null) {
                         _targetCtrl.clear();
                       }
                     });
                   },
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  _mode == 'port'
-                      ? '本地端口号（常见如 Next.js 3000、Vite 5173）'
-                      : (_mode == 'file'
-                          ? '本地文件完整路径（如 D:\\demo.mp4）'
-                          : '静态网站目录完整路径（自动识别 index.html）'),
-                  style: sansStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        modeHelp,
+                        style: sansStyle(c, size: 12.5, color: c.muted),
+                      ),
+                    ),
+                    if (_mode != 'port' && !widget.backend.isAndroidPlatform) ...[
+                      const SizedBox(width: 8),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          if (_mode == 'file' || _mode == 'site')
+                            ClaudeButton(
+                              label: _picking ? '选择中...' : '选文件...',
+                              compact: true,
+                              leading:
+                                  const Icon(Icons.insert_drive_file_outlined),
+                              onPressed: _picking
+                                  ? null
+                                  : () => _pickPath(directory: false),
+                            ),
+                          if (_mode == 'folder' || _mode == 'site')
+                            ClaudeButton(
+                              label: _picking ? '选择中...' : '选文件夹...',
+                              compact: true,
+                              leading: const Icon(Icons.folder_open_rounded),
+                              onPressed: _picking
+                                  ? null
+                                  : () => _pickPath(directory: true),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 8),
                 TextField(
                   controller: _targetCtrl,
+                  onChanged: _onTargetChanged,
                   style: monoStyle(c, size: 13, color: c.ink),
-                  decoration: InputDecoration(
-                    hintText: _mode == 'port'
-                        ? '例如 3000 或 5173'
-                        : (_mode == 'file'
-                            ? '例如 D:\\agent_mcp_tttmp\\demo.mp4'
-                            : '例如 D:\\my_web\\dist'),
-                  ),
+                  decoration: InputDecoration(hintText: hintText),
                 ),
+                if (isHtmlTarget && (_mode == 'file' || _mode == 'site')) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.tips_and_updates_outlined,
+                          size: 14, color: c.clay),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _mode == 'site'
+                              ? '当前将该 .html 直接作为网页运行；若只想让人查看源码或下载，可点上方「单个视频 / 文件」。'
+                              : '检测到 .html 文件：若希望对方点开直接运行网页，可点上方切到「静态网站 / HTML」。',
+                          style: sansStyle(c, size: 11.8, color: c.clay),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (_mode == 'port') ...[
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      for (final p in const ['3000', '5173', '8080', '8000', '4173'])
+                      for (final p in defaultPorts)
                         ClaudeButton(
-                          label: ':$p',
+                          label: widget.activeLocalPorts.contains(p)
+                              ? ':$p · 运行中'
+                              : ':$p',
                           compact: true,
-                          onPressed: () => setState(() => _targetCtrl.text = p),
+                          variant: widget.activeLocalPorts.contains(p)
+                              ? ClaudeBtnVariant.clay
+                              : ClaudeBtnVariant.neutral,
+                          onPressed: () =>
+                              setState(() => _targetCtrl.text = '$p'),
                         ),
                     ],
                   ),
                 ],
-                if (_mode == 'dir') ...[
+                if (_mode == 'site') ...[
                   const SizedBox(height: 8),
                   ClaudeCheckToggle(
                     value: _spa,
-                    label: '单页前端路由模式（子路径自动回退到 index.html）',
+                    label: '前端单页应用路由模式（未知子路径自动回退到 index.html）',
                     onChanged: (v) => setState(() => _spa = v),
                   ),
                 ],
                 const SizedBox(height: 14),
                 Text(
-                  '谁可以访问？',
+                  '访问范围与自动收起时间',
                   style: sansStyle(
                     c,
                     size: 12.6,
@@ -1030,45 +1282,40 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                   ),
                 ),
                 const SizedBox(height: 7),
-                ClaudeSegmented<String>(
-                  value: _scope,
-                  items: const [
-                    ('auto', '智能优选'),
-                    ('tailscale', '仅 Tailscale'),
-                    ('public', '公网直达'),
-                    ('lan', '仅局域网'),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    ClaudeSegmented<String>(
+                      value: _scope,
+                      items: const [
+                        ('auto', '智能优选'),
+                        ('tailscale', '仅 Tailscale'),
+                        ('public', '公网直达'),
+                        ('lan', '仅局域网'),
+                      ],
+                      onChanged: (v) => setState(() => _scope = v),
+                    ),
+                    ClaudeSegmented<int>(
+                      value: const [30, 120, 1440, 0].contains(_ttlMinutes)
+                          ? _ttlMinutes
+                          : 120,
+                      items: const [
+                        (30, '30 分钟'),
+                        (120, '2 小时'),
+                        (1440, '24 小时'),
+                        (0, '一直开着'),
+                      ],
+                      onChanged: (v) => setState(() => _ttlMinutes = v),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _scope = v),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '自动关闭时间',
-                  style: sansStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                ClaudeSegmented<int>(
-                  value: const [30, 120, 1440, 0].contains(_ttlMinutes)
-                      ? _ttlMinutes
-                      : 120,
-                  items: const [
-                    (30, '30 分钟'),
-                    (120, '2 小时'),
-                    (1440, '24 小时'),
-                    (0, '手动关闭'),
-                  ],
-                  onChanged: (v) => setState(() => _ttlMinutes = v),
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _labelCtrl,
                   style: sansStyle(c, size: 13, color: c.ink),
                   decoration: const InputDecoration(
-                    hintText: '可选备注名称（如：宣传片初稿预览、新官网测试版）',
+                    hintText: '可选备注名（留空会自动按文件名或端口号生成）',
                   ),
                 ),
                 if (_error.isNotEmpty) ...[
@@ -1108,6 +1355,161 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
     );
   }
 }
+
+class _ShareQrDialog extends StatelessWidget {
+  final String title;
+  final String url;
+  final VoidCallback onCopy;
+
+  const _ShareQrDialog({
+    required this.title,
+    required this.url,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final qrImgUrl =
+        'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${Uri.encodeComponent(url)}';
+
+    return Dialog(
+      backgroundColor: c.paper2,
+      elevation: 0,
+      shape: claudeSuperellipse(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: serifTitleStyle(c, size: 18),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '手机相机扫一扫，或直接复制链接发给好友',
+                style: sansStyle(c, size: 12.5, color: c.muted),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 196,
+                height: 196,
+                padding: const EdgeInsets.all(12),
+                decoration: ShapeDecoration(
+                  color: Colors.white,
+                  shape: claudeSuperellipse(18),
+                ),
+                child: Image.network(
+                  qrImgUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => CustomPaint(
+                    painter: _OfflineMatrixBadgePainter(url.hashCode, c.ink),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: ShapeDecoration(
+                  color: c.recessed,
+                  shape: claudeSuperellipse(12),
+                ),
+                child: SelectableText(
+                  url,
+                  textAlign: TextAlign.center,
+                  style: monoStyle(c, size: 11.8, color: c.inkSoft),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ClaudeButton(
+                    label: '关闭',
+                    compact: true,
+                    variant: ClaudeBtnVariant.ghost,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(width: 8),
+                  ClaudeButton(
+                    label: '复制链接',
+                    compact: true,
+                    variant: ClaudeBtnVariant.clay,
+                    leading: const Icon(Icons.copy_rounded),
+                    onPressed: () {
+                      onCopy();
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OfflineMatrixBadgePainter extends CustomPainter {
+  final int seed;
+  final Color color;
+  const _OfflineMatrixBadgePainter(this.seed, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()..color = const Color(0xFF1F1E1B);
+    const n = 15;
+    final cell = math.min(size.width, size.height) / n;
+    void finder(int ox, int oy) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(ox * cell, oy * cell, 4 * cell, 4 * cell),
+          const Radius.circular(4),
+        ),
+        p..style = PaintingStyle.stroke..strokeWidth = cell * 0.8,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH((ox + 1.2) * cell, (oy + 1.2) * cell, 1.6 * cell, 1.6 * cell),
+        p..style = PaintingStyle.fill,
+      );
+    }
+
+    finder(1, 1);
+    finder(n - 5, 1);
+    finder(1, n - 5);
+    var s = seed.abs() + 1337;
+    for (var y = 1; y < n - 1; y++) {
+      for (var x = 1; x < n - 1; x++) {
+        if ((x < 6 && y < 6) || (x > n - 7 && y < 6) || (x < 6 && y > n - 7)) {
+          continue;
+        }
+        s = (s * 1103515245 + 12345) & 0x7fffffff;
+        if (s % 3 == 0) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromLTWH(x * cell, y * cell, cell * 0.82, cell * 0.82),
+              const Radius.circular(2),
+            ),
+            p..style = PaintingStyle.fill,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OfflineMatrixBadgePainter oldDelegate) =>
+      oldDelegate.seed != seed;
+}
+
 class TailscaleExposureSettingsCard extends StatefulWidget {
   final ConsoleBackend backend;
   final Map<String, dynamic> config;
@@ -1235,15 +1637,15 @@ class _TailscaleExposureSettingsCardState
           ),
           const SizedBox(height: 8),
           Text(
-            '控制 AI 能否把做好的视频、网页或本地端口生成外部访问链接（manage_expose），以及是否联动你的 Tailscale 节点对外分享。',
+            '控制 AI 能否把做好的文件、文件夹、网页或本地端口生成分享链接，以及是否联动你的 Tailscale 组网。',
             style: sansStyle(c, size: 13, color: c.muted, height: 1.52),
           ),
           const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(15),
             decoration: ShapeDecoration(
               color: c.recessed,
-              shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline)),
+              shape: claudeSuperellipse(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1265,7 +1667,7 @@ class _TailscaleExposureSettingsCardState
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '开启后，对 AI 说“把这个视频/网站发链接给我预览”即可直接拿到访问地址；关闭后立即阻断所有外网分享。',
+                            '开启后，对 AI 说一句话即可拿到文件、目录或网站的预览链接；关闭后立即阻断所有外部访问。',
                             style: sansStyle(c, size: 12, color: c.muted),
                           ),
                         ],
@@ -1421,14 +1823,14 @@ class _TailscaleExposureSettingsCardState
                         (30, '30 分钟'),
                         (120, '2 小时'),
                         (1440, '24 小时'),
-                        (0, '手动关闭'),
+                        (0, '一直开着'),
                       ],
                       onChanged: !_exposeEnabled
                           ? (_) {}
                           : (v) => _patch(
                                 {'expose_default_ttl_minutes': v},
                                 v == 0
-                                    ? '默认设为手动关闭前长期有效'
+                                    ? '默认设为一直开着（手动收起）'
                                     : '默认有效期已设为 $v 分钟',
                               ),
                     ),

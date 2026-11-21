@@ -408,8 +408,10 @@ ThemeData buildClaudeTheme(ClaudePalette c) {
           );
         }
         return OutlineInputBorder(
-          borderRadius: BorderRadius.circular(11.5),
-          borderSide: BorderSide(color: c.hairline),
+          borderRadius: BorderRadius.circular(13),
+          borderSide: BorderSide(
+            color: c.hairline.withValues(alpha: c.isDark ? 0.5 : 0.3),
+          ),
         );
       }),
     ),
@@ -851,7 +853,7 @@ class ClaudeCard extends StatefulWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
     this.onTap,
     this.hoverable = false,
-    this.radius = 18,
+    this.radius = 20,
   });
 
   @override
@@ -877,7 +879,9 @@ class _ClaudeCardState extends State<ClaudeCard> {
         shape: claudeSuperellipse(
           widget.radius,
           side: BorderSide(
-            color: (_hovered && interactive) ? c.ringHover : c.hairline,
+            color: (_hovered && interactive)
+                ? c.ringHover
+                : c.hairline.withValues(alpha: c.isDark ? 0.55 : 0.35),
           ),
         ),
         shadows: (_hovered && interactive) ? c.cardHoverShadow : c.whisperShadow,
@@ -1002,8 +1006,8 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
       physics: const ClampingScrollPhysics(),
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          color: c.paper3.withValues(alpha: c.isDark ? 0.85 : 0.72),
-          shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+          color: c.paper3.withValues(alpha: c.isDark ? 0.85 : 0.68),
+          shape: claudeSuperellipse(13),
         ),
         child: Padding(
           padding: const EdgeInsets.all(3),
