@@ -1,0 +1,206 @@
+name: Build & Publish Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag to publish (e.g. v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 (Mica GUI + Web + CLI + SFX)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version String
+        shell: pwsh
+        run: |
+          $rawTag = if ("${{ github.event.inputs.tag_name }}" -ne "") {
+            "${{ github.event.inputs.tag_name }}"
+          } else {
+            "${{ github.ref_name }}"
+          }
+          $ver = $rawTag -replace '^v', ''
+          "TAG_NAME=$rawTag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "APP_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Fetch Workspace Dependencies & Run Tests
+        shell: pwsh
+        run: |
+          flutter pub get
+          dart analyze packages/agent_mcp_core
+          Push-Location apps/agent_mcp_app
+          flutter test --no-pub
+          Pop-Location
+
+      - name: Compile Web Dashboard, Windows Desktop & Standalone CLI
+        shell: pwsh
+        run: |
+          Push-Location apps/agent_mcp_app
+          flutter build web --release --base-href /dashboard/ --no-pub
+          flutter build windows --release --no-pub
+          Pop-Location
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o bin/agent-mcp.exe
+
+      - name: Package Sanitized Portable ZIP & Self-Extracting Installer (SFX)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_sfx.ps1 -SkipBuild -Version $env:APP_VERSION
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-artifacts
+          path: |
+            release/AgentMCP-v*-windows-x64-sfx.exe
+            release/AgentMCP-v*-windows-x64-portable.zip
+          if-no-files-found: error
+
+  build-android:
+    name: Build Android Dual-Mode APKs (arm64-v8a & Universal)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version String
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          VER="${RAW_TAG#v}"
+          echo "TAG_NAME=${RAW_TAG}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
+
+      - name: Setup Java 21 (Required by Gradle 9 / AGP 9)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build Universal & Split-ABI Release APKs
+        run: |
+          flutter pub get
+          mkdir -p release
+          cd apps/agent_mcp_app
+          flutter build apk --release --no-pub
+          cp build/app/outputs/flutter-apk/app-release.apk "../../release/AgentMCP-v${APP_VERSION}-android-universal.apk"
+          flutter build apk --release --split-per-abi --no-pub
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "../../release/AgentMCP-v${APP_VERSION}-android-arm64-v8a.apk"
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-artifacts
+          path: |
+            release/AgentMCP-v*-android-arm64-v8a.apk
+            release/AgentMCP-v*-android-universal.apk
+          if-no-files-found: error
+
+  build-linux-cli:
+    name: Build Linux x64 Standalone Native CLI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Version String
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          VER="${RAW_TAG#v}"
+          echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
+
+      - name: Setup Flutter & Dart SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Compile Native Linux x64 CLI
+        run: |
+          flutter pub get
+          mkdir -p release stage_linux
+          dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_linux/agent-mcp
+          chmod +x stage_linux/agent-mcp
+          cp LICENSE README.md README.en.md stage_linux/
+          tar -czf "release/AgentMCP-v${APP_VERSION}-linux-x64-cli.tar.gz" -C stage_linux .
+
+      - name: Upload Linux CLI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-cli-artifact
+          path: release/AgentMCP-v*-linux-x64-cli.tar.gz
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-android, build-linux-cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist_artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt
+        working-directory: dist_artifacts
+        run: |
+          sha256sum AgentMCP-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Check Existing Release Body
+        id: check_rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REL_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+        run: |
+          if BODY=$(gh release view "$REL_TAG" --repo "${{ github.repository }}" --json body -q .body 2>/dev/null) && [ -n "$BODY" ]; then
+            printf '%s\n' "$BODY" > existing_body.md
+            echo "has_body=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_body=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Existing GitHub Release Assets (Preserving Custom Notes)
+        if: steps.check_rel.outputs.has_body == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          body_path: existing_body.md
+          generate_release_notes: false
+          files: |
+            dist_artifacts/AgentMCP-*
+            dist_artifacts/SHA256SUMS.txt
+
+      - name: Create New GitHub Release (Auto-Generated Notes)
+        if: steps.check_rel.outputs.has_body != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Cross-Platform Native Desktop, CLI & Android Dual-Mode Edition"
+          generate_release_notes: true
+          files: |
+            dist_artifacts/AgentMCP-*
+            dist_artifacts/SHA256SUMS.txt

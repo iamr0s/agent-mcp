@@ -1,0 +1,12 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: false
+    strict-raw-types: false
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_final_locals: true
+    unawaited_futures: true

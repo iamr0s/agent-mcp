@@ -1,15 +1,20 @@
-# Agent MCP
+# Agent MCP v2.0
 
 [中文](README.md) | [English](README.en.md)
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
-[![MCP](https://img.shields.io/badge/Protocol-MCP%20%2F%20FastMCP-D97757.svg)](https://modelcontextprotocol.io/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#安装与启动)
+[![Release](https://img.shields.io/github/v/release/iamr0s/agent-mcp?color=D97757&label=Release)](https://github.com/iamr0s/agent-mcp/releases)
+[![Flutter 3.50+](https://img.shields.io/badge/Flutter-3.50%2B%20%7C%20Dart%20Native-02569B.svg)](https://flutter.dev/)
+[![MCP 2025-03-26](https://img.shields.io/badge/Protocol-MCP%20Streamable%20HTTP%20%2B%20SSE%20%2B%20stdio-4D7C5D.svg)](https://modelcontextprotocol.io/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20Mica%20%7C%20Android%20Dual--Mode%20%7C%20Web%20%7C%20CLI-141413.svg)](#快速下载与安装)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> 面向本地真实开发环境的跨平台 Agent MCP 服务端、子网关与控制台；让云端与本地大模型跨过沙盒玻璃墙，在受控边界内直接读写工程、驱动终端并调度工具链。
+> 面向真实开发与移动终端环境的跨平台原生 **Agent MCP 宿主、嵌套子网关与多端控制台**；让云端与本地大模型跨过沙盒玻璃墙，在受控边界内直接读写工程、驱动终端并按需调度整座工具生态。
 >
-> 支持 **Claude 暖纸风无边框桌面端（GUI）**、**1:1 全屏终端控制台（TUI）**、**同端口加密管理页（`/dashboard`）** 与 **Rich 命令行** 四端同源运行。
+> **v2.0 跨代重构**：全栈基于原生 **Dart & Flutter** 重写，零 Python / Node 运行时依赖，一套引擎同步驱动 **Win11 云母无边框桌面端**、**Android 双模合一特权端（沙盒 / Shizuku / Root SU）**、**同端口加密 `/dashboard` 网页端**与**独立原生 CLI**。
+
+<p align="center">
+  <img src="assets/previews/hero_overview.png" width="92%" alt="Agent MCP v2.0 跨平台概览">
+</p>
 
 ## 为什么做这件事
 
@@ -17,11 +22,186 @@
 
 还有另一重荒诞：当你真想给模型接上十几个外部工具时，上百份冗长的 JSON Schema 在第一轮对话就塞满了上下文窗口——活还没干，注意力先被工具说明书耗去大半。
 
-我们想把手脚还给模型，同时把缰绳留在自己手里：不绑死任何一家客户端，只按开放的 **Model Context Protocol (MCP)** 暴露能力；用外科手术式的原子编辑代替整文件覆写，用三枚极简元工具收拢整座子 MCP 生态，用多入口分流把公网隧道、OAuth 2.1 鉴权与目录白名单锁进清晰边界。门可以向远端敞开，但门栓永远握在你自己的机器上。
+我们想把手脚还给模型，同时把缰绳留在自己手里：不绑死任何一家客户端，只按开放的 **Model Context Protocol (MCP)** 暴露能力；用外科手术式的原子编辑代替整文件覆写，用三枚极简元工具收拢整座子 MCP 生态，用多入口分流把多网卡直连、公网隧道、OAuth 2.1 鉴权与目录白名单锁进清晰边界。门可以向远端敞开，但门栓永远握在你自己的机器上。
 
 > “我只能为你指明那扇门，走过去的路，得靠你自己。”
 >
 > —— 莫菲斯，《黑客帝国》
+
+## 界面与真机预览
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/previews/activity_and_submcp.png" alt="活动调用流与嵌套子网关">
+      <p align="center"><sub><b>圆角胶囊活动流 & 三元渐进子 MCP 网关</b></sub></p>
+    </td>
+    <td width="50%">
+      <img src="assets/previews/multi_ip_and_profiles.png" alt="多网卡直连多选与浮动协议复制菜单">
+      <p align="center"><sub><b>本机多网卡/Tailscale 多选 & 浮动协议复制菜单</b></sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <p align="center">
+        <img src="assets/previews/android_privilege_modes.png" width="84%" alt="Android 双模合一与三级特权架构">
+      </p>
+      <p align="center"><sub><b>Android 双模合一版：掌上多电脑节点远控 + 本机 Shizuku (ADB/Root) & Root SU 特权宿主</b></sub></p>
+    </td>
+  </tr>
+</table>
+
+## 核心设计亮点
+
+### 1. 三元渐进发现，终结上下文工具爆炸
+传统聚合器将下游所有子 MCP 的工具平铺注入首轮对话，动辄消耗数万 Token 并引发重名冲突。Agent MCP 始终只暴露 **3 枚极简元工具**（`list_sub_mcps` → `inspect_sub_mcp` → `call_sub_mcp`）：先看摘要目录，按需拉取单个工具 `inputSchema`，调用出错时自动附带 Schema 纠错提示，配置增删改**免重启秒级生效**。
+
+### 2. 单端口多入口分流、本机多网卡多选与 OAuth 2.1 无感授权
+- **直连 / 反代多地址叠加**：编辑入口时可直观多选本机 **局域网 (`192.168.x.x`)**、**Tailscale 组网 (`100.x.y.z`)** 与回环网卡（端口随基础配置自动跟随），同时叠加多条反代域名；若所选网卡未纳入监听，系统智能提示并支持保存时**一键同步开放网卡监听**。
+- **自托管 OAuth 2.1 动态注册**：完整实现 RFC 7591 动态客户端注册 + PKCE (`S256`)，对接 Gemini Web、Claude Web 等远程客户端只需填入 `/mcp` 地址并输入一次本地密码即可持久绑定。
+- **Cloudflared 隧道管家**：内置官方二进制断点续传下载、本地导入替换以及 `Named Token` 固定域名 / `Quick` 临时公网隧道守护。
+
+### 3. Android 双模合一 APK 与三级特权引擎（参考 InstallerX-Revived）
+- **模式 A · 掌上多电脑远控台**：顶栏下拉菜单支持保存并秒切多台远程电脑节点（局域网 / Tailscale / 公网 HTTPS），自动维护会话 Cookie 与 SSE 实时日志流。
+- **模式 B · 手机本机特权 MCP 宿主**：支持 FlClash 风格下拉通知栏常驻保活（含 WakeLock / WifiLock 与快捷停止/重启按钮）、全面屏挖孔与底部小白条沉浸透传、可折叠透传悬浮胶囊底栏，并提供三级执行授权器：
+  - **普通沙盒 (`App UID`)**：标准应用沙盒隔离，零额外授权。
+  - **Shizuku (`ADB UID 2000 / Root UID 0`)**：集成官方 `Shizuku-API 13.1.5`，自动识别无线调试 Shell 或 Root 后端，一键弹窗授权。
+  - **Root SU (`UID 0`)**：拉起持久 `su` 特权回环守护桥接（支持 `--mount-master` 全局挂载命名空间，兼容 **KernelSU / APatch / Magisk** 并支持一键跳转管理器授权），免重复弹窗，同步赋能全部 **12 项文件工具 + 3 项进程工具**！
+
+### 4. 外科手术式原子编辑与原生四端体验
+- **原子修改 + 单步反悔**：`edit_file` 强制精确上下文块匹配并在失配时返回近似行提示；配合 `apply_patch`、`replace_text` 预演模式与内存快照栈 `undo_edit`，彻底告别整文件覆写丢行。
+- **原生 Win11 云母桌面端 & 独立 CLI**：无边框 `WS_OVERLAPPEDWINDOW` 原生窗口、Win11 DWM Mica 云母透光背板、自绘圆角深浅双色托盘菜单、Win32 `JobObject` 子进程防孤儿守护，以及自带 `doctor` / `tools` / `snippet` 的单文件原生 CLI。
+
+## 架构链路
+
+```text
+AI Client (Gemini Web / Claude / Cursor / Codex / Antigravity / Custom Agent)
+  -> Transport (Streamable HTTP `/mcp` | Legacy SSE `/sse` | Local `stdio`)
+  -> Multi-NIC Direct / Reverse Proxy / Cloudflare Tunnel (`Token` or `Quick`)
+  -> Hot-Reloading Profile Router (Host & Token Matching -> Per-Entry OAuth 2.1 / Bearer & AccessPolicy)
+  -> Scope & Secret Guard (Allowed Roots + Read-Only + `.env` / Private Key Protection)
+  -> Unified Dart Execution Engine
+       ├─ 12 Atomic File Tools + Undo Snapshot Stack (`dart:io` + Android `PrivFs` Loopback Bridge)
+       ├─ 3 Process Tools (`Win32 JobObject` / Android `Shizuku` & `Root SU` Tree Guard)
+       └─ 3 Sub-MCP Meta-Tools (`list_sub_mcps` -> `inspect_sub_mcp` -> `call_sub_mcp`)
+  -> Real-Time Structured Event Bus -> Win11 Mica GUI / Android App / Web `/dashboard/` / Native CLI
+```
+
+## 内置原子工具矩阵（19 项）
+
+| 分类 | 工具名 | 权限级别 | 能力说明 |
+| :--- | :--- | :---: | :--- |
+| **作用域与读取** | `list_roots` | 只读 | 查看当前入口允许的根目录、读写/密钥策略及 Android 实时特权等级 |
+| | `list_dir` | 只读 | 输出干净目录树，自动过滤 `.git`、`node_modules`、`build` 与 `.gitignore` |
+| | `stat_file` | 只读 | 读取大文件前预检字节大小、行数、编码、换行符与预估 Token 数 |
+| | `read_file` | 只读 | 带行号区间切片读取文本（自动兼容 UTF-8 / UTF-8 BOM / GBK） |
+| | `read_files` | 只读 | 单次批量读取多个文件（含总字符预算保护），减少多轮往返 |
+| **检索与定位** | `glob_files` | 只读 | 按通配符跨目录高速定位文件路径 |
+| | `search_text` | 只读 | 正则/字面量全文检索（桌面优先调用 `ripgrep`，特权模式自动走特权桥接） |
+| **外科手术编辑** | `create_file` | 写入 | 创建新文件并自动建父目录，覆盖已有文件须显式传 `overwrite=true` |
+| | `edit_file` | 写入 | 原子级多处精确替换，失败时自动计算 Dice 相似度近似行号提示 |
+| | `apply_patch` | 写入 | 应用标准 Unified Diff (`@@ -a,b +c,d @@`) 补丁，支持 `dry_run` 预演 |
+| | `replace_text` | 写入 | 单文件或跨目录批量替换（含文件数安全上限与 `dry_run` 预览） |
+| | `file_op` | 写入/删除 | 安全移动（支持跨盘自动回退复制删除）、复制或删除文件与目录 |
+| | `undo_edit` | 写入 | 从内存快照栈一键回滚目标文件最近一次创建、编辑、补丁或删除 |
+| **命令与进程** | `run_command` | 执行 | 同步执行命令（UTF-8/GBK 自适应解码、首尾截断防刷屏、超时整棵进程树强杀） |
+| | `start_process` | 执行 | 启动长时后台任务（编译构建、开发服务器、持续日志监听）并返回 `process_id` |
+| | `manage_process` | 执行 | 列出后台进程、增量读取尾部输出、向 `stdin` 发送输入或强杀进程树 |
+| **子 MCP 网关** | `list_sub_mcps` | 只读 | 列出所有已启用嵌套子 MCP 服务摘要，零 Schema 膨胀 |
+| | `inspect_sub_mcp` | 只读 | 按需查看指定子 MCP 的工具列表或单个工具的完整 JSON Schema |
+| | `call_sub_mcp` | 代理调用 | 转发调用嵌套子 MCP 工具（支持 `stdio` 长连接池与 Streamable HTTP / SSE） |
+
+## 快速下载与安装
+
+前往 [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases) 下载对应平台最新发行包：
+
+| 平台 | 发行包 | 说明 |
+| :--- | :--- | :--- |
+| **Windows 10 / 11 (x64)** | `AgentMCP-v2.0.0-windows-x64-sfx.exe` | **推荐**：图形化便携自解压向导，一键创建桌面快捷方式并拉起云母控制台（内置 `agent-mcp.exe` CLI 与 `/dashboard/`） |
+| **Windows 10 / 11 (x64)** | `AgentMCP-v2.0.0-windows-x64-portable.zip` | 纯净免安装绿色压缩包，解压即用，零注册表残留 |
+| **Android (ARM64 真机推荐)** | `AgentMCP-v2.0.0-android-arm64-v8a.apk` | 轻量 `arm64-v8a` 双模合一安装包（支持远控电脑 + 本机 Shizuku / Root SU） |
+| **Android (全架构通用)** | `AgentMCP-v2.0.0-android-universal.apk` | 含 `arm64-v8a` / `armeabi-v7a` / `x86_64` 通用安装包 |
+
+## 命令行 (`agent-mcp`) 实战速查
+
+随桌面端附带的独立原生二进制 `agent-mcp`（无需任何外部运行时）与图形界面实时共享配置：
+
+```bash
+# 1. 环境与连通性全面体检（探测在线延迟、本机局域网/Tailscale 网卡、隧道与活跃入口）
+agent-mcp doctor
+
+# 2. 生成 Claude Desktop / Cursor / Gemini Web / Codex 一键挂载配置片段
+agent-mcp snippet
+
+# 3. 启动原生桌面控制台（支持 --silent 静默驻留系统托盘）
+agent-mcp gui
+agent-mcp gui --silent
+
+# 4. 启动多网卡 HTTP+SSE 服务端或作为本地 stdio 子进程挂载
+agent-mcp run --host 127.0.0.1,100.77.167.127 -p 8000
+agent-mcp run -t stdio --relaxed-cmd --allow-cwd
+
+# 5. 多入口、子网关与隧道快捷运维（保存即刻热加载）
+agent-mcp tools                          # 查看内置 19 项原子工具矩阵
+agent-mcp config                         # 查看脱敏配置摘要（支持 --json）
+agent-mcp profile list                   # 查看所有接入入口及解析后的完整 URL
+agent-mcp profile add-ip default 100.77.167.127
+agent-mcp sub inspect memory-mcp         # 实时探测子 MCP 工具清单
+agent-mcp tunnel status                  # 查看或管理 Cloudflared 隧道
+```
+
+## 从源码构建
+
+环境要求：**Flutter 3.50+ (Stable)**（含 Dart 3.14+）、Windows Visual Studio C++ 桌面工作负载（编译 Windows 端）或 Android SDK 35+ / JDK 17+（编译 Android 端）。
+
+```powershell
+git clone https://github.com/iamr0s/agent-mcp.git
+cd agent-mcp
+flutter pub get
+
+# 运行代码静态检查与组件测试
+dart analyze packages/agent_mcp_core
+cd apps/agent_mcp_app && flutter test && cd ../..
+
+# 一键构建 Windows 桌面端 + Web 管理台 + 原生 CLI + 便携/自解压包
+powershell -ExecutionPolicy Bypass -File .\scripts\build_release.ps1 -NoReload
+powershell -ExecutionPolicy Bypass -File .\scripts\package_sfx.ps1 -SkipBuild
+
+# 一键构建 Android 双模 Universal 与 arm64-v8a APK
+powershell -ExecutionPolicy Bypass -File .\scripts\build_android.ps1
+```
+
+## 工程目录结构
+
+```text
+agent-mcp/
+├── packages/
+│   └── agent_mcp_core/             # 纯 Dart 跨平台核心引擎与独立 CLI
+│       ├── bin/agent_mcp.dart      # 原生 CLI (gui / run / doctor / tools / snippet / profile / sub / tunnel)
+│       └── lib/src/
+│           ├── server.dart         # Streamable HTTP + SSE + stdio 统一引擎与热加载多入口路由
+│           ├── auth.dart           # 自托管 OAuth 2.1 (RFC 7591 + PKCE) 与 PBKDF2-SHA256 鉴权
+│           ├── file_tools.dart     # 12 项原子文件工具与内存快照撤销栈
+│           ├── process_tools.dart  # Win32 JobObject 与跨平台进程树管控
+│           ├── privileged_exec.dart# Android Shizuku / Root SU 特权回环桥接层 (PrivFs & Process)
+│           ├── sub_mcp.dart        # 嵌套子 MCP 渐进式发现与连接池
+│           ├── tunnel.dart         # Cloudflared 断点续传安装与多隧道守护
+│           └── dashboard_api.dart  # 同端口 /dashboard 静态资源 GZip 服务与管理 API
+├── apps/
+│   └── agent_mcp_app/              # Flutter 多端统一控制台 (Windows / Web / Android)
+│       ├── lib/                    # Claude 暖纸超椭圆主题、活动流、子网关、多网卡配置与特权卡片
+│       ├── windows/runner/         # Win11 DWM 云母、无边框窗口与 GDI+ 自绘圆角托盘菜单
+│       └── android/app/            # 前台常驻保活服务、全面屏挖孔透传、Shizuku AIDL 与 Root SU 守护
+├── .github/workflows/releases.yaml # GitHub Actions 跨平台自动构建与 Release 发布流水线
+├── scripts/                        # Windows / Android 自动化构建与无痕打包脚本
+└── examples/                       # 脱敏配置模板
+```
+
+## 安全边界说明
+
+- **默认拦截敏感凭据**：除非显式开启 `allow_secrets`，文件读写与检索工具默认拦截 `.env`、私钥证书（`*.pem`、`*.key`、`*.p12`、`*.jks`）以及自身 `config/` 与 `data/` 目录，防止排障过程中意外外泄宿主机密钥。
+- **公网与组网暴露务必设防**：绑定非回环网卡或开启 Cloudflare Tunnel 时，请始终启用 `OAuth 2.1` 或高强度 `Bearer Key`，并按最小权限原则配置入口级目录白名单（`roots`）或只读开关（`read_only`）。
+- **Android 特权审慎授权**：开启 `Shizuku` 或 `Root SU` 后，MCP 工具将具备对应的 `ADB Shell (UID 2000)` 或 `Root (UID 0)` 系统级读写执行能力，请仅向可信客户端开放授权凭证。
 
 ## 捐赠
 
@@ -34,224 +214,6 @@
 </p>
 
 <p align="center">支付宝 · 微信支付 · Binance Pay</p>
-
-## 这是什么
-
-Agent MCP 是基于 `FastMCP` 构建的本地系统级 MCP 宿主与聚合网关。无论客户端是网页端大模型（通过 Cloudflare Tunnel + OAuth 2.1 远程接入），还是本机 IDE / 桌面客户端（通过 HTTP、SSE 或 `stdio` 直连），所有请求都沿着同一条可观测、可热更新的链路流转：
-
-```text
-AI Client (Gemini / Claude / Cursor / Antigravity / Custom Agent)
-  -> Transport (Streamable HTTP `/mcp` | SSE `/sse` | `stdio`)
-  -> Cloudflare Tunnel (Quick trycloudflare / Named Token) or Local Loopback
-  -> Multi-Profile Router (Host / Credential Matching -> Per-Entry Auth & AccessPolicy)
-  -> Secret & Scope Guard (Allowed Roots + Read-Only + `.env`/Key Protection)
-  -> Tool Execution
-       ├─ Atomic Filesystem & Undo Stack
-       ├─ Sync Command (UTF-8/GBK + Process-Tree Kill) & Async Background Daemons
-       └─ Sub-MCP Gateway (`list_sub_mcps` -> `inspect_sub_mcp` -> `call_sub_mcp`)
-  -> Live Structured Telemetry (`GuiController` -> Desktop GUI / Terminal TUI / `/dashboard`)
-```
-
-## 核心设计取舍
-
-### 1. 三元渐进发现，拒绝工具爆炸
-传统网关把下游所有子 MCP 的工具一股脑平铺给模型，动辄上百个函数声明直接撑爆上下文并引发重名冲突。Agent MCP 的子网关始终只向主模型暴露 **3 个元工具**（`list_sub_mcps`、`inspect_sub_mcp`、`call_sub_mcp`）：模型先看目录，需要哪个工具再按需拉取它的精确 `inputSchema` 并调用；配置增删改**即时生效**，无需重启主服务。
-
-### 2. 同端口多入口（Profiles）与实时热加载
-一个本地端口即可同时承载多套接入入口：你可以给主力云端助手开一条带 `OAuth 2.1` 与读写权限的固定域名隧道，给代码审查 Agent 开一条带 `Bearer Key` 且限定单目录只读的 `Quick` 临时隧道，再给本机脚本留一条回环直连。入口的启停、公网地址热注入与权限边界修改全部**秒级热加载**，不断连现有会话。
-
-### 3. 外科手术式文件修改与单步反悔
-模型直接重写大文件极易丢行或破坏缩进。内置 `edit_file` 强制要求原子级精确块匹配，匹配失败时自动计算并返回上下文近似行提示；配合 `apply_patch`（统一 Diff 补丁，支持 `dry_run`）、`replace_text`（多文件批量替换预览）以及内存快照栈驱动的 `undo_edit`，任何一次误改都能一键回滚。
-
-### 4. 四端同源，不为无桌面环境妥协
-- **无边框桌面控制台（`agent-mcp gui`）**：Claude 暖羊皮纸与深色双主题（支持跟随系统）、自定义流畅缩放拖拽、系统托盘驻留。
-- **1:1 全屏终端控制台（`agent-mcp tui`）**：基于 `Textual` 完整复刻桌面端三栏布局、活动调用卡片展开（含红绿 Diff 高亮）、子 MCP 探测与五张配置卡片，SSH 连上无头服务器也有完整图形化体验。
-- **同端口加密管理页（`/dashboard`）**：无需额外开放管理端口，凭全局密码即可在任意浏览器远程管理。
-- **Rich 现代命令行（`agent-mcp run/config/profile/sub/tunnel`）**：启动状态卡片与快捷子命令，兼顾脚本自动化与人类阅读体验。
-
-## 内置工具矩阵（19 项）
-
-所有工具均附带标准 MCP `ToolAnnotations`（区分只读、修改、破坏性与外部调用），并受当前入口 `AccessPolicy` 实时约束：
-
-| 分类 | 工具名 | 权限级别 | 能力说明 |
-| :--- | :--- | :---: | :--- |
-| **目录与读取** | `list_roots` | 只读 | 查看当前会话允许的根目录、工作目录与读写/密钥策略 |
-| | `list_dir` | 只读 | 输出干净的目录树，自动跳过 `.git`、`node_modules` 等噪音目录 |
-| | `stat_file` | 只读 | 读取大文件前预检字节大小、行数、预估 Token 数与类型 |
-| | `read_file` | 只读 | 带行号与区间切片读取文本（自动兼容 UTF-8 / GBK 编码） |
-| | `read_files` | 只读 | 单次批量读取多个文件，减少多轮往返延迟 |
-| **检索与定位** | `glob_files` | 只读 | 按通配符高速匹配文件路径 |
-| | `search_text` | 只读 | 全文正则/字面量检索（优先调用 `ripgrep`，缺失时自动回退 Python） |
-| **原子编辑** | `create_file` | 写入 | 创建新文件（自动建父目录），覆盖已有文件需显式传 `overwrite=True` |
-| | `edit_file` | 写入 | 原子级多处精确文本替换，失败时附带近似片段行号提示 |
-| | `apply_patch` | 写入 | 应用标准 Unified Diff 补丁，支持 `dry_run` 预演 |
-| | `replace_text` | 写入 | 单文件或跨目录批量查找替换，支持 `dry_run` Diff 预览 |
-| | `file_op` | 写入/删除 | 安全移动、复制或删除文件与目录 |
-| | `undo_edit` | 写入 | 撤销某路径最近一次创建、编辑、补丁或删除操作 |
-| **命令与进程** | `run_command` | 执行 | 同步执行命令（智能解码、首尾截断防刷屏、超时整棵进程树强杀） |
-| | `start_process` | 执行 | 启动长时后台进程（如本地开发服、编译监听、日志跟踪） |
-| | `manage_process` | 执行 | 列出后台进程、增量读取输出、写入 `stdin` 或终止进程 |
-| **子 MCP 网关** | `list_sub_mcps` | 只读 | 列出已启用的嵌套子 MCP 服务摘要 |
-| | `inspect_sub_mcp` | 只读 | 按需查看指定子 MCP 的工具清单或单个工具的完整参数 Schema |
-| | `call_sub_mcp` | 代理调用 | 向嵌套子 MCP 转发工具调用，参数错误时自动附带 Schema 纠错提示 |
-
-## 环境要求
-
-- **Python 3.10+**
-- 推荐（可选）：系统安装 [`ripgrep`](https://github.com/BurntSushi/ripgrep)（`rg`）以获得毫秒级代码搜索；未安装时会自动降级至纯 Python 实现。
-- 完整安装（`pip install -e ".[full]"`）包含桌面窗口（`pywebview`）、系统托盘（`pystray` + `pillow`）与全屏 TUI（`textual`）；纯服务端仅依赖 `fastmcp`。
-
-## 安装与启动
-
-```bash
-git clone https://github.com/iamr0s/agent-mcp.git
-cd agent-mcp
-```
-
-### Windows
-
-安装脚本会自动准备虚拟环境、注册全局命令 `agent-mcp` / `agent-mcp-gui`，并写入**桌面快捷方式**与**系统开始菜单**（`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Agent MCP.lnk`）：
-
-```powershell
-# 推荐：以管理员或 Windows 11 sudo 运行（写入系统级开始菜单 + 桌面 + 用户 PATH）
-sudo powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
-
-# 普通权限运行（自动回退至当前用户开始菜单 + 桌面）
-powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
-
-# 也可直接双击 scripts\install_windows.bat
-
-# 仅安装无头 CLI 服务端（跳过 GUI 依赖与快捷方式）
-.\scripts\install_windows.ps1 -CliOnly
-
-# 移除快捷方式（保留源码与本地配置）
-sudo powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -Uninstall
-```
-
-### Linux
-
-自动创建 `.venv`、软链 CLI 至 `~/.local/bin`、生成 XDG 桌面菜单项（`~/.local/share/applications/agent-mcp.desktop`），并支持注册 `systemd --user` 常驻服务：
-
-```bash
-chmod +x scripts/install_linux.sh
-
-# 标准安装（CLI + 桌面应用菜单入口 + TUI）
-./scripts/install_linux.sh
-
-# 同时在桌面生成快捷图标
-./scripts/install_linux.sh --desktop
-
-# 无头服务器推荐：仅装核心依赖并启用 systemd 用户级后台自启
-./scripts/install_linux.sh --cli-only --systemd
-
-# 卸载快捷方式、软链与 systemd 单元
-./scripts/install_linux.sh --uninstall
-```
-
-### macOS
-
-自动创建 `.venv`、软链 CLI 至 `~/.local/bin`、生成原生 `~/Applications/Agent MCP.app` 应用包（支持访达与聚焦搜索启动），并可选配置 `launchd` 自启：
-
-```bash
-chmod +x scripts/install_macos.sh
-
-# 标准安装（CLI + ~/Applications/Agent MCP.app + TUI）
-./scripts/install_macos.sh
-
-# 无头常驻：仅装 CLI 并加载 LaunchAgent
-./scripts/install_macos.sh --cli-only --launchd
-
-# 卸载 .app、软链与 LaunchAgent
-./scripts/install_macos.sh --uninstall
-```
-
-### 手动安装（通用虚拟环境）
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Linux / macOS: source .venv/bin/activate
-
-pip install -e ".[full]"   # 完整安装（桌面 GUI + 全屏 TUI + 托盘）
-pip install -e ".[tui]"    # 服务端 + 全屏 TUI（适合远程服务器）
-pip install -e .           # 最简核心服务端
-```
-
-## 交互形态与命令行用法
-
-安装完成后，可在任意目录调用 `agent-mcp`（或在仓库根目录使用 `python main.py`）：
-
-```bash
-# 1. 桌面无边框控制台（默认管理端口 8779）
-agent-mcp gui
-agent-mcp-gui
-
-# 2. 全屏终端控制台（与桌面 GUI 1:1 对齐，SSH / 终端首选）
-agent-mcp tui
-
-# 3. 交互式向导与配置面板
-agent-mcp setup                  # 终端分步引导配置
-agent-mcp config                 # Rich 面板查看当前生效配置与入口列表
-agent-mcp config --json          # 输出脱敏 JSON（便于脚本读取）
-
-# 4. 启动 MCP 服务（自动输出 Rich 状态卡片 + 实时彩色日志流）
-agent-mcp run
-
-# 5. 快捷运维子命令（与 GUI / TUI / Dashboard 实时共享配置）
-agent-mcp profile list           # 查看所有接入入口
-agent-mcp profile enable <id>    # 启用 / 停用 (disable) 指定入口
-agent-mcp sub list               # 查看嵌套子 MCP 列表与状态
-agent-mcp sub inspect <name>     # 实时探测子 MCP 暴露的工具清单
-agent-mcp tunnel status          # 查看或启停 (start / stop / stop-all) Cloudflared 隧道
-```
-
-### 命令行参数覆盖与 `stdio` 接入
-
-命令行参数优先级高于环境变量与 `config/mcp_config.json`：
-
-```bash
-# 临时指定双模监听、Bearer 鉴权与受限目录启动
-agent-mcp run -t dual --host 127.0.0.1 -p 8000 --auth bearer --api-key sk-your-token -r /path/to/repo
-
-# 纯只读安全审计模式（禁止一切写文件、删文件与命令执行）
-agent-mcp run --read-only --allow-cwd
-
-# 作为本地 stdio 子进程直接挂载到 Claude Desktop / Cursor / Antigravity
-agent-mcp run -t stdio --allow-cwd
-```
-
-也支持通过环境变量在容器或守护进程中注入配置：`MCP_NAME`、`MCP_TOOL_PREFIX`、`MCP_TRANSPORT`、`MCP_HOST`、`MCP_PORT`、`MCP_AUTH_MODE`、`MCP_API_KEY`、`MCP_OAUTH_BASE_URL`、`MCP_OAUTH_CLIENT_ID`、`MCP_OAUTH_CLIENT_SECRET`、`MCP_LOG_LEVEL`、`MCP_LOG_FILE`。
-
-## 模块分层
-
-```text
-agent-mcp/
-├── main.py                     # 统一 CLI / GUI / TUI 启动入口
-├── launch_gui.pyw              # Windows 无控制台窗口静默启动器（含崩溃弹窗兜底）
-├── agent_mcp/
-│   ├── config.py               # 存储布局、无损迁移、多 Profile 与敏感路径守卫
-│   ├── server.py               # FastMCP 组装、HTTP+SSE 双模路由、动态按请求策略注入
-│   ├── auth.py                 # Bearer、本地自签发 OAuth 2.1、GitHub/Google/自定义 OIDC
-│   ├── file_tools.py           # 编码自适应读取、ripgrep 检索、原子替换、Diff 补丁与撤销栈
-│   ├── process_tools.py        # 进程树超时清理的同步命令与异步后台进程池
-│   ├── sub_mcp.py              # 嵌套子 MCP 连接池、Schema 探测与三元渐进代理
-│   ├── tunnel.py               # Cloudflared 在线安装/断点续传/本地导入与多隧道守护
-│   ├── web_gui.py              # GuiController 核心控制器与无边框桌面控制台
-│   ├── tui.py                  # 与桌面端 1:1 对齐的 Textual 全屏终端控制台
-│   ├── dashboard.py            # 挂载于主服务端口 /dashboard 的密码保护远程管理页
-│   ├── cli.py / cli_ui.py      # 命令行路由、子命令与 Rich 终端面板
-│   ├── tray.py                 # 跨平台系统托盘驻留
-│   └── logging_utils.py        # 结构化 JSON 事件总线与对齐彩色日志
-├── scripts/                    # Windows / Linux / macOS 安装、快捷方式与服务注册脚本
-└── examples/                   # 脱敏配置模板（mcp_config / mcp_sub_servers）
-```
-
-## 安全边界与非目标
-
-- **默认拦截敏感凭据**：除非显式开启 `allow_secrets`，文件读写与搜索工具默认拒绝访问 `.env`、私钥证书（`*.pem`、`*.key`、`*.p12`）以及 Agent MCP 自身的 `config/` 与 `data/` 状态文件，防止模型在排障时意外读取并外泄宿主机密钥。
-- **公网暴露必须设防**：通过 Cloudflare Tunnel 将服务暴露至公网时，请始终启用 `OAuth 2.1` 或高强度 `Bearer Key`，并结合入口级目录白名单（`roots`）或只读开关（`read_only`）收敛权限。
-- **非沙盒虚拟化**：本项目的目标是让模型操作**真实的宿主机环境**；在开启读写执行权限的入口下，`run_command` 拥有与当前操作系统用户同等的执行权限，请像对待 SSH 密钥一样保管你的授权凭据。
-- **运行态与代码严格分离**：`config/*.json`、`data/`、`logs/`、`bin/cloudflared*` 与 `.env` 均已列入 `.gitignore`，切勿强行提交至公开仓库。
 
 ## 许可
 

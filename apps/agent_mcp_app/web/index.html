@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Agent MCP Console — Anthropic Editorial Desktop & Web Console">
+  <meta name="theme-color" content="#F5F4ED" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Agent MCP">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Preload lightweight Latin/Mono typography without blocking CJK multi-MB fonts -->
+  <link rel="preload" href="assets/assets/fonts/AnthropicSerif-Medium.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/assets/fonts/AnthropicSans-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/assets/fonts/JetBrainsMono-Regular.ttf" as="font" type="font/ttf" crossorigin>
+
+  <title>Agent MCP Console</title>
+
+  <style>
+    :root {
+      --bg: #F5F4ED;
+      --ink: #141413;
+      --muted: #87867F;
+      --clay: #C96442;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141413;
+        --ink: #FAF9F5;
+        --muted: #828078;
+        --clay: #D97757;
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg);
+      color: var(--ink);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    #mcp-boot {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background-color: var(--bg);
+      transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+    #mcp-boot.done {
+      opacity: 0;
+      transform: scale(1.03);
+    }
+    .mcp-spark-wrap {
+      position: relative;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mcp-spark-halo {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201, 100, 66, 0.24) 0%, rgba(201, 100, 66, 0) 70%);
+      animation: haloPulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .mcp-spark {
+      width: 36px;
+      height: 36px;
+      animation: sparkPulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .mcp-boot-label {
+      font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: 0.015em;
+      color: var(--ink);
+    }
+    .mcp-boot-bar {
+      width: 180px;
+      height: 3.5px;
+      border-radius: 999px;
+      background-color: rgba(135, 134, 127, 0.22);
+      overflow: hidden;
+      position: relative;
+    }
+    .mcp-boot-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 44%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(201, 100, 66, 0.25), var(--clay), rgba(201, 100, 66, 0.25));
+      animation: bootSlide 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .mcp-boot-sub {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    @keyframes sparkPulse {
+      0%, 100% { transform: scale(0.90) rotate(0deg); opacity: 0.82; }
+      50% { transform: scale(1.12) rotate(12deg); opacity: 1; }
+    }
+    @keyframes haloPulse {
+      0%, 100% { transform: scale(0.85); opacity: 0.45; }
+      50% { transform: scale(1.32); opacity: 0.95; }
+    }
+    @keyframes bootSlide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(250%); }
+    }
+  </style>
+</head>
+<body>
+  <div id="mcp-boot">
+    <div class="mcp-spark-wrap">
+      <div class="mcp-spark-halo"></div>
+      <svg class="mcp-spark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 6L38.2 25.8L58 32L38.2 38.2L32 58L25.8 38.2L6 32L25.8 25.8L32 6Z" fill="var(--clay)"/>
+      </svg>
+    </div>
+    <div class="mcp-boot-label">Agent MCP Console</div>
+    <div class="mcp-boot-bar"><div class="mcp-boot-bar-fill"></div></div>
+    <div class="mcp-boot-sub">正在初始化控制台与实时事件流...</div>
+  </div>
+
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('mcp-boot');
+      if (boot) {
+        boot.classList.add('done');
+        setTimeout(function () { boot.remove(); }, 320);
+      }
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

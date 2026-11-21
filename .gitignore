@@ -1,51 +1,30 @@
-# Python bytecode & build artifacts
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.eggs/
-build/
-dist/
-pip-wheel-metadata/
+# Local Flutter/Dart SDK & build outputs
+/.sdk/
+.dart_tool/
+/build/
+apps/**/build/
+packages/**/build/
+/dist/
+/release/
+/_legacy/
+pubspec.lock
 
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
+# Android Gradle local & build outputs
+apps/agent_mcp_app/android/.gradle/
+apps/agent_mcp_app/android/local.properties
+apps/agent_mcp_app/android/key.properties
+*.jks
+*.keystore
+*.apk
+*.aab
 
-# Local secrets & runtime configuration (keep *.example.json templates)
+# Runtime state, secrets & local binaries (strictly separated from source)
+/config/*.json
+/data/
+/logs/
+/bin/
 .env
 .env.*
-!.env.example
-config/*.json
-!config/*.example.json
-mcp_config.json
-mcp_oauth_state.json
-mcp_sub_servers.json
-mcp_window_state.json
-*.key
-*.pem
-*.p12
-
-# Runtime data, WebView cache, logs & downloaded binaries (e.g. cloudflared)
-data/
-logs/
-bin/
-*.log
-
-# Legacy / migration archive
-_legacy/
-
-# OS & desktop shortcut artifacts
-*.lnk
-*.desktop
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# IDE / editor files
-.vscode/
-.idea/
-*.swp
-*.swo
+*.exe
+*.aot
+*.dill

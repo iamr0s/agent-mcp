@@ -1,19 +1,28 @@
 {
-  "server_name": "agent-mcp",
+  "server_name": "Agent MCP",
   "tool_prefix": "",
   "transport": "dual",
   "host": "127.0.0.1",
+  "hosts": ["127.0.0.1"],
   "port": 8000,
-  "auth_mode": "bearer",
-  "api_key": "REPLACE_WITH_YOUR_SECRET_TOKEN",
-  "oauth_base_url": "",
-  "oauth_client_id": "",
-  "oauth_client_secret": "",
-  "oauth_redirect_uris": [],
-  "roots": [],
+  "auth_mode": "oauth-local",
+  "auto_start": true,
   "read_only": false,
   "allow_secrets": false,
-  "default_timeout": 60,
-  "log_level": "INFO",
-  "log_file": null
+  "relaxed_command_annotations": true,
+  "android_privilege_mode": "none",
+  "android_su_mount_master": true,
+  "profiles": [
+    {
+      "id": "default",
+      "name": "主接入入口",
+      "enabled": true,
+      "transport": "dual",
+      "tunnel_mode": "none",
+      "direct_ips": ["127.0.0.1"],
+      "manual_urls": [],
+      "auth_mode": "oauth-local",
+      "inherit_permissions": true
+    }
+  ]
 }
