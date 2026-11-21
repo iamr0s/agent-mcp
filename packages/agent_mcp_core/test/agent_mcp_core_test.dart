@@ -400,4 +400,56 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('Linux systemd unit generation, CORS MCP-Protocol-Version, and /health metadata', () async {
+    final unitDir = Directory(p.join(tempRoot.path, 'systemd_units'));
+    final fakeExe = File(p.join(tempRoot.path, 'agent-mcp'))..writeAsStringSync('#!/bin/sh\n');
+    final inst = AutoStartManager.installLinuxSystemdService(
+      systemWide: false,
+      startNow: false,
+      unitDirOverride: unitDir,
+      executableOverride: fakeExe.path,
+    );
+    expect(inst['ok'], isTrue);
+    final unitText = File(inst['unit_path'] as String).readAsStringSync();
+    expect(unitText, contains('ExecStart="'));
+    expect(unitText, contains('AGENT_MCP_HOME='));
+    expect(unitText, contains('Restart=on-failure'));
+
+    final uninst = AutoStartManager.uninstallLinuxSystemdService(
+      systemWide: false,
+      unitDirOverride: unitDir,
+    );
+    expect(uninst['removed'], isTrue);
+
+    const loopback = '127.0' '.0.1';
+    final cfg = ServerConfig(
+      serverName: 'meta-mcp',
+      transport: 'dual',
+      host: loopback,
+      port: 0,
+      authMode: 'bearer',
+      apiKey: 'sk-remote-999',
+      roots: [sandboxDir.path],
+    );
+    final engine = McpServerEngine(cfg);
+    final srv = await engine.serveHttp();
+    final authority = '${srv.address.address}:${srv.port}';
+    try {
+      final hResp = await http.get(Uri.http(authority, '/health'));
+      final hJson = jsonDecode(hResp.body) as Map<String, dynamic>;
+      expect(hJson['os'], equals(Platform.operatingSystem));
+      expect(hJson['tools_count'], equals(20));
+
+      final optReq = http.Request('OPTIONS', Uri.http(authority, '/mcp'));
+      final optStream = await optReq.send();
+      expect(optStream.statusCode, equals(200));
+      expect(
+        optStream.headers['access-control-allow-headers'] ?? '',
+        contains('MCP-Protocol-Version'),
+      );
+    } finally {
+      await srv.close(force: true);
+    }
+  });
 }

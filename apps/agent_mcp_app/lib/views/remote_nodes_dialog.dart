@@ -92,7 +92,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     if (cleanUrl.isEmpty) {
       setState(() {
         _probeOk = false;
-        _probeMsg = '请先输入远程电脑的域名或局域网 / Tailscale 地址';
+        _probeMsg = '请先输入远程服务器、电脑或手机节点的域名 / Tailscale / 局域网地址';
       });
       return;
     }
@@ -193,7 +193,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                           style: serifTitleStyle(c, size: 17.5),
                         ),
                         Text(
-                          '在本机服务与多台远程电脑 MCP 节点间随时切换',
+                          '在本机服务与多台远程服务器、电脑或手机节点间随时切换',
                           style: sansStyle(c, size: 12, color: c.muted),
                         ),
                       ],
@@ -250,7 +250,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: ClaudeButton(
-                            label: '添加远程电脑节点',
+                            label: '添加远程节点（服务器 / 电脑 / 手机）',
                             leading: const Icon(Icons.add_rounded),
                             onPressed: _startAdd,
                           ),

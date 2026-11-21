@@ -33,7 +33,7 @@ class _SseSession {
 }
 
 /// Core Agent MCP Server Engine:
-/// - Registers all 19 tools (`list_roots` + 12 file + 3 process + 3 sub-MCP)
+/// - Registers all 20 tools (`list_roots` + 12 file + 3 process + 3 sub-MCP + `manage_expose`)
 /// - Enforces per-request `Zone` `AccessPolicy` & `relaxed_command_annotations`
 /// - Serves `stdio`, Streamable HTTP (`/mcp`), Legacy SSE (`/sse` + `/messages`),
 ///   OAuth 2.1, `/health`, and `/dashboard` on a single port!
@@ -454,8 +454,8 @@ class McpServerEngine {
             'access-control-allow-origin': '*',
             'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
             'access-control-allow-headers':
-                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, X-Filename',
-            'access-control-expose-headers': 'Mcp-Session-Id',
+                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID, X-Filename',
+            'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version',
           },
         );
       }
@@ -470,6 +470,9 @@ class McpServerEngine {
             'server_name': config.serverName,
             'version': agentMcpVersion,
             'runtime': 'dart-native',
+            'os': Platform.operatingSystem,
+            'hostname': Platform.localHostname,
+            'tools_count': _tools.length,
             'auth_mode': config.authMode,
             'read_only': config.readOnly,
           }),
@@ -651,6 +654,7 @@ class McpServerEngine {
           'content-type': 'text/event-stream; charset=utf-8',
           'cache-control': 'no-cache',
           'mcp-session-id': sid,
+          'mcp-protocol-version': mcpProtocolVersion,
         },
         context: const {'shelf.io.buffer_output': false},
       );
@@ -693,6 +697,7 @@ class McpServerEngine {
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'mcp-session-id': sid,
+          'mcp-protocol-version': mcpProtocolVersion,
         },
       );
     }
@@ -708,6 +713,7 @@ class McpServerEngine {
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'mcp-session-id': sid,
+          'mcp-protocol-version': mcpProtocolVersion,
         },
       );
     }
@@ -1066,7 +1072,7 @@ Response _withCors(Response r) {
   return r.change(
     headers: const {
       'access-control-allow-origin': '*',
-      'access-control-expose-headers': 'Mcp-Session-Id',
+      'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version',
     },
   );
 }

@@ -1,77 +1,103 @@
 # Agent MCP v2.0
 
-[中文](README.md) | English
+[中文](README.md) | [English](README.en.md)
 
 [![Release](https://img.shields.io/github/v/release/iamr0s/agent-mcp?color=D97757&label=Release)](https://github.com/iamr0s/agent-mcp/releases)
 [![Flutter 3.50+](https://img.shields.io/badge/Flutter-3.50%2B%20%7C%20Dart%20Native-02569B.svg)](https://flutter.dev/)
-[![MCP 2025-03-26](https://img.shields.io/badge/Protocol-Streamable%20HTTP%20%2B%20SSE%20%2B%20stdio-4D7C5D.svg)](https://modelcontextprotocol.io/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%20Android%20%7C%20Web%20%7C%20CLI-141413.svg)](#downloads)
+[![MCP 2025-03-26](https://img.shields.io/badge/Protocol-Streamable%20HTTP%20%2B%20SSE%20%2B%20stdio-3D8B63.svg)](https://modelcontextprotocol.io/)
+[![Platform](https://img.shields.io/badge/Nodes-Linux%20Server%20%7C%20Android%20%7C%20Windows%20%7C%20SDK-141413.svg)](#downloads--installation)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> **Give AI real hands on your workspace—while keeping every switch and permission boundary on your own device.**
+> **A zero-dependency native MCP execution node & Sub-MCP bastion you install on Linux servers, remote workstations, and Android phones — ready to be invoked from your computer's AI clients or your own code.**
 >
-> Built natively with **Dart & Flutter** with zero Python/Node dependencies, **Agent MCP v2.0** lets Gemini, Claude, Cursor, and Codex edit code surgically, run terminal builds, route dozens of Sub-MCP servers on demand, **instantly share generated videos or local web ports via Tailscale & public links (`manage_expose`)**, and control everything from **Windows 11**, **Web**, **CLI**, or an **Android Dual-Mode app**.
+> Local coding assistants already handle files on your laptop. The real friction starts when your workloads live on **headless Linux cloud servers, GPU boxes, NAS appliances, secondary Windows machines, or real Android test phones** where `localhost` `stdio` tools cannot reach.
+>
+> Built natively with **Dart & Flutter** (zero Python / Node.js runtime dependencies), **Agent MCP v2.0** drops onto any server, workstation, or Android device and exposes 20 surgical file, process, Sub-MCP gateway, and instant link-sharing tools over standard **Streamable HTTP (`/mcp`) + SSE** with built-in **OAuth 2.1 (RFC 7591 + PKCE)**, **Bearer API keys**, and **Tailscale** integration.
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="94%" alt="Agent MCP v2.0 Overview">
+  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v2.0 Cross-Device Execution Node Overview">
 </p>
 
-## Visual Tour
+## 60-Second Cross-Device Quickstart
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/previews/activity_and_submcp.png" alt="Live Activity & Sub-MCP Gateway">
-      <p align="center"><sub><b>Live Call Stream & On-Demand Sub-MCP Gateway</b></sub></p>
-    </td>
-    <td width="50%">
-      <img src="assets/previews/multi_ip_and_profiles.png" alt="Multi-IP Picker & Tailscale Share Controls">
-      <p align="center"><sub><b>Multi-NIC Picker & Tailscale External Share Controls</b></sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <p align="center">
-        <img src="assets/previews/android_privilege_modes.png" width="88%" alt="Android Dual-Mode App">
-      </p>
-      <p align="center"><sub><b>Android Dual-Mode App: Remote Multi-PC Controller + Local Sandbox / Shizuku / Root SU</b></sub></p>
-    </td>
-  </tr>
-</table>
-
-## What You Can Do & How to Use It
-
-1. **Edit Files, Run Commands & Undo in One Step (20 Built-in Tools)**: Connect your AI client and ask directly—surgical `edit_file` / `apply_patch` edits with `undo_edit` snapshots, plus `run_command` / `start_process` / `manage_process` for builds and dev servers.
-2. **Instant External Sharing with Tailscale (`manage_expose` + Share Tab)**: Just generated an MP4 video or started a site on `:3000`? Ask AI to expose it—or click **+ New Share** in the **External Share** tab—to get an instant mobile-ready link (with HTTP Range video scrubbing) over Tailscale, your active gateway domain, or a temporary Cloudflare HTTPS tunnel. Toggle master access and Tailscale mode anytime in **Settings**.
-3. **Multi-NIC Direct Picker & Per-Profile Auth**: Select LAN and Tailscale IPs side-by-side when editing a Direct/Reverse-Proxy profile, auto-sync unbound NIC listeners on save, and copy any channel URL from the dropdown menu.
-4. **Zero-Bloat Sub-MCP Gateway**: Paste your existing `mcpServers` JSON into the **Sub-MCP Gateway** tab. Only 3 compact tools (`list_sub_mcps`, `inspect_sub_mcp`, `call_sub_mcp`) are exposed upfront so context stays fast and clean.
-5. **Android Dual-Mode APK**: Switch between remote desktop nodes from the top bar, or run a local MCP server on your phone with one-tap switching across **App Sandbox**, **Shizuku (Wireless ADB / Root)**, and **Root SU (KernelSU / APatch / Magisk)**.
-
-## Downloads
-
-Grab the latest release from [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases):
-- **Windows 10/11 (`x64`)**: `AgentMCP-v2.0.0-windows-x64-sfx.exe` (installer wizard) or `AgentMCP-v2.0.0-windows-x64-portable.zip`.
-- **Android**: `AgentMCP-v2.0.0-android-arm64-v8a.apk` (recommended for modern phones) or `AgentMCP-v2.0.0-android-universal.apk`.
-- **Linux (`x64` CLI)**: `AgentMCP-v2.0.0-linux-x64-cli.tar.gz`.
-
-## CLI Quickstart
+### 1. Deploy on a Headless Linux Server / GPU Host / NAS
 
 ```bash
-agent-mcp doctor                  # Check health, LAN/Tailscale IPs, tunnels & share status
-agent-mcp snippet                 # Generate ready-to-paste Claude / Cursor / Gemini / Codex config
-agent-mcp gui --silent            # Launch native desktop console into the system tray
-agent-mcp run -t stdio            # Run as a local stdio MCP server
-agent-mcp tools                   # List all 20 built-in tools (including manage_expose)
+# 1. Download & extract (includes both native `agent-mcp` binary and compiled `/dashboard/` Web UI)
+curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.0.0/AgentMCP-v2.0.0-linux-x64-cli.tar.gz | tar -xzf -
+
+# 2. One-line non-interactive setup (auto-detects LAN & Tailscale 100.x IPs + generates Bearer key)
+./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
+
+# 3. Install & start persistent Linux systemd service
+./agent-mcp service install
 ```
 
-## Donation
+Open `http://<server-ip>:8778/dashboard/` in any browser to manage profiles, live call streams, Sub-MCPs, and external shares visually.
 
-<p align="center">
-  <img src="assets/donation/alipay.jpg" width="200" alt="Alipay">
-  <img src="assets/donation/wxpay.jpg" width="200" alt="WeChat Pay">
-  <img src="assets/donation/binance.jpg" width="200" alt="Binance Pay">
-</p>
+### 2. Call Remotely from Your Computer's AI Client or Your Own Python / TS Code
+
+**Option A — Connect Claude Code / Cursor / Windsurf / Antigravity to your remote server or phone:**
+
+```json
+{
+  "mcpServers": {
+    "gpu-server-01": {
+      "url": "http://100.88.12.5:8778/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-mcp-YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+**Option B — Call programmatically via Official Python MCP SDK (`pip install mcp`):**
+
+```python
+import asyncio
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+async def main():
+    url = "http://100.88.12.5:8778/mcp"  # Linux server, Windows workstation, or Android phone
+    headers = {"Authorization": "Bearer sk-mcp-YOUR_KEY"}
+
+    async with streamablehttp_client(url, headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            res = await session.call_tool("run_command", {"command": "nvidia-smi -L"})
+            print(res.content[0].text)
+
+asyncio.run(main())
+```
+
+**Option C — Direct CLI health check & remote invocation:**
+
+```bash
+agent-mcp remote http://100.88.12.5:8778 ping
+agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-YOUR_KEY
+```
+
+## Highlights
+
+- **External Exposure & Instant Preview Links (`manage_expose` + Dedicated Share Tab)**: Share newly rendered videos (HTTP `206 Range` scrubbable player), static web builds, or local dev ports (`:3000`) via **Tailscale Funnel / Serve** or on-demand `cloudflared` tunnels, with a master Tailscale toggle and auto-expiry TTL in Settings.
+- **Internal Sub-MCP Bastion Gateway (`-96%` Initial Schema Tokens)**: Keep private VPC databases (`postgres`, `redis`, `docker`) unexposed to the internet behind 3 progressive tools (`list_sub_mcps` -> `inspect_sub_mcp` -> `call_sub_mcp`).
+- **Multi-NIC IP Picker & Per-Profile Isolation**: Multi-select LAN and Tailscale `100.x` IPs plus custom reverse-proxy URLs per profile, each with independent OAuth 2.1 / Bearer auth, read-only flags, and root whitelists.
+- **Android Dual-Mode APK**: Control multiple remote Linux/Windows servers on the go, OR run an on-device wireless MCP server with 3 switchable privilege tiers (**App Sandbox**, **Shizuku ADB/Root**, and **Persistent Root SU Daemon** for KernelSU / APatch / Magisk) and foreground lock-screen keep-alive.
+
+## Downloads & Installation
+
+Grab prebuilt binaries from [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases):
+
+| Target Platform | Release Asset | Description |
+| :--- | :--- | :--- |
+| **Linux Server / NAS (x64)** | `AgentMCP-v2.0.0-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
+| **Android (ARM64 Recommended)** | `AgentMCP-v2.0.0-android-arm64-v8a.apk` | Dual-mode remote multi-node controller + 3-tier local MCP server |
+| **Android (Universal)** | `AgentMCP-v2.0.0-android-universal.apk` | Multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v2.0.0-windows-x64-sfx.exe` | Windows 11 Mica desktop console + Web UI + standalone `agent-mcp.exe` CLI |
+| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v2.0.0-windows-x64-portable.zip` | Portable archive storing config & logs locally |
 
 ## License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+Licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE).

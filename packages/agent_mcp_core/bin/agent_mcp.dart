@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:agent_mcp_core/agent_mcp_core.dart';
 import 'package:agent_mcp_core/src/win32_tray.dart';
 import 'package:args/args.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 bool _useAnsiColor = true;
@@ -114,6 +115,12 @@ Future<void> main(List<String> rawArgs) async {
       await _cmdRun(rawArgs.sublist(1));
     case 'gui':
       await _cmdGui(rawArgs.sublist(1));
+    case 'init':
+      await _cmdInit(rawArgs.sublist(1));
+    case 'service':
+      _cmdService(rawArgs.sublist(1));
+    case 'remote':
+      await _cmdRemote(rawArgs.sublist(1));
     case 'status':
     case 'doctor':
       await _cmdDoctor(rawArgs.sublist(1));
@@ -145,18 +152,23 @@ Future<void> main(List<String> rawArgs) async {
 
 void _printHelp() {
   _printBox(
-    '${_cClay("✦")} ${_cBold("Agent MCP v$agentMcpVersion")} · Cross-Platform Native CLI',
+    '${_cClay("✦")} ${_cBold("Agent MCP v$agentMcpVersion")} · Cross-Device Remote Execution Node & CLI',
     [
-      _cMuted('同源引擎驱动 Windows 云母桌面端 · Android 双模版 · Web 面板 · 原生 CLI'),
+      _cMuted('部署于 Linux 服务器 · Windows 主机 · Android 手机，供任意电脑 AI 或 SDK 远程调用'),
     ],
   );
   stdout.writeln('''
-${_cBold("核心运行与诊断:")}
-  gui [--silent]          启动原生桌面控制台（无 GUI 二进制时自动回退 Web 托盘模式）
-  run [options]           按配置或命令行覆盖参数启动多网卡 MCP 服务端
-  doctor [--json]         全面体检：探测在线状态、本机网卡/Tailscale IP、隧道与入口
-  tools [--json]          查看内置 19 项原子工具矩阵与权限分级
-  snippet [client]        生成 Claude / Cursor / Gemini / Codex 一键接入配置片段
+${_cBold("核心运行与无头服务器部署:")}
+  init [options]          非交互一行初始化节点配置（适合 SSH 云服务器 / Docker 部署）
+  service <subcmd>        注册后台常驻守护服务 (install | uninstall | status, 支持 Linux systemd)
+  run [options]           按配置或参数启动多网卡 MCP 节点与 Web 管理面板 (/mcp + /dashboard/)
+  gui [--silent]          启动原生桌面控制台（无 GUI 二进制时自动挂载 Web 面板模式）
+  doctor [--json]         全面体检：探测在线状态、本机网卡 / Tailscale IP、隧道与外网分享
+
+${_cBold("跨设备连接与程序化调用:")}
+  snippet [target]        生成远程连接与程序调用代码 (remote | python | ts | curl | claude | cursor | gemini | codex)
+  remote <url> [action]   从终端直接测试或调用远端服务器 / 手机节点 (ping | tools | call)
+  tools [--json]          查看内置 20 项原子工具矩阵与权限分级
 
 ${_cBold("配置与网关运维 (实时热加载):")}
   setup                   交互式终端分步配置向导
@@ -165,12 +177,12 @@ ${_cBold("配置与网关运维 (实时热加载):")}
   sub <subcmd>            管理嵌套子 MCP 网关 (list | inspect | enable | disable)
   tunnel <subcmd>         管理 Cloudflared 隧道 (status | start | stop | stop-all | install)
 
-${_cBold("run 常用覆盖参数:")}
+${_cBold("init / run 常用参数:")}
   -t, --transport <mode>  传输协议: dual (默认 HTTP+SSE) | http | sse | stdio
       --host <addr>       监听网卡地址 (支持多次传入或逗号分隔，如 0.0.0.0 或 127.0.0.1,100.x.y.z)
-  -p, --port <port>       监听端口 (默认 8000)
-      --auth <mode>       鉴权模式: oauth-local | bearer | none
-      --api-key <token>   指定 Bearer API Key
+  -p, --port <port>       监听端口 (默认 8778 / 8000)
+      --auth <mode>       鉴权模式: bearer | oauth-local | none
+      --api-key <token>   指定 Bearer API Key（init 可传 --generate-key 自动生成高强密钥）
   -r, --root <dir>        限定可访问根目录（可多次传入）
       --allow-cwd         将当前工作目录加入白名单
       --read-only         纯只读安全审计模式（禁止一切写入、删除与命令执行）
@@ -302,6 +314,409 @@ ServerConfig _resolveCliServerConfig(List<String> args) {
 
   return cfg;
 }
+
+Future<void> _cmdInit(List<String> args) async {
+  final parser = ArgParser()
+    ..addOption('config', abbr: 'c')
+    ..addOption('name')
+    ..addOption('prefix')
+    ..addMultiOption('host')
+    ..addOption('port', abbr: 'p')
+    ..addOption('auth')
+    ..addOption('api-key')
+    ..addFlag('generate-key', negatable: false)
+    ..addFlag('password-stdin', negatable: false)
+    ..addMultiOption('root', abbr: 'r')
+    ..addFlag('read-only', negatable: false)
+    ..addFlag('relaxed-cmd', defaultsTo: true)
+    ..addFlag('json', negatable: false)
+    ..addFlag('no-color', negatable: false);
+
+  final res = parser.parse(args);
+  final cfgPath = res['config']?.toString();
+  final cfgFile = cfgPath != null && cfgPath.trim().isNotEmpty
+      ? File(expandAndResolvePath(cfgPath))
+      : StoragePaths.instance.defaultConfigFile;
+
+  final data = loadSavedConfig(cfgFile);
+  final serverName = (res.wasParsed('name')
+          ? res['name']
+          : (data['server_name'] ?? 'mcp-${Platform.localHostname}'))
+      .toString()
+      .trim();
+  data['server_name'] = serverName;
+  if (res.wasParsed('prefix')) {
+    data['tool_prefix'] = sanitizePrefix(res['prefix'].toString())
+        .replaceAll(RegExp(r'_+$'), '');
+  }
+  data['transport'] = 'dual';
+
+  final bindHosts = res.wasParsed('host')
+      ? parseBindHosts(res['host'] as List<String>)
+      : parseBindHosts(data['hosts'], data['host'] ?? '0.0.0.0');
+  data['hosts'] = bindHosts;
+  data['host'] = bindHosts.first;
+
+  final port = res.wasParsed('port')
+      ? (int.tryParse(res['port'].toString()) ?? 8778)
+      : (int.tryParse('${data['port'] ?? 8778}') ?? 8778);
+  data['port'] = port;
+
+  final authMode = (res.wasParsed('auth')
+          ? res['auth']
+          : (data['auth_mode'] ?? 'bearer'))
+      .toString()
+      .toLowerCase();
+  data['auth_mode'] =
+      {'bearer', 'oauth-local', 'none'}.contains(authMode) ? authMode : 'bearer';
+
+  String? issuedKey;
+  String? issuedPassword;
+
+  if (data['auth_mode'] == 'bearer') {
+    var key = res.wasParsed('api-key')
+        ? res['api-key'].toString().trim()
+        : (data['api_key'] ?? '').toString().trim();
+    if (res['generate-key'] == true || key.isEmpty) {
+      key = 'sk-mcp-${randomTokenUrlSafe(24)}';
+    }
+    data['api_key'] = key;
+    issuedKey = key;
+  }
+
+  var adminPwd = (Platform.environment['AGENT_MCP_PASSWORD'] ?? '').trim();
+  if (res['password-stdin'] == true) {
+    adminPwd = stdin.readLineSync()?.trim() ?? '';
+  }
+  if (adminPwd.isNotEmpty) {
+    data['oauth_local_password_hash'] = hashPassword(adminPwd);
+    issuedPassword = '<configured-from-env-or-stdin>';
+  } else if ((data['oauth_local_password_hash'] ?? '').toString().isEmpty) {
+    final autoPwd = randomTokenUrlSafe(12);
+    data['oauth_local_password_hash'] = hashPassword(autoPwd);
+    issuedPassword = autoPwd;
+  }
+
+  final cliRoots = (res['root'] as List<String>)
+      .map((e) => e.trim())
+      .where((s) => s.isNotEmpty)
+      .map(expandAndResolvePath)
+      .toList();
+  if (cliRoots.isNotEmpty) {
+    data['roots'] = cliRoots;
+  }
+  if (res.wasParsed('read-only')) {
+    data['read_only'] = res['read-only'] == true;
+  }
+  data['relaxed_command_annotations'] = res['relaxed-cmd'] == true;
+
+  final ifaces = await listHostNetworkInterfaces();
+  final detectedIps = ifaces
+      .map((m) => (m['ip'] ?? '').trim())
+      .where((ip) => ip.isNotEmpty && ip != '127.0.0.1' && ip != '::1')
+      .toList();
+
+  final profs = ensureProfilesInConfig(data);
+  if (profs.isNotEmpty) {
+    final mainProf = profs.first;
+    mainProf['auth_mode'] = data['auth_mode'];
+    if (issuedKey != null) {
+      mainProf['api_key'] = issuedKey;
+    }
+    if (bindHosts.contains('0.0.0.0') && detectedIps.isNotEmpty) {
+      mainProf['direct_ips'] = detectedIps;
+    }
+  }
+  data['profiles'] = profs;
+  saveConfigFile(cfgFile, data);
+
+  final primaryIp = detectedIps.firstWhere(
+    (ip) => ip.startsWith('100.'),
+    orElse: () => detectedIps.isNotEmpty
+        ? detectedIps.first
+        : (bindHosts.first == '0.0.0.0' ? '127.0.0.1' : bindHosts.first),
+  );
+  final mcpEndpoint = 'http://$primaryIp:$port/mcp';
+  final dashUrl = 'http://$primaryIp:$port/dashboard/';
+
+  if (res['json'] == true) {
+    stdout.writeln(
+      const JsonEncoder.withIndent('  ').convert({
+        'ok': true,
+        'config_file': cfgFile.path,
+        'server_name': serverName,
+        'bind_hosts': bindHosts,
+        'port': port,
+        'auth_mode': data['auth_mode'],
+        if (issuedKey != null) 'api_key': issuedKey,
+        if (issuedPassword != null) 'dashboard_password': issuedPassword,
+        'mcp_endpoint': mcpEndpoint,
+        'dashboard_url': dashUrl,
+        'detected_ips': detectedIps,
+      }),
+    );
+    return;
+  }
+
+  _printBox('${_cClay("✦")} ${_cBold("节点初始化完成 ($serverName)")}', [
+    '配置文件   : ${cfgFile.path}',
+    '监听地址   : ${bindHosts.join(", ")} : $port',
+    '远程入口   : ${_cSage(mcpEndpoint)}',
+    'Web 管理台 : $dashUrl',
+    if (issuedKey != null) 'Bearer Key : $issuedKey',
+    if (issuedPassword != null) '管理台密码 : $issuedPassword',
+  ]);
+  stdout.writeln('\n下一步启动或注册常驻守护服务:');
+  stdout.writeln('  前台运行 : agent-mcp run');
+  if (Platform.isLinux) {
+    stdout.writeln('  常驻守护 : agent-mcp service install');
+  }
+  stdout.writeln('  调用代码 : agent-mcp snippet python');
+}
+
+void _cmdService(List<String> args) {
+  final sub = args.isEmpty ? 'status' : args.first.toLowerCase();
+  final systemWide = args.contains('--system');
+  final startNow = !args.contains('--no-start');
+  final asJson = args.contains('--json');
+
+  if (Platform.isLinux) {
+    Map<String, dynamic> out;
+    if (sub == 'install') {
+      out = AutoStartManager.installLinuxSystemdService(
+        systemWide: systemWide,
+        startNow: startNow,
+      );
+    } else if (sub == 'uninstall' || sub == 'remove') {
+      out = AutoStartManager.uninstallLinuxSystemdService(
+        systemWide: systemWide,
+      );
+    } else if (sub == 'status') {
+      out = AutoStartManager.queryLinuxSystemdStatus(systemWide: systemWide);
+    } else {
+      stderr.writeln('用法: agent-mcp service <install|uninstall|status> [--user|--system] [--no-start]');
+      exitCode = 1;
+      return;
+    }
+
+    if (asJson) {
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(out));
+      return;
+    }
+
+    if (sub == 'install') {
+      if (out['ok'] != true) {
+        stderr.writeln('${_cClay("✗")} ${out['error']}');
+        exitCode = 1;
+        return;
+      }
+      _printBox('${_cClay("✦")} ${_cBold("Linux systemd 守护服务已写入")}', [
+        '运行级别 : ${out['mode'] == 'system' ? '系统级 (/etc/systemd/system)' : '用户级 (~/.config/systemd/user)'}',
+        '单元文件 : ${out['unit_path']}',
+        '工作目录 : ${out['working_directory']}',
+        '启动状态 : ${out['systemctl_started'] == true ? _cSage("已启用并启动") : _cMuted("单元已生成 (${out['note'] ?? '请手动执行 systemctl 启用'})")}',
+      ]);
+      return;
+    }
+    if (sub == 'uninstall' || sub == 'remove') {
+      stdout.writeln('${_cSage("✓")} 已移除 systemd 服务单元: ${out['unit_path']}');
+      return;
+    }
+    _printBox('${_cClay("✦")} ${_cBold("Linux systemd 服务状态")}', [
+      '单元文件 : ${out['unit_path']} (${out['unit_exists'] == true ? "已安装" : "未安装"})',
+      '激活状态 : ${out['active_state']}',
+      '自启状态 : ${out['enabled_state']}',
+    ]);
+    return;
+  }
+
+  if (sub == 'install') {
+    final res = AutoStartManager.syncWithOs(enabled: true, silentStart: true);
+    if (asJson) {
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(res));
+      return;
+    }
+    stdout.writeln(
+      res['ok'] == true
+          ? '${_cSage("✓")} 已注册开机静默自启动: ${res['exe']}'
+          : '${_cClay("!")} ${res['warning'] ?? res['error']}',
+    );
+  } else if (sub == 'uninstall' || sub == 'remove') {
+    final res = AutoStartManager.syncWithOs(enabled: false, silentStart: false);
+    if (asJson) {
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(res));
+      return;
+    }
+    stdout.writeln('${_cSage("✓")} 已取消开机自启动。');
+  } else {
+    final reg = AutoStartManager.isOsRegistered();
+    if (asJson) {
+      stdout.writeln(jsonEncode({'os': Platform.operatingSystem, 'registered': reg}));
+      return;
+    }
+    stdout.writeln('开机自启注册状态 (${Platform.operatingSystem}): ${reg ? _cSage("已启用") : _cMuted("未启用")}');
+  }
+}
+
+Future<void> _cmdRemote(List<String> args) async {
+  final parser = ArgParser()
+    ..addOption('api-key', abbr: 'k')
+    ..addFlag('json', negatable: false)
+    ..addFlag('no-color', negatable: false);
+  final res = parser.parse(args);
+  final rest = res.rest;
+  if (rest.isEmpty) {
+    stderr.writeln(
+      '用法:\n'
+      '  agent-mcp remote <http://host:port> ping\n'
+      '  agent-mcp remote <http://host:port> tools [-k <api_key>]\n'
+      '  agent-mcp remote <http://host:port> call <tool_name> [json_args] [-k <api_key>]',
+    );
+    exitCode = 1;
+    return;
+  }
+
+  var rawBase = rest.first.trim().replaceAll(RegExp(r'/+$'), '');
+  if (!rawBase.startsWith('http://') && !rawBase.startsWith('https://')) {
+    rawBase = 'http://$rawBase';
+  }
+  if (rawBase.endsWith('/mcp')) {
+    rawBase = rawBase.substring(0, rawBase.length - 4);
+  }
+  final action = rest.length >= 2 ? rest[1].toLowerCase() : 'ping';
+  final apiKey = (res['api-key'] ?? Platform.environment['MCP_API_KEY'] ?? '')
+      .toString()
+      .trim();
+  final asJson = res['json'] == true;
+
+  Map<String, String> buildHeaders() => {
+        'content-type': 'application/json',
+        'accept': 'application/json, text/event-stream',
+        'mcp-protocol-version': mcpProtocolVersion,
+        if (apiKey.isNotEmpty) 'authorization': 'Bearer $apiKey',
+      };
+
+  if (action == 'ping' || action == 'health') {
+    final sw = Stopwatch()..start();
+    try {
+      final resp = await http
+          .get(Uri.parse('$rawBase/health'))
+          .timeout(const Duration(seconds: 6));
+      sw.stop();
+      if (resp.statusCode != 200) {
+        stderr.writeln('远端返回 HTTP ${resp.statusCode}: ${resp.body}');
+        exitCode = 1;
+        return;
+      }
+      final info = jsonDecode(resp.body) as Map<String, dynamic>;
+      info['latency_ms'] = sw.elapsedMilliseconds;
+      info['mcp_endpoint'] = '$rawBase/mcp';
+      if (asJson) {
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(info));
+        return;
+      }
+      _printBox('${_cClay("✦")} ${_cBold("远端节点在线 (${info['server_name']})")}', [
+        'MCP 地址 : ${_cSage("$rawBase/mcp")}',
+        '主机信息 : ${info['hostname'] ?? '-'} (${info['os'] ?? 'unknown'} · v${info['version'] ?? '-'})',
+        '工具数量 : ${info['tools_count'] ?? '-'} 项 · 鉴权=${info['auth_mode']} · 延迟=${sw.elapsedMilliseconds}ms',
+      ]);
+    } catch (e) {
+      stderr.writeln('无法连接远端节点 $rawBase: $e');
+      exitCode = 1;
+    }
+    return;
+  }
+
+  Future<Map<String, dynamic>> rpcPost(
+    String method,
+    Map<String, dynamic> params, {
+    String? sessionId,
+  }) async {
+    final hdrs = buildHeaders();
+    if (sessionId != null && sessionId.isNotEmpty) {
+      hdrs['mcp-session-id'] = sessionId;
+    }
+    final r = await http
+        .post(
+          Uri.parse('$rawBase/mcp'),
+          headers: hdrs,
+          body: jsonEncode({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': method,
+            'params': params,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+    if (r.statusCode != 200) {
+      throw HttpException('HTTP ${r.statusCode}: ${r.body}');
+    }
+    final decoded = jsonDecode(r.body) as Map<String, dynamic>;
+    final sid = r.headers['mcp-session-id'];
+    if (sid != null) decoded['_session_id'] = sid;
+    return decoded;
+  }
+
+  try {
+    final initResp = await rpcPost('initialize', {
+      'protocolVersion': mcpProtocolVersion,
+      'capabilities': const <String, dynamic>{},
+      'clientInfo': {'name': 'agent-mcp-cli', 'version': agentMcpVersion},
+    });
+    final sid = initResp['_session_id']?.toString();
+
+    if (action == 'tools') {
+      final listResp =
+          await rpcPost('tools/list', const <String, dynamic>{}, sessionId: sid);
+      final tools = (((listResp['result'] as Map?)?['tools'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>();
+      if (asJson) {
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(tools));
+        return;
+      }
+      stdout.writeln('${_cBold("远端节点共开放 ${tools.length} 项工具")} ($rawBase/mcp):');
+      for (final t in tools) {
+        final name = '${t['name']}'.padRight(20);
+        stdout.writeln('  • ${_cSage(name)} ${_cMuted('${t['description'] ?? ''}')}');
+      }
+      return;
+    }
+
+    if (action == 'call' && rest.length >= 3) {
+      final toolName = rest[2];
+      final rawArgsJson = rest.length >= 4 ? rest[3] : '{}';
+      final parsedArgs = Map<String, dynamic>.from(jsonDecode(rawArgsJson) as Map);
+      final callResp = await rpcPost(
+        'tools/call',
+        {'name': toolName, 'arguments': parsedArgs},
+        sessionId: sid,
+      );
+      if (asJson) {
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(callResp));
+        return;
+      }
+      if (callResp['error'] != null) {
+        stderr.writeln('调用错误: ${jsonEncode(callResp['error'])}');
+        exitCode = 1;
+        return;
+      }
+      final content = ((callResp['result'] as Map?)?['content'] as List?) ?? const [];
+      for (final item in content) {
+        if (item is Map && item['text'] != null) {
+          stdout.writeln(item['text']);
+        }
+      }
+      return;
+    }
+
+    stderr.writeln('未知 remote 动作: $action (支持 ping | tools | call)');
+    exitCode = 1;
+  } catch (e) {
+    stderr.writeln('远程调用失败: $e');
+    exitCode = 1;
+  }
+}
+
 Future<void> _cmdRun(List<String> args) async {
   final cfg = _resolveCliServerConfig(args);
   McpLogger.instance.configure(
@@ -337,6 +752,7 @@ Future<void> _cmdRun(List<String> args) async {
   McpLogger.instance.info('正在优雅关闭 Agent MCP 服务与后台子进程...');
   await sigIntSub.cancel();
   await sigTermSub?.cancel();
+  await ExposureManager.instance.closeAllExposures();
   await TunnelManager.instance.stopAll();
   await engine.processManager.stopAll();
   for (final s in servers) {
@@ -527,6 +943,8 @@ Future<void> _cmdDoctor(List<String> args) async {
     stdout.writeln(
       const JsonEncoder.withIndent('  ').convert({
         'version': agentMcpVersion,
+        'os': Platform.operatingSystem,
+        'hostname': Platform.localHostname,
         'config_file': cfgFile.path,
         'service_online': serviceLive,
         'latency_ms': latencyMs,
@@ -546,15 +964,16 @@ Future<void> _cmdDoctor(List<String> args) async {
 
   final statusLine = serviceLive
       ? '${_cSage("● 运行中")} (${liveServerName ?? saved['server_name'] ?? 'Agent MCP'} v${liveVersion ?? agentMcpVersion}, ${latencyMs}ms)'
-      : '${_cClay("○ 未在本地监听")} (可执行 agent-mcp gui 或 agent-mcp run 启动)';
+      : '${_cClay("○ 未在本地监听")} (可执行 agent-mcp init / run 或 agent-mcp gui 启动)';
 
   final cfInstalled = tunStatus['installed'] == true;
   final cfLine = cfInstalled
       ? '${_cSage("已就绪")} ${tunStatus['version'] ?? ""}'.trim()
       : _cMuted('未安装 (需要公网穿透可执行 agent-mcp tunnel install)');
 
-  _printBox('${_cClay("✦")} ${_cBold("Agent MCP 环境与连通性体检")}', [
+  _printBox('${_cClay("✦")} ${_cBold("Agent MCP 节点环境与连通性体检")}', [
     '运行状态 : $statusLine',
+    '当前主机 : ${Platform.localHostname} (${Platform.operatingSystem})',
     '配置文件 : ${cfgFile.path}',
     '监听配置 : ${bindHosts.join(", ")} : $port',
     '隧道组件 : $cfLine',
@@ -630,30 +1049,40 @@ void _cmdSnippet(List<String> args) {
 
   final saved = loadSavedConfig();
   final profs = ensureProfilesInConfig(saved);
-  final port = int.tryParse('${saved['port'] ?? 8000}') ?? 8000;
+  final port = int.tryParse('${saved['port'] ?? 8778}') ?? 8778;
   final prof = wantedProfId != null
       ? (profs.where((e) => e['id'] == wantedProfId).firstOrNull ?? profs.first)
       : (profs.where((e) => e['enabled'] != false).firstOrNull ?? profs.first);
 
+  final fallbackHost = (saved['host'] == '0.0.0.0' || saved['host'] == null)
+      ? '100.x.y.z'
+      : saved['host'].toString();
   final urls = resolveProfileBaseUrls(
     prof,
     port: port,
-    fallbackHost: (saved['host'] ?? '127.0.0.1').toString(),
+    fallbackHost: fallbackHost,
   );
   final mcpUrl = '${urls.first}/mcp';
+  final srvName = (saved['server_name'] ?? 'remote-agent-mcp').toString();
+  final isBearer = prof['auth_mode'] == 'bearer';
+  final keyHint = isBearer ? '<YOUR_BEARER_API_KEY>' : '<YOUR_ACCESS_TOKEN>';
   final exePath = Platform.resolvedExecutable;
   const enc = JsonEncoder.withIndent('  ');
 
-  if (target == 'all' || target == 'claude' || target == 'cursor') {
+  if (target == 'all' ||
+      target == 'remote' ||
+      target == 'claude' ||
+      target == 'cursor') {
     stdout.writeln(
-      _cBold('1. Claude Desktop / Cursor / Antigravity 本地 stdio 挂载 (mcpServers):'),
+      _cBold('1. 电脑端 Claude Code / Cursor / Antigravity 远程连接服务器或手机 (mcpServers):'),
     );
     stdout.writeln(
       enc.convert({
         'mcpServers': {
-          (saved['server_name'] ?? 'agent-mcp').toString(): {
-            'command': exePath,
-            'args': ['run', '-t', 'stdio', '--relaxed-cmd'],
+          srvName: {
+            'url': mcpUrl,
+            if (prof['auth_mode'] != 'none')
+              'headers': {'Authorization': 'Bearer $keyHint'},
           },
         },
       }),
@@ -661,26 +1090,70 @@ void _cmdSnippet(List<String> args) {
     stdout.writeln();
   }
 
+  if (target == 'all' || target == 'python' || target == 'py') {
+    stdout.writeln(
+      _cBold('2. Python 官方 MCP SDK 程序化远程调用 (pip install mcp):'),
+    );
+    stdout.writeln('''import asyncio
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+async def main():
+    headers = {"Authorization": "Bearer $keyHint"}
+    async with streamablehttp_client("$mcpUrl", headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            roots = await session.call_tool("list_roots", {})
+            print(roots.content[0].text)
+
+asyncio.run(main())
+''');
+  }
+
+  if (target == 'all' || target == 'ts' || target == 'typescript' || target == 'node') {
+    stdout.writeln(
+      _cBold('3. TypeScript / Node.js 官方 SDK 远程调用 (npm i @modelcontextprotocol/sdk):'),
+    );
+    stdout.writeln('''import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+const client = new Client({ name: "my-agent", version: "1.0.0" });
+const transport = new StreamableHTTPClientTransport(new URL("$mcpUrl"), {
+  requestInit: { headers: { Authorization: "Bearer $keyHint" } },
+});
+await client.connect(transport);
+const res = await client.callTool({ name: "list_roots", arguments: {} });
+console.log(res.content);
+''');
+  }
+
+  if (target == 'all' || target == 'curl') {
+    stdout.writeln(_cBold('4. curl 零依赖 JSON-RPC 远程直调示例:'));
+    stdout.writeln('''curl -sS -X POST "$mcpUrl" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $keyHint" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_roots","arguments":{}}}'
+''');
+  }
+
   if (target == 'all' || target == 'gemini' || target == 'http') {
     stdout.writeln(
-      _cBold('2. Gemini Web / Claude Web / 远程 Streamable HTTP 入口 (${prof['name']}):'),
+      _cBold('5. Gemini Web / Claude Web 浏览器端连接 (${prof['name']}):'),
     );
     stdout.writeln('  URL      : ${_cSage(mcpUrl)}');
     stdout.writeln('  Auth Mode: ${prof['auth_mode']}');
-    if (prof['auth_mode'] == 'bearer' &&
-        (prof['api_key'] ?? '').toString().isNotEmpty) {
-      stdout.writeln('  Header   : Authorization: Bearer <已配置的 API Key>');
-    } else if (prof['auth_mode'] == 'oauth-local') {
-      stdout.writeln('  OAuth 2.1: 支持 RFC 7591 无感动态注册，填入 URL 后输入本地管理密码即可完成绑定');
+    if (prof['auth_mode'] == 'oauth-local') {
+      stdout.writeln('  OAuth 2.1: 支持 RFC 7591 动态注册，填入 URL 后输入节点管理密码即可完成授权');
     }
     stdout.writeln();
   }
 
-  if (target == 'all' || target == 'codex') {
-    stdout.writeln(_cBold('3. Codex CLI 一键注册命令:'));
-    stdout.writeln('  codex mcp add agent-mcp -- "$exePath" run -t stdio --relaxed-cmd');
+  if (target == 'all' || target == 'stdio' || target == 'codex') {
+    stdout.writeln(_cBold('6. 本机同机 stdio 挂载 (Codex / Claude Desktop):'));
+    stdout.writeln('  codex mcp add $srvName -- "$exePath" run -t stdio --relaxed-cmd');
   }
 }
+
 String _prompt(String label, [String defaultVal = '']) {
   final suffix = defaultVal.isNotEmpty ? ' [$defaultVal]' : '';
   stdout.write('$label$suffix: ');
@@ -721,8 +1194,8 @@ Future<void> _cmdSetup() async {
     final normHosts = parseBindHosts(rawHosts);
     data['hosts'] = normHosts;
     data['host'] = normHosts.first;
-    final portStr = _prompt('监听 Port', '${data['port'] ?? 8000}');
-    data['port'] = int.tryParse(portStr) ?? 8000;
+    final portStr = _prompt('监听 Port', '${data['port'] ?? 8778}');
+    data['port'] = int.tryParse(portStr) ?? 8778;
   }
 
   final auth = _prompt(

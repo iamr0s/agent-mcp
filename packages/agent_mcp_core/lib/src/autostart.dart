@@ -5,15 +5,16 @@ import 'package:path/path.dart' as p;
 import 'config.dart';
 import 'logging_utils.dart';
 
-/// Cross-platform OS Login Auto-Start & Silent Tray Launch manager
+/// Cross-platform OS Login Auto-Start, Silent Tray Launch & Headless Linux `systemd` manager
 /// supporting Windows (`HKCU\...\Run`), macOS (`~/Library/LaunchAgents`),
-/// and Linux (`~/.config/autostart` XDG Desktop Entry).
+/// Linux Desktop (`~/.config/autostart`), and Headless Linux Servers (`systemd`).
 class AutoStartManager {
   static const String _winRegKey =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
   static const String _winRegValue = 'AgentMCP';
   static const String _macLabel = 'com.iamr0s.agentmcp';
   static const String _linuxDesktopName = 'agent-mcp.desktop';
+  static const String linuxServiceName = 'agent-mcp.service';
 
   /// Resolves the native desktop executable path for the current OS,
   /// whether invoked from inside the compiled Flutter app or CLI/server.
@@ -89,6 +90,28 @@ class AutoStartManager {
     return null;
   }
 
+  /// Resolves the standalone server/CLI binary path for headless daemon installation.
+  static String? resolveServerExecutablePath() {
+    final execPath = Platform.resolvedExecutable;
+    final execBase = p.basenameWithoutExtension(execPath).toLowerCase();
+    if (execBase != 'dart' &&
+        execBase != 'dartaotruntime' &&
+        execBase != 'flutter_tester') {
+      final f = File(execPath);
+      if (f.existsSync()) return f.absolute.path;
+    }
+    final root = StoragePaths.instance.rootDir.path;
+    final binName = Platform.isWindows ? 'agent-mcp.exe' : 'agent-mcp';
+    for (final c in [
+      p.join(root, binName),
+      p.join(root, 'bin', binName),
+    ]) {
+      final f = File(c);
+      if (f.existsSync()) return f.absolute.path;
+    }
+    return resolveDesktopExecutablePath();
+  }
+
   static File _macPlistFile() {
     final home = Platform.environment['HOME'] ?? '';
     return File(p.join(home, 'Library', 'LaunchAgents', '$_macLabel.plist'));
@@ -100,6 +123,172 @@ class AutoStartManager {
         ? xdg.trim()
         : p.join(Platform.environment['HOME'] ?? '', '.config');
     return File(p.join(base, 'autostart', _linuxDesktopName));
+  }
+
+  static File linuxSystemdUnitFile({bool systemWide = false, Directory? baseOverride}) {
+    if (baseOverride != null) {
+      return File(p.join(baseOverride.path, linuxServiceName));
+    }
+    if (systemWide) {
+      return File('/etc/systemd/system/$linuxServiceName');
+    }
+    final xdg = Platform.environment['XDG_CONFIG_HOME'];
+    final base = (xdg != null && xdg.trim().isNotEmpty)
+        ? xdg.trim()
+        : p.join(Platform.environment['HOME'] ?? '', '.config');
+    return File(p.join(base, 'systemd', 'user', linuxServiceName));
+  }
+
+  /// Builds a clean, production-grade `systemd` unit file content for headless Linux servers.
+  static String buildSystemdUnitContent({
+    required String executablePath,
+    required String workingDirectory,
+    required String configFilePath,
+    bool systemWide = false,
+  }) {
+    final wantedBy = systemWide ? 'multi-user.target' : 'default.target';
+    return '[Unit]\n'
+        'Description=Agent MCP Remote Execution Node & Sub-MCP Gateway\n'
+        'After=network-online.target\n'
+        'Wants=network-online.target\n\n'
+        '[Service]\n'
+        'Type=simple\n'
+        'WorkingDirectory=$workingDirectory\n'
+        'Environment="AGENT_MCP_HOME=$workingDirectory"\n'
+        'ExecStart="$executablePath" run -c "$configFilePath"\n'
+        'Restart=on-failure\n'
+        'RestartSec=3\n'
+        'KillMode=process\n'
+        'LimitNOFILE=65536\n\n'
+        '[Install]\n'
+        'WantedBy=$wantedBy\n';
+  }
+
+  /// Installs and optionally activates `agent-mcp.service` on Linux (`--user` or `--system`).
+  static Map<String, dynamic> installLinuxSystemdService({
+    bool systemWide = false,
+    bool startNow = true,
+    Directory? unitDirOverride,
+    String? executableOverride,
+  }) {
+    final exe = executableOverride ?? resolveServerExecutablePath();
+    if (exe == null || exe.isEmpty) {
+      return {
+        'ok': false,
+        'error': '未找到已编译的 agent-mcp 可执行文件，请使用编译后的二进制执行安装。',
+      };
+    }
+    final rootDir = StoragePaths.instance.rootDir.absolute.path;
+    final cfgPath = StoragePaths.instance.defaultConfigFile.absolute.path;
+    final unitFile = linuxSystemdUnitFile(
+      systemWide: systemWide,
+      baseOverride: unitDirOverride,
+    );
+    try {
+      unitFile.parent.createSync(recursive: true);
+      final content = buildSystemdUnitContent(
+        executablePath: exe,
+        workingDirectory: rootDir,
+        configFilePath: cfgPath,
+        systemWide: systemWide,
+      );
+      unitFile.writeAsStringSync(content, flush: true);
+    } catch (e) {
+      return {
+        'ok': false,
+        'unit_path': unitFile.path,
+        'error': '写入 systemd 单元文件失败: $e',
+      };
+    }
+
+    var systemctlActive = false;
+    String systemctlNote = '';
+    if (Platform.isLinux && unitDirOverride == null) {
+      try {
+        final scopeArgs = systemWide ? <String>[] : <String>['--user'];
+        final reload = Process.runSync('systemctl', [...scopeArgs, 'daemon-reload']);
+        if (reload.exitCode == 0) {
+          final enableArgs = startNow
+              ? [...scopeArgs, 'enable', '--now', linuxServiceName]
+              : [...scopeArgs, 'enable', linuxServiceName];
+          final en = Process.runSync('systemctl', enableArgs);
+          systemctlActive = en.exitCode == 0;
+          if (!systemctlActive) {
+            systemctlNote = '${en.stderr}'.trim();
+          }
+        } else {
+          systemctlNote = '${reload.stderr}'.trim();
+        }
+      } catch (e) {
+        systemctlNote = '$e';
+      }
+    }
+
+    return {
+      'ok': true,
+      'mode': systemWide ? 'system' : 'user',
+      'unit_path': unitFile.path,
+      'executable': exe,
+      'working_directory': rootDir,
+      'systemctl_started': systemctlActive,
+      if (systemctlNote.isNotEmpty) 'note': systemctlNote,
+    };
+  }
+
+  static Map<String, dynamic> uninstallLinuxSystemdService({
+    bool systemWide = false,
+    Directory? unitDirOverride,
+  }) {
+    final unitFile = linuxSystemdUnitFile(
+      systemWide: systemWide,
+      baseOverride: unitDirOverride,
+    );
+    if (Platform.isLinux && unitDirOverride == null) {
+      try {
+        final scopeArgs = systemWide ? <String>[] : <String>['--user'];
+        Process.runSync('systemctl', [...scopeArgs, 'disable', '--now', linuxServiceName]);
+      } catch (_) {}
+    }
+    var removed = false;
+    if (unitFile.existsSync()) {
+      unitFile.deleteSync();
+      removed = true;
+    }
+    if (Platform.isLinux && unitDirOverride == null) {
+      try {
+        final scopeArgs = systemWide ? <String>[] : <String>['--user'];
+        Process.runSync('systemctl', [...scopeArgs, 'daemon-reload']);
+      } catch (_) {}
+    }
+    return {
+      'ok': true,
+      'removed': removed,
+      'unit_path': unitFile.path,
+    };
+  }
+
+  static Map<String, dynamic> queryLinuxSystemdStatus({bool systemWide = false}) {
+    final unitFile = linuxSystemdUnitFile(systemWide: systemWide);
+    var activeState = 'unknown';
+    var enabledState = unitFile.existsSync() ? 'unit-present' : 'not-installed';
+    if (Platform.isLinux) {
+      try {
+        final scopeArgs = systemWide ? <String>[] : <String>['--user'];
+        final act = Process.runSync('systemctl', [...scopeArgs, 'is-active', linuxServiceName]);
+        final outAct = '${act.stdout}'.trim();
+        if (outAct.isNotEmpty) activeState = outAct;
+        final en = Process.runSync('systemctl', [...scopeArgs, 'is-enabled', linuxServiceName]);
+        final outEn = '${en.stdout}'.trim();
+        if (outEn.isNotEmpty) enabledState = outEn;
+      } catch (_) {}
+    }
+    return {
+      'mode': systemWide ? 'system' : 'user',
+      'unit_exists': unitFile.existsSync(),
+      'unit_path': unitFile.path,
+      'active_state': activeState,
+      'enabled_state': enabledState,
+    };
   }
 
   /// Checks whether OS-level login auto-start is currently registered.
@@ -117,7 +306,9 @@ class AutoStartManager {
         return _macPlistFile().existsSync();
       }
       if (Platform.isLinux) {
-        return _linuxDesktopFile().existsSync();
+        return _linuxDesktopFile().existsSync() ||
+            linuxSystemdUnitFile(systemWide: false).existsSync() ||
+            linuxSystemdUnitFile(systemWide: true).existsSync();
       }
     } catch (_) {}
     return false;
