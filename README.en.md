@@ -4,74 +4,67 @@
 
 [![Release](https://img.shields.io/github/v/release/iamr0s/agent-mcp?color=D97757&label=Release)](https://github.com/iamr0s/agent-mcp/releases)
 [![Flutter 3.50+](https://img.shields.io/badge/Flutter-3.50%2B%20%7C%20Dart%20Native-02569B.svg)](https://flutter.dev/)
-[![MCP 2025-03-26](https://img.shields.io/badge/Protocol-MCP%20Streamable%20HTTP%20%2B%20SSE%20%2B%20stdio-4D7C5D.svg)](https://modelcontextprotocol.io/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20Mica%20%7C%20Android%20Dual--Mode%20%7C%20Web%20%7C%20CLI-141413.svg)](#downloads--installation)
+[![MCP 2025-03-26](https://img.shields.io/badge/Protocol-Streamable%20HTTP%20%2B%20SSE%20%2B%20stdio-4D7C5D.svg)](https://modelcontextprotocol.io/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%20Android%20%7C%20Web%20%7C%20CLI-141413.svg)](#downloads)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> A native cross-platform **Agent MCP host, progressive Sub-MCP gateway, and multi-surface console**—letting cloud and local models step past the sandbox glass wall to inspect, edit, and drive real workspaces and mobile devices within explicit boundaries.
+> **Give AI real hands on your workspace—while keeping every switch and permission boundary on your own device.**
 >
-> **v2.0 Next-Gen Rewrite**: Built natively with **Dart & Flutter** with zero Python/Node runtime requirements—powering a **Win11 DWM Mica Frameless Desktop Console**, an **Android Dual-Mode Edition (`Sandbox / Shizuku / Root SU`)**, a **same-port encrypted `/dashboard` Web UI**, and a **Standalone Native CLI** from one codebase.
+> Built natively with **Dart & Flutter** with zero Python/Node dependencies, **Agent MCP v2.0** lets Gemini, Claude, Cursor, and Codex edit code surgically, run terminal builds, route dozens of Sub-MCP servers on demand, **instantly share generated videos or local web ports via Tailscale & public links (`manage_expose`)**, and control everything from **Windows 11**, **Web**, **CLI**, or an **Android Dual-Mode app**.
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="92%" alt="Agent MCP v2.0 Overview">
+  <img src="assets/previews/hero_overview.png" width="94%" alt="Agent MCP v2.0 Overview">
 </p>
 
-## Why This Exists
-
-Models grow sharper every quarter, yet most of the time they remain advisers locked behind bulletproof glass: capable of reasoning through hundreds of lines of code while unable to touch a single file on your disk; fluent at diagnosing a broken build while reducing you to a human clipboard ferrying logs between browser tabs and terminals.
-
-And when you wire a dozen external MCP servers into a client, hundreds of verbose JSON schemas flood turn one—burning context window budget before any real work begins.
-
-Agent MCP gives models real hands while keeping the bolt on your desk: open **Model Context Protocol (MCP)** transports (`Streamable HTTP`, `SSE`, `stdio`), surgical atomic edits with single-step undo, **3 compact meta-tools** fronting your entire Sub-MCP ecosystem, multi-NIC & Cloudflare Tunnel routing with self-hosted **OAuth 2.1 (RFC 7591 + PKCE)**, and an **Android Dual-Mode APK** that both manages remote PCs and runs a local privileged MCP server via **Shizuku** or **Root SU**.
-
-> “I can only show you the door. You're the one that has to walk through it.”
->
-> — Morpheus, *The Matrix*
-
-## Visual Previews
+## Visual Tour
 
 <table>
   <tr>
     <td width="50%">
-      <img src="assets/previews/activity_and_submcp.png" alt="Live Telemetry & Sub-MCP Gateway">
-      <p align="center"><sub><b>Live Capsule Telemetry & Progressive Sub-MCP Gateway</b></sub></p>
+      <img src="assets/previews/activity_and_submcp.png" alt="Live Activity & Sub-MCP Gateway">
+      <p align="center"><sub><b>Live Call Stream & On-Demand Sub-MCP Gateway</b></sub></p>
     </td>
     <td width="50%">
-      <img src="assets/previews/multi_ip_and_profiles.png" alt="Multi-IP Picker & Copy DropMenu">
-      <p align="center"><sub><b>Multi-NIC / Tailscale Picker & Floating Endpoint Copy Menu</b></sub></p>
+      <img src="assets/previews/multi_ip_and_profiles.png" alt="Multi-IP Picker & Tailscale Share Controls">
+      <p align="center"><sub><b>Multi-NIC Picker & Tailscale External Share Controls</b></sub></p>
     </td>
   </tr>
   <tr>
     <td colspan="2">
       <p align="center">
-        <img src="assets/previews/android_privilege_modes.png" width="84%" alt="Android Dual-Mode & Shizuku/Root SU">
+        <img src="assets/previews/android_privilege_modes.png" width="88%" alt="Android Dual-Mode App">
       </p>
-      <p align="center"><sub><b>Android Dual-Mode Edition: Multi-Host Remote Controller + Local Shizuku (ADB/Root) & Root SU Engine</b></sub></p>
+      <p align="center"><sub><b>Android Dual-Mode App: Remote Multi-PC Controller + Local Sandbox / Shizuku / Root SU</b></sub></p>
     </td>
   </tr>
 </table>
 
-## Downloads & Installation
+## What You Can Do & How to Use It
 
-Grab the latest prebuilt binaries from [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases):
+1. **Edit Files, Run Commands & Undo in One Step (20 Built-in Tools)**: Connect your AI client and ask directly—surgical `edit_file` / `apply_patch` edits with `undo_edit` snapshots, plus `run_command` / `start_process` / `manage_process` for builds and dev servers.
+2. **Instant External Sharing with Tailscale (`manage_expose` + Share Tab)**: Just generated an MP4 video or started a site on `:3000`? Ask AI to expose it—or click **+ New Share** in the **External Share** tab—to get an instant mobile-ready link (with HTTP Range video scrubbing) over Tailscale, your active gateway domain, or a temporary Cloudflare HTTPS tunnel. Toggle master access and Tailscale mode anytime in **Settings**.
+3. **Multi-NIC Direct Picker & Per-Profile Auth**: Select LAN and Tailscale IPs side-by-side when editing a Direct/Reverse-Proxy profile, auto-sync unbound NIC listeners on save, and copy any channel URL from the dropdown menu.
+4. **Zero-Bloat Sub-MCP Gateway**: Paste your existing `mcpServers` JSON into the **Sub-MCP Gateway** tab. Only 3 compact tools (`list_sub_mcps`, `inspect_sub_mcp`, `call_sub_mcp`) are exposed upfront so context stays fast and clean.
+5. **Android Dual-Mode APK**: Switch between remote desktop nodes from the top bar, or run a local MCP server on your phone with one-tap switching across **App Sandbox**, **Shizuku (Wireless ADB / Root)**, and **Root SU (KernelSU / APatch / Magisk)**.
 
-- **Windows 10/11 (`x64`)**: `AgentMCP-v2.0.0-windows-x64-sfx.exe` (self-extracting GUI wizard) or `AgentMCP-v2.0.0-windows-x64-portable.zip` (zero-install portable archive containing both `agent_mcp_app.exe` and `agent-mcp.exe`).
-- **Android (`arm64-v8a` / Universal)**: `AgentMCP-v2.0.0-android-arm64-v8a.apk` (recommended for modern phones) or `AgentMCP-v2.0.0-android-universal.apk`.
+## Downloads
 
-## Standalone CLI Quickstart
+Grab the latest release from [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases):
+- **Windows 10/11 (`x64`)**: `AgentMCP-v2.0.0-windows-x64-sfx.exe` (installer wizard) or `AgentMCP-v2.0.0-windows-x64-portable.zip`.
+- **Android**: `AgentMCP-v2.0.0-android-arm64-v8a.apk` (recommended for modern phones) or `AgentMCP-v2.0.0-android-universal.apk`.
+- **Linux (`x64` CLI)**: `AgentMCP-v2.0.0-linux-x64-cli.tar.gz`.
+
+## CLI Quickstart
 
 ```bash
-agent-mcp doctor                  # Full health, NIC/Tailscale IP & profile diagnostics
-agent-mcp snippet                 # Generate Claude / Cursor / Gemini / Codex config snippets
-agent-mcp gui --silent            # Launch native Win11 Mica console into system tray
-agent-mcp run -t stdio            # Run as zero-latency local stdio server
-agent-mcp tools                   # List all 19 built-in surgical & gateway tools
-agent-mcp profile list            # Inspect multi-NIC & tunnel profiles
+agent-mcp doctor                  # Check health, LAN/Tailscale IPs, tunnels & share status
+agent-mcp snippet                 # Generate ready-to-paste Claude / Cursor / Gemini / Codex config
+agent-mcp gui --silent            # Launch native desktop console into the system tray
+agent-mcp run -t stdio            # Run as a local stdio MCP server
+agent-mcp tools                   # List all 20 built-in tools (including manage_expose)
 ```
 
 ## Donation
-
-If this project helps your workflow, optional donations are appreciated:
 
 <p align="center">
   <img src="assets/donation/alipay.jpg" width="200" alt="Alipay">
@@ -81,4 +74,4 @@ If this project helps your workflow, optional donations are appreciated:
 
 ## License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+GNU General Public License v3.0. See [LICENSE](LICENSE).

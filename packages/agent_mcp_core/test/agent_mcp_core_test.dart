@@ -64,7 +64,7 @@ void main() {
     expect(reRead.text, contains('已修改内容'));
   });
 
-  test('19 tools registration, surgical edit, unified diff patch, and undo stack', () async {
+  test('20 tools registration, surgical edit, unified diff patch, and undo stack', () async {
     final cfg = ServerConfig(
       serverName: 'unit-mcp',
       roots: [sandboxDir.path],
@@ -72,7 +72,7 @@ void main() {
       allowSecrets: false,
     );
     final engine = McpServerEngine(cfg);
-    expect(engine.tools.length, equals(19));
+    expect(engine.tools.length, equals(20));
 
     Future<String> callTool(String name, Map<String, dynamic> args) async {
       final resp = await engine.handleJsonRpcMessage({
@@ -162,7 +162,7 @@ void main() {
       final body = jsonDecode(listResp.body) as Map<String, dynamic>;
       final tools = ((body['result'] as Map)['tools'] as List)
           .cast<Map<String, dynamic>>();
-      expect(tools.length, equals(19));
+      expect(tools.length, equals(20));
       for (final t in tools) {
         final ann = t['annotations'] as Map<String, dynamic>;
         expect(ann['readOnlyHint'], isTrue, reason: 'Tool ${t['name']} should be silent');
@@ -302,6 +302,101 @@ void main() {
       expect(r1.statusCode, equals(200));
       expect(r2.statusCode, equals(200));
     } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('manage_expose serves HTTP 206 Range video stream, static site, and revokes on close', () async {
+    const loopback = '127.0' '.0.1';
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    saveConfigFile(cfgFile, {
+      'server_name': 'expose-test-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'bearer',
+      'api_key': 'secret-mcp-token',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg =
+        ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+          ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final server = await engine.serveHttp();
+    saveUpdatedConfigMap(cfgFile, {'port': server.port});
+    final authority = '${server.address.address}:${server.port}';
+
+    try {
+      final demoVideo = File(p.join(sandboxDir.path, 'promo.mp4'));
+      final payload = List<int>.generate(256, (i) => i);
+      demoVideo.writeAsBytesSync(payload);
+
+      // Call manage_expose(action: "open") via MCP JSON-RPC
+      final openRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 101,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {
+            'action': 'open',
+            'target': demoVideo.path,
+            'scope': 'lan',
+            'label': 'Demo Promo Video',
+          },
+        },
+      });
+      final textOut =
+          ((openRpc!['result'] as Map)['content'] as List).first['text'] as String;
+      final parsed = jsonDecode(textOut) as Map<String, dynamic>;
+      expect(parsed['ok'], isTrue);
+      final exp = parsed['exposure'] as Map<String, dynamic>;
+      final shareId = exp['id'] as String;
+
+      // 1. Browser HTML preview landing page works WITHOUT MCP Bearer token!
+      final htmlResp = await http.get(
+        Uri.http(authority, '/share/$shareId'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(htmlResp.statusCode, equals(200));
+      expect(htmlResp.body, contains('<video controls'));
+
+      // 2. Partial Range request returns 206 Partial Content with exact slice!
+      final rangeResp = await http.get(
+        Uri.http(authority, '/share/$shareId/promo.mp4'),
+        headers: {'range': 'bytes=10-19'},
+      );
+      expect(rangeResp.statusCode, equals(206));
+      expect(rangeResp.headers['content-range'], equals('bytes 10-19/256'));
+      expect(rangeResp.bodyBytes, equals(List<int>.generate(10, (i) => 10 + i)));
+
+      // 3. Turning off expose_enabled in settings blocks external access immediately (403)
+      saveUpdatedConfigMap(cfgFile, {'expose_enabled': false});
+      final blockedResp = await http.get(
+        Uri.http(authority, '/share/$shareId/promo.mp4'),
+      );
+      expect(blockedResp.statusCode, equals(403));
+
+      // Re-enable and close via manage_expose(action: "close") -> 404
+      saveUpdatedConfigMap(cfgFile, {'expose_enabled': true});
+      await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 102,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {'action': 'close', 'id': shareId},
+        },
+      });
+      final closedResp = await http.get(
+        Uri.http(authority, '/share/$shareId/promo.mp4'),
+      );
+      expect(closedResp.statusCode, equals(404));
+    } finally {
+      await ExposureManager.instance.closeAllExposures();
       await server.close(force: true);
     }
   });

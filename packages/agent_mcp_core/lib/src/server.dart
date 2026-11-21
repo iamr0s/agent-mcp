@@ -9,6 +9,7 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'auth.dart';
 import 'config.dart';
 import 'dashboard_api.dart';
+import 'exposure_tools.dart';
 import 'file_tools.dart';
 import 'logging_utils.dart';
 import 'privileged_exec.dart';
@@ -58,8 +59,8 @@ class McpServerEngine {
     return "MCP server '${config.serverName}' on host '${Platform.localHostname}' ($modeDesc, $scopeDesc). "
         'Prefer stat_file before reading large files, use edit_file or apply_patch for '
         'surgical changes instead of rewriting whole files, use start_process + '
-        'manage_process for long-running builds or servers, and use list_sub_mcps / '
-        'inspect_sub_mcp / call_sub_mcp to discover and invoke nested Sub-MCP servers.';
+        'manage_process for long-running builds or servers, use list_sub_mcps / inspect_sub_mcp / call_sub_mcp for nested Sub-MCP servers, '
+        'and use manage_expose to share generated videos, files, static websites, or local ports via Tailscale / public links.';
   }
 
   void _registerAllTools() {
@@ -115,6 +116,7 @@ class McpServerEngine {
     registerFileTools(registerTool, config, undoStore);
     registerProcessTools(registerTool, config, processManager);
     registerSubMcpTools(registerTool, config);
+    registerExposureTools(registerTool, config);
   }
 
   Future<Map<String, dynamic>?> handleJsonRpcMessage(
@@ -474,6 +476,10 @@ class McpServerEngine {
           headers: const {'content-type': 'application/json; charset=utf-8'},
         );
       }
+
+      // 1b. Public / Tailscale capability-token share links (/share/<id>/...)
+      final shareResp = await ExposureManager.instance.tryHandleShareRequest(request, config: config);
+      if (shareResp != null) return shareResp;
 
       // 2. Password-protected Web Dashboard
       final dashResp = await dashboard.tryHandle(request);

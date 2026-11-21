@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'services/console_backend.dart';
 import 'theme/claude_theme.dart';
 import 'views/activity_page.dart';
+import 'views/exposure_page.dart';
 import 'views/setup_page.dart';
 import 'views/remote_nodes_dialog.dart';
 import 'views/sub_mcp_page.dart';
@@ -265,6 +266,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   Map<String, dynamic> _config = {};
   Map<String, dynamic> _tunnelInfo = {'installed': false, 'tunnels': {}};
   Map<String, dynamic> _storageStats = {};
+  Map<String, dynamic> _exposureSummary = const {'enabled': true, 'active_count': 0, 'items': <dynamic>[]};
   List<Map<String, dynamic>> _subMcps = [];
   final List<Map<String, dynamic>> _events = [];
 
@@ -489,6 +491,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         'd': st['dashboard_mode'],
         'c': st['config'],
         't': st['tunnels'],
+        'e': st['exposures'],
       });
       if (sig == _lastStatusSignature) {
         return; // Zero setState / zero rebuild when idle!
@@ -504,6 +507,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         }
         if (st['tunnels'] is Map) {
           _tunnelInfo = Map<String, dynamic>.from(st['tunnels'] as Map);
+        }
+        if (st['exposures'] is Map) {
+          _exposureSummary = Map<String, dynamic>.from(st['exposures'] as Map);
         }
       });
     } on UnauthorizedConsoleException {
@@ -671,6 +677,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     });
     if (idx == 1) unawaited(_refreshSubMcps());
     if (idx == 2) {
+      _lastStatusSignature = '';
+      unawaited(_refreshStatus());
+    }
+    if (idx == 3) {
       unawaited(_refreshStatus());
       unawaited(_refreshStorage());
     }
@@ -952,6 +962,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
     final enabledSubCount =
         _subMcps.where((s) => s['enabled'] != false).length;
+    final activeExposeCount =
+        int.tryParse('${_exposureSummary['active_count'] ?? 0}') ?? 0;
 
     final rawHosts = (_config['hosts'] as List?)
             ?.map((e) => e.toString().trim())
@@ -1012,12 +1024,25 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         onRefresh: _refreshSubMcps,
         onToast: _showToast,
       ),
+      ExposureSharePage(
+        key: const ValueKey('page-exposure'),
+        backend: widget.backend,
+        exposureSummary: _exposureSummary,
+        topPadding: pageTopInset,
+        extraBottomPadding: pageExtraBottom,
+        onRefresh: () async {
+          _lastStatusSignature = '';
+          await _refreshStatus();
+        },
+        onToast: _showToast,
+      ),
       ServiceSetupPage(
         key: const ValueKey('page-setup'),
         backend: widget.backend,
         config: _config,
         tunnelInfo: _tunnelInfo,
         storageStats: _storageStats,
+        exposureSummary: _exposureSummary,
         isRunning: _isRunning,
         themeMode: widget.themeMode,
         topPadding: pageTopInset,
@@ -1230,6 +1255,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                   selectedIndex: _tabIndex,
                                   expandProgress: t,
                                   enabledSubCount: enabledSubCount,
+                                  activeExposeCount: activeExposeCount,
                                   onSelect: _selectTab,
                                 ),
                                 const Spacer(),
@@ -1506,6 +1532,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             child: _MobileGlassBottomNav(
                               selectedIndex: _tabIndex,
                               enabledSubCount: enabledSubCount,
+                              activeExposeCount: activeExposeCount,
                               micaActive: micaActive,
                               onSelect: _selectTab,
                               onCollapse: () => _setChromeVisibleManual(false),
@@ -1817,6 +1844,7 @@ class _ConsoleScrollBehavior extends MaterialScrollBehavior {
 class _MobileGlassBottomNav extends StatelessWidget {
   final int selectedIndex;
   final int enabledSubCount;
+  final int activeExposeCount;
   final bool micaActive;
   final ValueChanged<int> onSelect;
   final VoidCallback onCollapse;
@@ -1824,6 +1852,7 @@ class _MobileGlassBottomNav extends StatelessWidget {
   const _MobileGlassBottomNav({
     required this.selectedIndex,
     required this.enabledSubCount,
+    this.activeExposeCount = 0,
     required this.micaActive,
     required this.onSelect,
     required this.onCollapse,
@@ -1839,6 +1868,12 @@ class _MobileGlassBottomNav extends StatelessWidget {
         Icons.hub_rounded,
         '子 MCP',
         enabledSubCount > 0 ? '$enabledSubCount' : null,
+      ),
+      (
+        Icons.public_outlined,
+        Icons.public_rounded,
+        '外网',
+        activeExposeCount > 0 ? '$activeExposeCount' : null,
       ),
       (Icons.tune_rounded, Icons.tune_rounded, '服务配置', null),
     ];
@@ -2163,8 +2198,8 @@ class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: 17.5, color: iconColor),
-                const SizedBox(width: 5.5),
+                Icon(widget.icon, size: 16.0, color: iconColor),
+                const SizedBox(width: 4.0),
                 Flexible(
                   child: Text(
                     widget.label,
@@ -2172,7 +2207,7 @@ class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
                     overflow: TextOverflow.ellipsis,
                     style: sansStyle(
                       c,
-                      size: 12.5,
+                      size: 11.8,
                       weight: widget.active ? FontWeight.w600 : FontWeight.w500,
                       color: labelColor,
                       height: 1.1,
@@ -2219,12 +2254,14 @@ class _SidebarNavGroup extends StatelessWidget {
   final int selectedIndex;
   final double expandProgress;
   final int enabledSubCount;
+  final int activeExposeCount;
   final ValueChanged<int> onSelect;
 
   const _SidebarNavGroup({
     required this.selectedIndex,
     required this.expandProgress,
     required this.enabledSubCount,
+    this.activeExposeCount = 0,
     required this.onSelect,
   });
 
@@ -2240,6 +2277,11 @@ class _SidebarNavGroup extends StatelessWidget {
         Icons.hub_outlined,
         '子 MCP 网关',
         enabledSubCount > 0 ? '$enabledSubCount' : null,
+      ),
+      (
+        Icons.public_rounded,
+        '外网与分享',
+        activeExposeCount > 0 ? '$activeExposeCount' : null,
       ),
       (Icons.tune_rounded, '服务配置', null),
     ];
@@ -2580,7 +2622,7 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                             textAlign: TextAlign.center,
                             style: sansStyle(
                               c,
-                              size: 12.5,
+                              size: 11.8,
                               color: c.danger,
                             ),
                           ),

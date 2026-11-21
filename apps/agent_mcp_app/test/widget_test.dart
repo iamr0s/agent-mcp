@@ -115,6 +115,38 @@ class _FakeConsoleBackend extends ConsoleBackend {
             'prof-main': {'running': true},
           },
         },
+        'exposures': {
+          'enabled': config['expose_enabled'] != false,
+          'tailscale_enabled': config['expose_tailscale_enabled'] != false,
+          'tailscale_mode': config['expose_tailscale_mode'] ?? 'funnel',
+          'cloudflared_fallback': true,
+          'default_ttl_minutes': 120,
+          'tailscale_status': {
+            'reachable': true,
+            'dns_name': 'omen-pc.taildemo.ts.net',
+            'tailscale_ips': ['100.77.167.127'],
+          },
+          'public_gateway_bases': ['https://omen-mcp.iamr0s.de5.net'],
+          'cloudflared_installed': true,
+          'active_count': 1,
+          'items': [
+            {
+              'id': 'sh_testDemo123',
+              'kind': 'file',
+              'label': '产品宣传片预览.mp4',
+              'target': r'D:\agent_mcp_tttmp\promo.mp4',
+              'scope': 'auto',
+              'primary_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_testDemo123',
+              'direct_file_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_testDemo123/promo.mp4',
+              'public_urls': ['https://omen-mcp.iamr0s.de5.net/share/sh_testDemo123'],
+              'tailscale_urls': ['http://100.77.167.127:8000/share/sh_testDemo123'],
+              'lan_urls': ['http://192.168.6.205:8000/share/sh_testDemo123'],
+              'hit_count': 5,
+              'bytes_sent_human': '6.05 MB',
+              'remaining_seconds': 7100,
+            },
+          ],
+        },
         'config': config,
       };
 
@@ -372,23 +404,23 @@ void main() {
         },
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(ClaudeCaptionIcon), findsNWidgets(3));
     await tester.tap(find.byTooltip('窗口置顶'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(pinned, isTrue);
 
     await tester.tap(find.byTooltip('最大化'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(maximized, isTrue);
 
     await tester.tap(find.byTooltip('最小化'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(minimizedCount, equals(1));
 
     await tester.tap(find.byTooltip('隐藏到系统托盘（MCP 服务继续运行）'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(closedToTrayCount, equals(1));
   });
 
@@ -632,10 +664,13 @@ void main() {
     expect(find.text('KernelSU'), findsOneWidget);
 
     // Verify redundant FGS IP copy buttons were removed while profile multi-endpoint copy button exists
-    expect(find.text('Android 通知栏常驻服务保活（FlClash 模式）'), findsOneWidget);
+    expect(find.text('通知栏常驻保活与快捷启停'), findsOneWidget);
+    expect(find.textContaining('InstallerX'), findsNothing);
     expect(find.text('复制地址'), findsOneWidget);
 
     // Tap 复制地址 on the multi-endpoint profile -> opens DropMenu with LAN, Tailscale, HTTPS & Copy All!
+    await tester.ensureVisible(find.text('复制地址'));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('复制地址'));
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('http://192.168.31.102:8000/mcp'), findsWidgets);
@@ -650,5 +685,53 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('本机网卡 IP'), findsOneWidget);
     expect(find.text('选局域网与组网'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Exposure & Share 4th tab renders active links, multi-channel copy menu, and Tailscale settings switches',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    tester.view.physicalSize = const Size(1280, 960);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.takeException(), isNull);
+
+    // Switch to 4th feature tab ("外网与分享")
+    await tester.tap(find.text('外网与分享'));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    expect(find.text('外网映射与链接分享'), findsOneWidget);
+    expect(find.text('产品宣传片预览.mp4'), findsOneWidget);
+    expect(
+      find.text('https://omen-mcp.iamr0s.de5.net/share/sh_testDemo123'),
+      findsOneWidget,
+    );
+
+    // Open New Share modal and verify port/file/dir segmented controls
+    await tester.tap(find.text('新建外网分享'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('新建外网映射与分享'), findsOneWidget);
+    expect(find.text('本地网站端口'), findsOneWidget);
+    expect(find.text('单个视频 / 文件'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Switch to Setup tab and verify Tailscale & Exposure master switches
+    await tester.tap(find.text('服务配置'));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(find.text('Tailscale 与外网分享设置'), findsOneWidget);
+    expect(
+      find.text('允许外网分享与 AI 自动映射 (manage_expose)'),
+      findsOneWidget,
+    );
+    expect(find.text('启用 Tailscale 组网与 Funnel 联动'), findsOneWidget);
   });
 }

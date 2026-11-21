@@ -746,6 +746,11 @@ class _IoConsoleBackend extends ConsoleBackend {
           (saved['android_privilege_mode'] ?? 'none').toString()
       ..['android_su_mount_master'] =
           saved['android_su_mount_master'] != false
+      ..['expose_enabled'] = ExposureManager.isExposureEnabledInSaved(saved)
+      ..['expose_tailscale_enabled'] = ExposureManager.isTailscaleEnabledInSaved(saved)
+      ..['expose_tailscale_mode'] = ExposureManager.tailscaleModeInSaved(saved)
+      ..['expose_cloudflared_fallback'] = ExposureManager.isCloudflaredFallbackInSaved(saved)
+      ..['expose_default_ttl_minutes'] = ExposureManager.defaultTtlMinutesInSaved(saved)
       ..['privilege_status'] = PrivilegedExecutor.instance.publicStatus
       ..['has_password'] =
           (saved['oauth_local_password_hash'] ?? '').toString().isNotEmpty
@@ -757,6 +762,7 @@ class _IoConsoleBackend extends ConsoleBackend {
       'version': agentMcpVersion,
       'dashboard_mode': false,
       'tunnels': TunnelManager.instance.getStatuses(),
+      'exposures': await ExposureManager.instance.getDashboardSummary(_ctrl.loadCurrentServerConfig()),
       'config': sanitized,
     };
   }
@@ -1172,6 +1178,119 @@ class _IoConsoleBackend extends ConsoleBackend {
         target,
       );
       return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getExposures() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.getExposures());
+    }
+    return {
+      'ok': true,
+      'exposures': await ExposureManager.instance
+          .getDashboardSummary(_ctrl.loadCurrentServerConfig()),
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTailscaleStatus() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.getTailscaleStatus());
+    }
+    final st =
+        await ExposureManager.instance.probeTailscaleStatus(forceRefresh: true);
+    return {'ok': true, 'tailscale': st.toJson()};
+  }
+
+  @override
+  Future<Map<String, dynamic>> openExposure({
+    required String target,
+    int? port,
+    String scope = 'auto',
+    String? label,
+    int? ttlMinutes,
+    bool spa = false,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.openExposure(
+          target: target,
+          port: port,
+          scope: scope,
+          label: label,
+          ttlMinutes: ttlMinutes,
+          spa: spa,
+        ),
+      );
+    }
+    try {
+      if (!_ctrl.isRunning) {
+        await _ctrl.start();
+      }
+      final created = await ExposureManager.instance.openExposure(
+        config: _ctrl.loadCurrentServerConfig(),
+        rawTarget: target,
+        portOverride: port,
+        scope: scope,
+        label: label,
+        ttlMinutes: ttlMinutes,
+        spa: spa,
+        validateWithPolicy: false,
+      );
+      _refreshSignal.value++;
+      return {'ok': true, 'exposure': created};
+    } catch (e) {
+      return {'ok': false, 'error': '$e'};
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeExposure(String id) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.closeExposure(id));
+    }
+    final closed = await ExposureManager.instance.closeExposure(id);
+    _refreshSignal.value++;
+    return {'ok': closed, 'id': id};
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeAllExposures() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.closeAllExposures());
+    }
+    final count = await ExposureManager.instance.closeAllExposures();
+    _refreshSignal.value++;
+    return {'ok': true, 'closed_count': count};
+  }
+
+  @override
+  Future<bool> openExternalUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+    if (Platform.isAndroid) {
+      try {
+        final ok = await _androidChannel.invokeMethod<bool>(
+          'openExternalUrl',
+          trimmed,
+        );
+        return ok == true;
+      } catch (_) {
+        return false;
+      }
+    }
+    try {
+      if (Platform.isWindows) {
+        await Process.start('cmd', ['/c', 'start', '', trimmed]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [trimmed]);
+      } else {
+        await Process.start('xdg-open', [trimmed]);
+      }
+      return true;
     } catch (_) {
       return false;
     }

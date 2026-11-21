@@ -414,4 +414,37 @@ class RemoteHttpNodeClient {
           'interactive': interactive,
         },
       );
+
+  Future<Map<String, dynamic>> getExposures() =>
+      _requestJson('GET', '/exposures');
+
+  Future<Map<String, dynamic>> getTailscaleStatus() =>
+      _requestJson('GET', '/tailscale/status');
+
+  Future<Map<String, dynamic>> openExposure({
+    required String target,
+    int? port,
+    String scope = 'auto',
+    String? label,
+    int? ttlMinutes,
+    bool spa = false,
+  }) =>
+      _requestJson(
+        'POST',
+        '/exposures/open',
+        jsonBody: {
+          'target': target,
+          if (port != null) 'port': port,
+          'scope': scope,
+          if (label != null && label.isNotEmpty) 'label': label,
+          if (ttlMinutes != null) 'ttl_minutes': ttlMinutes,
+          'spa': spa,
+        },
+      );
+
+  Future<Map<String, dynamic>> closeExposure(String id) =>
+      _requestJson('POST', '/exposures/close', jsonBody: {'id': id});
+
+  Future<Map<String, dynamic>> closeAllExposures() =>
+      _requestJson('POST', '/exposures/close-all');
 }

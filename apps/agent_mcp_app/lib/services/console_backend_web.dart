@@ -413,5 +413,63 @@ class _WebConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<Map<String, dynamic>> getExposures() async {
+    final r = await http.get(_uri('/exposures'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTailscaleStatus() async {
+    final r = await http.get(_uri('/tailscale/status'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> openExposure({
+    required String target,
+    int? port,
+    String scope = 'auto',
+    String? label,
+    int? ttlMinutes,
+    bool spa = false,
+  }) async {
+    final r = await http.post(
+      _uri('/exposures/open'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'target': target,
+        if (port != null) 'port': port,
+        'scope': scope,
+        if (label != null && label.isNotEmpty) 'label': label,
+        if (ttlMinutes != null) 'ttl_minutes': ttlMinutes,
+        'spa': spa,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeExposure(String id) async {
+    final r = await http.post(
+      _uri('/exposures/close'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'id': id}),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeAllExposures() async {
+    final r = await http.post(_uri('/exposures/close-all'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<bool> openExternalUrl(String url) async {
+    web.window.open(url, '_blank');
+    return true;
+  }
+
+  @override
   void quitDesktopApp() {}
 }

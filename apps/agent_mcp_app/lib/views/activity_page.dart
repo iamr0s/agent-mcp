@@ -25,6 +25,7 @@ const Map<String, (IconData, String)> kToolMeta = {
   'list_sub_mcps': (Icons.account_tree_outlined, '列出子 MCP'),
   'inspect_sub_mcp': (Icons.radar_rounded, '查看子 MCP 工具'),
   'call_sub_mcp': (Icons.extension_outlined, '调用子 MCP'),
+  'manage_expose': (Icons.public_rounded, '外网分享'),
 };
 
 (IconData, String) resolveToolMeta(String rawTool) {
@@ -76,6 +77,11 @@ String buildHumanSummary(Map<String, dynamic> ev) {
   if (t.endsWith('inspect_sub_mcp') && a['server_name'] != null) {
     final sub = a['tool_name'] != null ? ' / ${a['tool_name']}' : ' (工具目录)';
     return '${a['server_name']}$sub';
+  }
+  if (t.endsWith('manage_expose') && a['action'] != null) {
+    final act = a['action'].toString();
+    final tgt = (a['target'] ?? a['port'] ?? a['id'] ?? '').toString();
+    return tgt.isNotEmpty ? '$act -> $tgt' : act;
   }
   if (t.endsWith('call_sub_mcp') && a['server_name'] != null) {
     return '${a['server_name']} / ${a['tool_name'] ?? ''}';

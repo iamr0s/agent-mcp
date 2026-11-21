@@ -559,6 +559,7 @@ Future<void> _cmdDoctor(List<String> args) async {
     '监听配置 : ${bindHosts.join(", ")} : $port',
     '隧道组件 : $cfLine',
     '子网关数 : 已配置 ${subServers.length} 个嵌套子 MCP 服务',
+    '外网分享 : ${ExposureManager.isExposureEnabledInSaved(saved) ? _cSage('已开启 (Tailscale + /share)') : _cMuted('已关闭')}',
   ]);
 
   stdout.writeln('\n${_cBold("本机网络接口:")}');

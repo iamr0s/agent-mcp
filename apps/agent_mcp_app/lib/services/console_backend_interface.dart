@@ -268,5 +268,29 @@ abstract class ConsoleBackend {
 
   Future<bool> openPrivilegeManagerApp(String target) async => false;
 
+  Future<Map<String, dynamic>> getExposures() async =>
+      const {'ok': true, 'exposures': <String, dynamic>{'enabled': true, 'active_count': 0, 'items': <dynamic>[]}};
+
+  Future<Map<String, dynamic>> openExposure({
+    required String target,
+    int? port,
+    String scope = 'auto',
+    String? label,
+    int? ttlMinutes,
+    bool spa = false,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
+  Future<Map<String, dynamic>> closeExposure(String id) async =>
+      const {'ok': false};
+
+  Future<Map<String, dynamic>> closeAllExposures() async =>
+      const {'ok': false};
+
+  Future<Map<String, dynamic>> getTailscaleStatus() async =>
+      const {'ok': true, 'tailscale': <String, dynamic>{}};
+
+  Future<bool> openExternalUrl(String url) async => false;
+
   void quitDesktopApp();
 }

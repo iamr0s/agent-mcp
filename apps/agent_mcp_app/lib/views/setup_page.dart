@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/console_backend.dart';
 import '../theme/claude_theme.dart';
 import 'android_privilege_card.dart';
+import 'exposure_page.dart';
 import 'profile_dialogs.dart';
 import 'profile_endpoints_helper.dart';
 
@@ -12,6 +13,7 @@ class ServiceSetupPage extends StatefulWidget {
   final Map<String, dynamic> config;
   final Map<String, dynamic> tunnelInfo;
   final Map<String, dynamic> storageStats;
+  final Map<String, dynamic> exposureSummary;
   final bool isRunning;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
@@ -28,6 +30,7 @@ class ServiceSetupPage extends StatefulWidget {
     required this.config,
     required this.tunnelInfo,
     required this.storageStats,
+    this.exposureSummary = const <String, dynamic>{},
     required this.isRunning,
     required this.themeMode,
     required this.onThemeChanged,
@@ -838,7 +841,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Android 通知栏常驻服务保活（FlClash 模式）',
+                                            '通知栏常驻保活与快捷启停',
                                             style: sansStyle(
                                               c,
                                               size: 13.5,
@@ -848,7 +851,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            '本机 MCP 运行期间自动挂起系统前台通知保活，支持在下拉通知栏一键停止或重启服务。',
+                                            '手机锁屏或切到后台时保持本机服务不断连，下拉通知栏即可随时停止或重启。',
                                             style: sansStyle(
                                               c,
                                               size: 12,
@@ -989,6 +992,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 const SizedBox(height: 16),
                 ClaudeStaggeredReveal(
                   index: 2,
+                  child: TailscaleExposureSettingsCard(
+                    backend: widget.backend,
+                    config: widget.config,
+                    exposureSummary: widget.exposureSummary,
+                    onRefreshStatus: widget.onRefreshStatus,
+                    onToast: widget.onToast,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ClaudeStaggeredReveal(
+                  index: 2,
                   child: ClaudeCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1014,7 +1028,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '同端口支持多入口共存：原生支持 OAuth 2.1 动态客户端注册 (RFC 7591 + PKCE)、静态 Client 绑定、Bearer Token、Cloudflared 隧道以及独立权限策略，保存即时生效。',
+                          '为不同 AI 客户端分配独立的连接方式与目录权限：例如主力编程助手开放代码读写，远程网页端开启登录验证或只读目录，保存立即生效。',
                           style: sansStyle(
                             c,
                             size: 13,

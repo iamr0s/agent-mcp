@@ -11,6 +11,7 @@ import 'package:shelf_static/shelf_static.dart';
 import 'auth.dart';
 import 'autostart.dart';
 import 'config.dart';
+import 'exposure_tools.dart';
 import 'logging_utils.dart';
 import 'privileged_exec.dart';
 import 'sub_mcp.dart';
@@ -300,6 +301,11 @@ class DashboardHandler {
             (saved['android_privilege_mode'] ?? 'none').toString()
         ..['android_su_mount_master'] =
             saved['android_su_mount_master'] != false
+        ..['expose_enabled'] = ExposureManager.isExposureEnabledInSaved(saved)
+        ..['expose_tailscale_enabled'] = ExposureManager.isTailscaleEnabledInSaved(saved)
+        ..['expose_tailscale_mode'] = ExposureManager.tailscaleModeInSaved(saved)
+        ..['expose_cloudflared_fallback'] = ExposureManager.isCloudflaredFallbackInSaved(saved)
+        ..['expose_default_ttl_minutes'] = ExposureManager.defaultTtlMinutesInSaved(saved)
         ..['privilege_status'] = PrivilegedExecutor.instance.publicStatus
         ..['has_password'] =
             (saved['oauth_local_password_hash'] ?? '').toString().isNotEmpty
@@ -311,6 +317,7 @@ class DashboardHandler {
         'config_rev': _fileMtimeMs(config.configFile),
         'sub_rev': _fileMtimeMs(SubMcpManager.instance.configFile),
         'tunnels': TunnelManager.instance.getStatuses(),
+        'exposures': await ExposureManager.instance.getDashboardSummary(config),
         if (Platform.isAndroid)
           'privilege': PrivilegedExecutor.instance.publicStatus,
         'config': sanitized,
@@ -351,6 +358,54 @@ class DashboardHandler {
       });
     }
 
+        if (apiPath == '/exposures' && req.method == 'GET') {
+      return _json({
+        'ok': true,
+        'exposures': await ExposureManager.instance.getDashboardSummary(config),
+      });
+    }
+
+    if (apiPath == '/tailscale/status' && req.method == 'GET') {
+      final st = await ExposureManager.instance.probeTailscaleStatus(
+        forceRefresh: true,
+      );
+      return _json({'ok': true, 'tailscale': st.toJson()});
+    }
+
+    if (apiPath == '/exposures/open' && req.method == 'POST') {
+      try {
+        final body = Map<String, dynamic>.from(
+          (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+        );
+        final created = await ExposureManager.instance.openExposure(
+          config: config,
+          rawTarget: (body['target'] ?? '').toString(),
+          portOverride: int.tryParse('${body['port'] ?? ''}'),
+          scope: (body['scope'] ?? 'auto').toString(),
+          label: body['label']?.toString(),
+          ttlMinutes: int.tryParse('${body['ttl_minutes'] ?? ''}'),
+          spa: body['spa'] == true,
+          validateWithPolicy: false,
+        );
+        return _json({'ok': true, 'exposure': created});
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
+    }
+
+    if (apiPath == '/exposures/close' && req.method == 'POST') {
+      final body = Map<String, dynamic>.from(
+        (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+      );
+      final id = (body['id'] ?? '').toString();
+      final closed = await ExposureManager.instance.closeExposure(id);
+      return _json({'ok': closed, 'id': id});
+    }
+
+    if (apiPath == '/exposures/close-all' && req.method == 'POST') {
+      final count = await ExposureManager.instance.closeAllExposures();
+      return _json({'ok': true, 'closed_count': count});
+    }
     if (apiPath == '/config' && req.method == 'POST') {
       final body = Map<String, dynamic>.from(
         (jsonDecode(await req.readAsString()) as Map?) ?? const {},

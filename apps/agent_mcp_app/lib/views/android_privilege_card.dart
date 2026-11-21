@@ -71,7 +71,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
       if (mode == 'none') {
         widget.onToast('已切换为普通应用沙盒级别');
       } else if (ready) {
-        widget.onToast('特权桥接已就绪：${label.isNotEmpty ? label : mode}');
+        widget.onToast('已切换执行权限：${label.isNotEmpty ? label : mode}');
       } else if (err.isNotEmpty) {
         widget.onToast(err);
       }
@@ -188,7 +188,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
           ),
           const SizedBox(height: 8),
           Text(
-            '参考 InstallerX-Revived 授权器架构：支持在普通沙盒、Shizuku（自动继承无线调试 ADB 或 Root 能力）与 Root SU 持久守护桥接之间按需切换，同步赋能全部文件读写与终端进程工具。',
+            '按需选择手机本地工具的执行权限：平时管共享文件或远控电脑选「普通沙盒」即可；需要抓系统日志、管理安装包或跨目录排障时，点选 Shizuku 或 Root SU 一键提权。',
             style: sansStyle(c, size: 12.8, color: c.muted, height: 1.54),
           ),
           const SizedBox(height: 14),
@@ -207,7 +207,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                     child: _AuthorizerModeTile(
                       title: '普通沙盒',
                       badge: 'App UID',
-                      subtitle: '标准应用沙盒权限，零额外授权，适合工作区读写与远程管理电脑',
+                      subtitle: '零额外授权，开箱即用。适合读写共享目录，或把手机当成多台电脑的随身遥控器',
                       icon: Icons.shield_outlined,
                       selected: reqMode == 'none',
                       activeReady: reqMode == 'none',
@@ -221,7 +221,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                       title: 'Shizuku',
                       badge: shizukuBadge,
                       subtitle:
-                          '绑定 Shizuku / Sui 用户服务，高速执行 ADB Shell (2000) 或 Root (0) 操作',
+                          '免 Root 解锁无线调试级能力：先启动 Shizuku 再点此授权，即可跑 pm / dumpsys / logcat',
                       icon: Icons.bolt_rounded,
                       selected: reqMode == 'shizuku',
                       activeReady: bridgeReady && activeMode == 'shizuku',
@@ -235,7 +235,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                       title: 'Root SU',
                       badge: rootBadge,
                       subtitle:
-                          '拉起持久 su 特权桥接 (UID 0)，兼容 KernelSU / APatch / Magisk，免重复弹窗',
+                          '最高系统权限（支持 KernelSU / APatch / Magisk）：首次点允许后常驻生效，免重复弹窗',
                       icon: Icons.terminal_rounded,
                       selected: reqMode == 'root',
                       activeReady: bridgeReady && activeMode == 'root',
@@ -290,8 +290,8 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                           Expanded(
                             child: Text(
                               effectiveUid == 0
-                                  ? '当前已激活 UID 0 最高特权桥接：文件工具与命令工具可直接访问 /sdcard、/sdcard/Android/data、/data/local/tmp 与 /data/adb 等系统路径。'
-                                  : '当前已激活 Shizuku Shell (UID $effectiveUid) 桥接：文件工具与命令工具可直接访问 /sdcard、/sdcard/Android/data、/data/local/tmp 并执行 pm / dumpsys / am 等调试命令。',
+                                  ? 'Root SU (UID 0) 已就绪：AI 可直接读写 /sdcard、Android/data、/data/local/tmp、/data/adb 并执行系统级终端命令。'
+                                  : 'Shizuku (UID $effectiveUid) 已就绪：AI 可直接访问 /sdcard、Android/data、/data/local/tmp 并执行 pm / dumpsys / am 等调试命令。',
                               style: sansStyle(
                                 c,
                                 size: 12.2,
