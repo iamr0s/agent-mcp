@@ -119,6 +119,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   final Set<int> _expandedIds = <int>{};
+  bool _splitView = true;
+  int? _selectedSeq;
 
   @override
   void dispose() {
@@ -213,106 +215,28 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
     final avgText =
         msCnt > 0 ? '${(msSum / msCnt).toStringAsFixed(0)} ms' : '—';
 
-    return CustomScrollView(
-      controller: _scrollCtrl,
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
-              ClaudeStaggeredReveal(
-                index: 0,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 10,
-                children: [
-                  Text('活动与调用流', style: serifTitleStyle(c, size: 25)),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ClaudeButton(
-                        label: '清空',
-                        compact: true,
-                        leading: const Icon(Icons.delete_sweep_outlined),
-                        onPressed: widget.onClear,
-                      ),
-                      ClaudeButton(
-                        label: '导出日志',
-                        compact: true,
-                        leading: const Icon(Icons.download_outlined),
-                        onPressed: widget.onExport,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              LayoutBuilder(
-                builder: (ctx, box) {
-                  final tiles = [
-                    _StatTile(
-                      label: '总事件数',
-                      value: '${widget.events.length}',
-                    ),
-                    _StatTile(label: '工具调用', value: '$toolCalls'),
-                    _StatTile(
-                      label: '错误 / 警告',
-                      value: '$errCount',
-                      accent: errCount > 0 ? c.danger : null,
-                    ),
-                    _StatTile(label: '平均耗时', value: avgText),
-                  ];
+    return LayoutBuilder(
+      builder: (context, pageBox) {
+        final canSplit = pageBox.maxWidth >= 900;
+        final useSplit = canSplit && _splitView && filtered.isNotEmpty;
 
-                  if (box.maxWidth < 600) {
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: tiles[0]),
-                            const SizedBox(width: 10),
-                            Expanded(child: tiles[1]),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(child: tiles[2]),
-                            const SizedBox(width: 10),
-                            Expanded(child: tiles[3]),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: tiles[0]),
-                      const SizedBox(width: 12),
-                      Expanded(child: tiles[1]),
-                      const SizedBox(width: 12),
-                      Expanded(child: tiles[2]),
-                      const SizedBox(width: 12),
-                      Expanded(child: tiles[3]),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        ClaudeStaggeredReveal(
-          index: 1,
-          child: ClaudeGlassBar(
+        Map<String, dynamic>? activeEv;
+        int? activeSeq;
+        if (useSplit) {
+          for (var i = 0; i < filtered.length; i++) {
+            final s = (filtered[i]['_seq'] as int?) ?? i;
+            if (s == _selectedSeq) {
+              activeEv = filtered[i];
+              activeSeq = s;
+              break;
+            }
+          }
+          if (activeEv == null) {
+            activeEv = filtered.first;
+            activeSeq = (activeEv['_seq'] as int?) ?? 0;
+          }
+        }
+        final filterBarWidget = ClaudeGlassBar(
             blurSigma: 16,
             borderRadius: 16,
             tintColor: c.paper2.withValues(alpha: c.isDark ? 0.84 : 0.88),
@@ -486,12 +410,74 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                 );
               },
             ),
-          ),
-        ),
+          );
+
+        final headerSliver = SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
+              ClaudeStaggeredReveal(
+                index: 0,
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 14,
+                      runSpacing: 6,
+                      children: [
+                        Text('活动与调用流', style: serifTitleStyle(c, size: 24)),
+                        _InlineTelemetryRibbon(
+                          total: widget.events.length,
+                          toolCalls: toolCalls,
+                          errCount: errCount,
+                          avgText: avgText,
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (canSplit)
+                          ClaudeSegmented<bool>(
+                            value: _splitView,
+                            items: const [
+                              (true, '分栏预览'),
+                              (false, '行内展开'),
+                            ],
+                            onChanged: (v) => setState(() => _splitView = v),
+                          ),
+                        ClaudeButton(
+                          label: '清空',
+                          compact: true,
+                          leading: const Icon(Icons.delete_sweep_outlined),
+                          onPressed: widget.onClear,
+                        ),
+                        ClaudeButton(
+                          label: '导出日志',
+                          compact: true,
+                          leading: const Icon(Icons.download_outlined),
+                          onPressed: widget.onExport,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 11),
+              ClaudeStaggeredReveal(index: 1, child: filterBarWidget),
               const SizedBox(height: 10),
             ],
           ),
-        ),
+        );
+
+        final feedSlivers = <Widget>[
         if (filtered.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
@@ -551,15 +537,20 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               itemBuilder: (ctx, idx) {
                 final ev = filtered[idx];
                 final seqId = (ev['_seq'] as int?) ?? idx;
-                final open = _expandedIds.contains(seqId);
+                final open = !useSplit && _expandedIds.contains(seqId);
+                final isSelected = useSplit && seqId == activeSeq;
                 return RepaintBoundary(
                   child: _EventCard(
                     key: ValueKey('ev-$seqId'),
                     ev: ev,
                     expanded: open,
+                    selected: isSelected,
+                    splitMode: useSplit,
                     onToggle: () {
                       setState(() {
-                        if (open) {
+                        if (useSplit) {
+                          _selectedSeq = seqId;
+                        } else if (open) {
                           _expandedIds.remove(seqId);
                         } else {
                           _expandedIds.add(seqId);
@@ -575,64 +566,302 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               },
             ),
           ),
-      ],
+      ];
+
+        if (!useSplit) {
+          return CustomScrollView(
+            controller: _scrollCtrl,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [headerSliver, ...feedSlivers],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: widget.topPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 14,
+                        runSpacing: 6,
+                        children: [
+                          Text('活动与调用流', style: serifTitleStyle(c, size: 24)),
+                          _InlineTelemetryRibbon(
+                            total: widget.events.length,
+                            toolCalls: toolCalls,
+                            errCount: errCount,
+                            avgText: avgText,
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          ClaudeSegmented<bool>(
+                            value: _splitView,
+                            items: const [
+                              (true, '分栏预览'),
+                              (false, '行内展开'),
+                            ],
+                            onChanged: (v) => setState(() => _splitView = v),
+                          ),
+                          ClaudeButton(
+                            label: '清空',
+                            compact: true,
+                            leading: const Icon(Icons.delete_sweep_outlined),
+                            onPressed: widget.onClear,
+                          ),
+                          ClaudeButton(
+                            label: '导出日志',
+                            compact: true,
+                            leading: const Icon(Icons.download_outlined),
+                            onPressed: widget.onExport,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 11),
+                  filterBarWidget,
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 46,
+                    child: CustomScrollView(
+                      controller: _scrollCtrl,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: feedSlivers,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 54,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: 24 + widget.extraBottomPadding,
+                      ),
+                      child: _DockedInspectorPane(
+                        ev: activeEv!,
+                        onCopy: (txt, msg) {
+                          Clipboard.setData(ClipboardData(text: txt));
+                          widget.onToast(msg);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? accent;
+class _InlineTelemetryRibbon extends StatelessWidget {
+  final int total;
+  final int toolCalls;
+  final int errCount;
+  final String avgText;
 
-  const _StatTile({
-    required this.label,
-    required this.value,
-    this.accent,
+  const _InlineTelemetryRibbon({
+    required this.total,
+    required this.toolCalls,
+    required this.errCount,
+    required this.avgText,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
+    Widget item(String label, String val, {Color? accent}) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: sansStyle(c, size: 12, color: c.muted)),
+          const SizedBox(width: 4.5),
+          Text(
+            val,
+            style: monoStyle(
+              c,
+              size: 12.5,
+              weight: FontWeight.w600,
+              color: accent ?? c.ink,
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget dot() => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text('·', style: sansStyle(c, size: 12, color: c.meta)),
+        );
+
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: c.paper2,
-        shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
-        shadows: c.whisperShadow,
+        color: c.recessed,
+        shape: StadiumBorder(side: BorderSide(color: c.hairline)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: sansStyle(
-                c,
-                size: 12,
-                color: c.muted,
-                height: 1.2,
-                letterSpacing: 0.1,
-              ),
+            item('事件', '$total'),
+            dot(),
+            item('调用', '$toolCalls'),
+            dot(),
+            item(
+              '异常',
+              '$errCount',
+              accent: errCount > 0 ? c.danger : null,
             ),
-            const SizedBox(height: 5),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: serifTitleStyle(
-                c,
-                size: 21,
-                color: accent ?? c.ink,
-                height: 1.15,
-                tabular: true,
-              ),
-            ),
+            dot(),
+            item('均值', avgText),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DockedInspectorPane extends StatelessWidget {
+  final Map<String, dynamic> ev;
+  final void Function(String text, String msg) onCopy;
+
+  const _DockedInspectorPane({
+    required this.ev,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final kind = (ev['kind'] ?? 'info').toString();
+    final status = (ev['status'] ?? 'done').toString();
+    final isRunning = status == 'running';
+    final badge = isRunning ? '执行中' : (ev['badge'] ?? '完成').toString();
+    final toolRaw = (ev['tool'] ?? '').toString();
+    final tm = resolveToolMeta(toolRaw);
+    final summary = buildHumanSummary(ev);
+    final source = (ev['source'] ?? '').toString();
+    final ms = ev['ms'] as num?;
+    final ts = (ev['ts'] ?? '').toString();
+    final rawArgs = ev['args'];
+    final argsMap = rawArgs is Map && rawArgs.isNotEmpty
+        ? Map<String, dynamic>.from(rawArgs)
+        : null;
+    final resultStr = (ev['result'] ?? '').toString();
+
+    final accent = switch (kind) {
+      'err' => c.danger,
+      'ok' => c.sage,
+      'call' => c.clay,
+      'oauth' => c.purple,
+      _ => c.muted,
+    };
+
+    return ClaudeCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClaudeStatusDot(
+                      color: accent,
+                      pulsing: isRunning,
+                      size: 7,
+                    ),
+                    const SizedBox(width: 7),
+                    Icon(tm.$1, size: 16, color: c.inkSoft),
+                    const SizedBox(width: 6),
+                    Text(
+                      tm.$2,
+                      style: sansStyle(
+                        c,
+                        size: 14,
+                        weight: FontWeight.w600,
+                        color: c.ink,
+                      ),
+                    ),
+                    if (toolRaw.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '($toolRaw)',
+                        style: monoStyle(c, size: 11.5, color: c.meta),
+                      ),
+                    ],
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    ClaudePill(
+                      text: ms != null
+                          ? '$badge · ${ms.toStringAsFixed(1)} ms'
+                          : badge,
+                      mono: false,
+                      fg: accent,
+                      bg: accent.withValues(alpha: 0.12),
+                    ),
+                    if (source.isNotEmpty || ts.isNotEmpty)
+                      Text(
+                        [if (source.isNotEmpty) source, if (ts.isNotEmpty) ts]
+                            .join(' · '),
+                        style: sansStyle(c, size: 12, color: c.muted),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Divider(color: c.hairline, height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: 12),
+              child: _RichToolDetailDrawer(
+                ev: ev,
+                toolRaw: toolRaw,
+                argsMap: argsMap,
+                resultStr: resultStr,
+                summary: summary,
+                onCopy: onCopy,
+                docked: true,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -641,6 +870,8 @@ class _StatTile extends StatelessWidget {
 class _EventCard extends StatefulWidget {
   final Map<String, dynamic> ev;
   final bool expanded;
+  final bool selected;
+  final bool splitMode;
   final VoidCallback onToggle;
   final void Function(String text, String msg) onCopy;
 
@@ -648,6 +879,8 @@ class _EventCard extends StatefulWidget {
     super.key,
     required this.ev,
     required this.expanded,
+    this.selected = false,
+    this.splitMode = false,
     required this.onToggle,
     required this.onCopy,
   });
@@ -760,13 +993,18 @@ class _EventCardState extends State<_EventCard> {
         duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
         curve: ClaudeMotion.editorialOut,
         decoration: ShapeDecoration(
-          color: c.paper2,
+          color: widget.selected
+              ? Color.alphaBlend(c.clay.withValues(alpha: 0.06), c.paper2)
+              : c.paper2,
           shape: claudeSuperellipse(
             14,
             side: BorderSide(
-              color: widget.expanded
-                  ? accent.withValues(alpha: 0.42)
-                  : (_hovered ? c.ringHover : c.hairline),
+              color: widget.selected
+                  ? c.clay.withValues(alpha: 0.62)
+                  : (widget.expanded
+                      ? accent.withValues(alpha: 0.42)
+                      : (_hovered ? c.ringHover : c.hairline)),
+              width: widget.selected ? 1.3 : 1.0,
             ),
           ),
           shadows: _hovered ? c.cardHoverShadow : c.whisperShadow,
@@ -784,23 +1022,54 @@ class _EventCardState extends State<_EventCard> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 13,
-                      vertical: 10.5,
+                      vertical: 10,
                     ),
                     child: LayoutBuilder(
                       builder: (ctx, rowBox) {
-                        final isCompactRow = rowBox.maxWidth < 660;
-                        final chevron = AnimatedRotation(
-                          turns: widget.expanded ? 0.5 : 0.0,
-                          duration: ClaudeMotion.duration(
-                            context,
-                            ClaudeMotion.base,
-                          ),
-                          curve: ClaudeMotion.editorialOut,
-                          child: Icon(
-                            Icons.expand_more_rounded,
-                            size: 17,
-                            color: _hovered ? c.inkSoft : c.meta,
-                          ),
+                        final isCompactRow = rowBox.maxWidth < 560;
+                        final chevron = widget.splitMode
+                            ? Icon(
+                                Icons.chevron_right_rounded,
+                                size: 16,
+                                color: widget.selected ? c.clay : c.meta,
+                              )
+                            : AnimatedRotation(
+                                turns: widget.expanded ? 0.5 : 0.0,
+                                duration: ClaudeMotion.duration(
+                                  context,
+                                  ClaudeMotion.base,
+                                ),
+                                curve: ClaudeMotion.editorialOut,
+                                child: Icon(
+                                  Icons.expand_more_rounded,
+                                  size: 17,
+                                  color: _hovered ? c.inkSoft : c.meta,
+                                ),
+                              );
+
+                        final statusLead = isRunning || kind == 'err'
+                            ? buildStatusAccentPill()
+                            : Container(
+                                width: 3.5,
+                                height: 15,
+                                decoration: BoxDecoration(
+                                  color: accent,
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                              );
+
+                        final metaTrail = Text(
+                          [
+                            if (!isCompactRow &&
+                                !widget.splitMode &&
+                                source.isNotEmpty)
+                              source,
+                            if (ms != null) '${ms.toStringAsFixed(0)} ms',
+                            if (!widget.splitMode && ts.isNotEmpty) ts,
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: monoStyle(c, size: 11.2, color: c.meta),
                         );
 
                         if (isCompactRow) {
@@ -809,138 +1078,109 @@ class _EventCardState extends State<_EventCard> {
                             children: [
                               Row(
                                 children: [
-                                  buildStatusAccentPill(),
-                                  const SizedBox(width: 9),
-                                    Icon(tm.$1, size: 15, color: c.inkSoft),
-                                    const SizedBox(width: 5),
-                                    Expanded(
-                                      child: Text(
-                                        tm.$2,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: sansStyle(
-                                          c,
-                                          size: 13,
-                                          weight: FontWeight.w600,
-                                          color: c.ink,
-                                          height: 1.2,
-                                        ),
+                                  statusLead,
+                                  const SizedBox(width: 8),
+                                  Icon(tm.$1, size: 15, color: c.inkSoft),
+                                  const SizedBox(width: 5),
+                                  Expanded(
+                                    child: Text(
+                                      tm.$2,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: sansStyle(
+                                        c,
+                                        size: 13,
+                                        weight: FontWeight.w600,
+                                        color: c.ink,
+                                        height: 1.2,
                                       ),
                                     ),
-                                    if (ms != null) ...[
-                                      const SizedBox(width: 6),
-                                      ClaudePill(
-                                        text: '${ms.toStringAsFixed(0)} ms',
-                                      ),
-                                    ],
-                                    if (ts.isNotEmpty) ...[
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        ts,
-                                        style: monoStyle(
-                                          c,
-                                          size: 11,
-                                          color: c.meta,
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(width: 4),
-                                    chevron,
-                                  ],
-                                ),
-                                if (summary.isNotEmpty || source.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      if (source.isNotEmpty) ...[
-                                        ClaudePill(
-                                          text: source,
-                                          leading:
-                                              const Icon(Icons.login_rounded),
-                                          fg: c.clay,
-                                          bg: c.clay.withValues(alpha: 0.10),
-                                          border:
-                                              c.clay.withValues(alpha: 0.24),
-                                          mono: false,
-                                        ),
-                                        const SizedBox(width: 7),
-                                      ],
-                                      Expanded(
-                                        child: _RichEventSummary(
-                                          ev: ev,
-                                          fallback: summary,
-                                        ),
-                                      ),
-                                    ],
                                   ),
+                                  const SizedBox(width: 6),
+                                  Flexible(child: metaTrail),
+                                  const SizedBox(width: 4),
+                                  chevron,
                                 ],
-                              ],
-                            );
-                          }
-
-                          return Row(
-                            children: [
-                              buildStatusAccentPill(),
-                              const SizedBox(width: 11),
-                              SizedBox(
-                                width: 136,
-                                child: Row(
+                              ),
+                              if (summary.isNotEmpty || source.isNotEmpty) ...[
+                                const SizedBox(height: 5),
+                                Row(
                                   children: [
-                                    Icon(tm.$1, size: 15, color: c.inkSoft),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        tm.$2,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: sansStyle(
-                                          c,
-                                          size: 13,
-                                          weight: FontWeight.w600,
-                                          color: c.ink,
-                                          height: 1.2,
+                                    if (source.isNotEmpty) ...[
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 110,
                                         ),
+                                        child: Text(
+                                          '$source · ',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: sansStyle(
+                                            c,
+                                            size: 11.5,
+                                            color: c.muted,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    Expanded(
+                                      child: _RichEventSummary(
+                                        ev: ev,
+                                        fallback: summary,
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _RichEventSummary(
-                                  ev: ev,
-                                  fallback: summary,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (source.isNotEmpty) ...[
-                                ClaudePill(
-                                  text: source,
-                                  leading: const Icon(Icons.login_rounded),
-                                  fg: c.clay,
-                                  bg: c.clay.withValues(alpha: 0.10),
-                                  border: c.clay.withValues(alpha: 0.24),
-                                  mono: false,
-                                ),
-                                const SizedBox(width: 6),
                               ],
-                              if (ms != null) ...[
-                                ClaudePill(text: '${ms.toStringAsFixed(1)} ms'),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                ts,
-                                style: monoStyle(c, size: 11.5, color: c.meta),
-                              ),
-                              const SizedBox(width: 6),
-                              chevron,
                             ],
                           );
-                        },
-                      ),
+                        }
+
+                        return Row(
+                          children: [
+                            statusLead,
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: 118,
+                              child: Row(
+                                children: [
+                                  Icon(tm.$1, size: 15, color: c.inkSoft),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      tm.$2,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: sansStyle(
+                                        c,
+                                        size: 13,
+                                        weight: FontWeight.w600,
+                                        color: c.ink,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _RichEventSummary(
+                                ev: ev,
+                                fallback: summary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            metaTrail,
+                            const SizedBox(width: 6),
+                            chevron,
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
+              ),
                 ClaudeCollapsible(
                   expanded: widget.expanded,
                   builder: (_) => _RichToolDetailDrawer(
@@ -1493,6 +1733,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   final String resultStr;
   final String summary;
   final void Function(String text, String msg) onCopy;
+  final bool docked;
 
   const _RichToolDetailDrawer({
     required this.ev,
@@ -1501,6 +1742,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     required this.resultStr,
     required this.summary,
     required this.onCopy,
+    this.docked = false,
   });
 
   @override
@@ -1531,12 +1773,17 @@ class _RichToolDetailDrawer extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      padding: const EdgeInsets.all(14),
-      decoration: ShapeDecoration(
-        color: c.recessed,
-        shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
-      ),
+      margin: docked
+          ? const EdgeInsets.fromLTRB(16, 0, 16, 16)
+          : const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      padding: docked ? EdgeInsets.zero : const EdgeInsets.all(14),
+      decoration: docked
+          ? const BoxDecoration()
+          : ShapeDecoration(
+              color: c.recessed,
+              shape:
+                  claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+            ),
       child: LayoutBuilder(
         builder: (ctx, dbox) {
           final stackArgs = dbox.maxWidth < 460;
@@ -1621,7 +1868,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
-                  constraints: const BoxConstraints(maxHeight: 280),
+                  constraints: BoxConstraints(maxHeight: docked ? 440 : 280),
                   padding: const EdgeInsets.all(12),
                   decoration: ShapeDecoration(
                     color: c.termBg,

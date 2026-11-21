@@ -663,9 +663,12 @@ void main() {
     expect(find.text('ADB (UID 2000)'), findsOneWidget);
     expect(find.text('KernelSU'), findsOneWidget);
 
-    // Verify redundant FGS IP copy buttons were removed while profile multi-endpoint copy button exists
+    // Verify redundant FGS IP copy buttons were removed while profile multi-endpoint copy button exists under 接入入口
     expect(find.text('通知栏常驻保活与快捷启停'), findsOneWidget);
     expect(find.textContaining('InstallerX'), findsNothing);
+
+    await tester.tap(find.text('接入入口 (1)'));
+    await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('复制地址'), findsOneWidget);
 
     // Tap 复制地址 on the multi-endpoint profile -> opens DropMenu with LAN, Tailscale, HTTPS & Copy All!
@@ -724,14 +727,58 @@ void main() {
     await tester.tap(find.text('取消'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Switch to Setup tab and verify Tailscale & Exposure master switches
+    // Switch to Setup tab and verify Tailscale & Exposure master switches under 外网与隧道
     await tester.tap(find.text('服务配置'));
     await tester.pump(const Duration(milliseconds: 450));
+    await tester.tap(find.text('外网与隧道'));
+    await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('Tailscale 与外网分享设置'), findsOneWidget);
     expect(
       find.text('允许外网分享与 AI 自动映射 (manage_expose)'),
       findsOneWidget,
     );
     expect(find.text('启用 Tailscale 组网与 Funnel 联动'), findsOneWidget);
+
+    // Verify Security & All-Expanded sub-tabs also render cleanly
+    await tester.tap(find.text('权限与维护'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('全局默认权限与日志'), findsOneWidget);
+    expect(find.text('存储与维护'), findsOneWidget);
+    await tester.tap(find.text('全部展开'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('基础服务与全局密码'), findsOneWidget);
+    expect(find.text('传输、鉴权与权限入口'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Desktop Activity Split Inspector previews rich tool output without jumping and toggles inline mode',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    tester.view.physicalSize = const Size(1440, 920);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.takeException(), isNull);
+
+    // Wide desktop defaults to Docked Split Inspector ("分栏预览")
+    expect(find.text('分栏预览'), findsOneWidget);
+    expect(find.text('行内展开'), findsOneWidget);
+    expect(find.textContaining('lib/'), findsOneWidget);
+
+    // Toggle to Inline Accordion ("行内展开") and back to Split ("分栏预览")
+    await tester.tap(find.text('行内展开'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('分栏预览'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('lib/'), findsOneWidget);
   });
 }

@@ -88,71 +88,44 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
               ClaudeStaggeredReveal(
                 index: 0,
                 child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              Text('子 MCP 网关', style: serifTitleStyle(c, size: 25)),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ClaudeButton(
-                    label: '粘贴 JSON 导入',
-                    compact: true,
-                    leading: const Icon(Icons.data_object_rounded),
-                    onPressed: () => _openEditModal(jsonMode: true),
-                  ),
-                  ClaudeButton(
-                    label: '添加子 MCP',
-                    compact: true,
-                    leading: const Icon(Icons.add_rounded),
-                    variant: ClaudeBtnVariant.clay,
-                    onPressed: () => _openEditModal(),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        ClaudeStaggeredReveal(
-          index: 1,
-          child: ClaudeGlassBar(
-            blurSigma: 16,
-            borderRadius: 16,
-            tintColor: c.paper2.withValues(alpha: c.isDark ? 0.84 : 0.88),
-            boxShadow: c.whisperShadow,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 6,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                  alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    Text(
-                      '渐进式披露网关仅暴露 3 个元工具，拒绝上下文膨胀：',
-                      style: sansStyle(c, size: 12.5, color: c.muted),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('子 MCP 网关', style: serifTitleStyle(c, size: 24)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '渐进式按需网关 · 对外仅暴露 list / inspect / call 三个元工具，配置即时生效',
+                          style: sansStyle(c, size: 12.5, color: c.muted),
+                        ),
+                      ],
                     ),
-                    const ClaudePill(text: 'list_sub_mcps'),
-                    const ClaudePill(text: 'inspect_sub_mcp'),
-                    const ClaudePill(text: 'call_sub_mcp'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ClaudeButton(
+                          label: '粘贴 JSON 导入',
+                          compact: true,
+                          leading: const Icon(Icons.data_object_rounded),
+                          onPressed: () => _openEditModal(jsonMode: true),
+                        ),
+                        ClaudeButton(
+                          label: '添加子 MCP',
+                          compact: true,
+                          leading: const Icon(Icons.add_rounded),
+                          variant: ClaudeBtnVariant.clay,
+                          onPressed: () => _openEditModal(),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                Text(
-                  '配置即时生效 · 无需重启主服务',
-                  style: sansStyle(c, size: 12, color: c.meta),
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
               const SizedBox(height: 14),
             ],
           ),
@@ -353,6 +326,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                                         ClaudeButton(
                                           label: '编辑',
                                           compact: true,
+                                          variant: ClaudeBtnVariant.ghost,
                                           onPressed: () =>
                                               _openEditModal(existing: s),
                                         ),

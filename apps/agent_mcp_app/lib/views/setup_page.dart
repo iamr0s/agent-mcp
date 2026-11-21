@@ -74,6 +74,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   bool _savingPerm = false;
   bool _refreshingStorage = false;
   String? _cleaningTarget;
+  String _setupSection = 'basic';
   final Set<String> _togglingTunnels = <String>{};
 
   String _lastSyncedKey = '';
@@ -511,6 +512,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
 
     final showDesktopWindowToggle =
         widget.backend.hasCustomTitleBar && !widget.backend.isRemoteNodeActive;
+    final showBasic = _setupSection == 'basic' || _setupSection == 'all';
+    final showProfiles = _setupSection == 'profiles' || _setupSection == 'all';
+    final showExpose = _setupSection == 'expose' || _setupSection == 'all';
+    final showSecurity = _setupSection == 'security' || _setupSection == 'all';
 
     return SingleChildScrollView(
       controller: _scrollCtrl,
@@ -525,9 +530,42 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         children: [
           ClaudeStaggeredReveal(
             index: 0,
-            child: Text('服务配置', style: serifTitleStyle(c, size: 25)),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('服务配置', style: serifTitleStyle(c, size: 25)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '按分组收纳基础监听、接入入口、外网联动与安全权限，也可一键展开全部。',
+                      style: sansStyle(c, size: 12.5, color: c.muted),
+                    ),
+                  ],
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ClaudeSegmented<String>(
+                    value: _setupSection,
+                    items: [
+                      ('basic', _basicDirty ? '基础与外观 ●' : '基础与外观'),
+                      ('profiles', '接入入口 (${profs.length})'),
+                      ('expose', '外网与隧道'),
+                      ('security', _permDirty ? '权限与维护 ●' : '权限与维护'),
+                      ('all', '全部展开'),
+                    ],
+                    onChanged: (next) => setState(() => _setupSection = next),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
+          if (showBasic) ...[
                 ClaudeStaggeredReveal(
                   index: 1,
                   child: ClaudeCard(
@@ -989,18 +1027,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 2,
-                  child: TailscaleExposureSettingsCard(
-                    backend: widget.backend,
-                    config: widget.config,
-                    exposureSummary: widget.exposureSummary,
-                    onRefreshStatus: widget.onRefreshStatus,
-                    onToast: widget.onToast,
-                  ),
-                ),
-                const SizedBox(height: 16),
+          ],
+          if (showProfiles) ...[
+                if (showBasic) const SizedBox(height: 16),
                 ClaudeStaggeredReveal(
                   index: 2,
                   child: ClaudeCard(
@@ -1045,6 +1074,19 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     ),
                   ),
                 ),
+          ],
+          if (showExpose) ...[
+                if (showBasic || showProfiles) const SizedBox(height: 16),
+                ClaudeStaggeredReveal(
+                  index: 2,
+                  child: TailscaleExposureSettingsCard(
+                    backend: widget.backend,
+                    config: widget.config,
+                    exposureSummary: widget.exposureSummary,
+                    onRefreshStatus: widget.onRefreshStatus,
+                    onToast: widget.onToast,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 ClaudeStaggeredReveal(
                   index: 3,
@@ -1052,7 +1094,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     child: _buildCloudflaredCard(c, ti, inst, tMap),
                   ),
                 ),
-                const SizedBox(height: 16),
+          ],
+          if (showSecurity) ...[
+                if (showBasic || showProfiles || showExpose)
+                  const SizedBox(height: 16),
                 ClaudeStaggeredReveal(
                   index: 4,
                   child: ClaudeCard(
@@ -1190,6 +1235,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     child: _buildStorageCard(c),
                   ),
                 ),
+          ],
               ],
             ),
           );
@@ -1391,6 +1437,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     ClaudeButton(
                       label: '编辑',
                       compact: true,
+                      variant: ClaudeBtnVariant.ghost,
                       onPressed: () => _openProfileModal(idx),
                     ),
                     if (profs.length > 1)
@@ -1447,56 +1494,36 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 9),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: p['inherit_permissions'] != false
-                  ? [
-                      ClaudePill(
-                        text: '继承全局默认权限',
-                        mono: false,
-                        bg: c.paper2,
-                      ),
-                    ]
-                  : [
-                      ClaudePill(
-                        leading: Icon(
-                          p['read_only'] == true
-                              ? Icons.lock_outline_rounded
-                              : Icons.edit_outlined,
-                        ),
-                        text: p['read_only'] == true ? '仅只读' : '可写执行',
-                        mono: false,
-                        bg: c.paper2,
-                      ),
-                      if (p['allow_secrets'] == true)
-                        ClaudePill(
-                          leading: const Icon(Icons.key_rounded),
-                          text: '允许敏感文件',
-                          mono: false,
-                          bg: c.paper2,
-                        ),
-                      if (p['relaxed_command_annotations'] == true)
-                        ClaudePill(
-                          leading: const Icon(Icons.bolt_rounded),
-                          text: '免弹窗声明',
-                          mono: false,
-                          bg: c.paper2,
-                        ),
-                      ClaudePill(
-                        leading: Icon(
-                          ((p['roots'] as List?)?.isNotEmpty ?? false)
-                              ? Icons.folder_outlined
-                              : Icons.public_rounded,
-                        ),
-                        text: ((p['roots'] as List?)?.isNotEmpty ?? false)
-                            ? '限定 ${(p['roots'] as List).length} 个目录'
-                            : '全盘访问',
-                        mono: false,
-                        bg: c.paper2,
-                      ),
-                    ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  p['inherit_permissions'] != false
+                      ? Icons.shield_outlined
+                      : (p['read_only'] == true
+                          ? Icons.lock_outline_rounded
+                          : Icons.tune_rounded),
+                  size: 13.5,
+                  color: c.meta,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    p['inherit_permissions'] != false
+                        ? '权限策略：继承全局默认权限'
+                        : [
+                            p['read_only'] == true ? '仅只读' : '可写执行',
+                            if (p['allow_secrets'] == true) '允许敏感文件',
+                            if (p['relaxed_command_annotations'] == true)
+                              '免弹窗声明',
+                            ((p['roots'] as List?)?.isNotEmpty ?? false)
+                                ? '限定 ${(p['roots'] as List).length} 个目录'
+                                : '全盘访问',
+                          ].join(' · '),
+                    style: sansStyle(c, size: 12, color: c.meta, tabular: true),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

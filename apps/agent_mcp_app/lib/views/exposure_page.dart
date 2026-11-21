@@ -32,6 +32,8 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   bool _closingAll = false;
   String? _closingId;
   bool _togglingMaster = false;
+  bool _showChannelDetails = false;
+  bool _showGuide = false;
 
   bool get _enabled => widget.exposureSummary['enabled'] != false;
   bool get _tsEnabled => widget.exposureSummary['tailscale_enabled'] != false;
@@ -188,15 +190,15 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('外网映射与链接分享', style: serifTitleStyle(c, size: 22)),
-                    const SizedBox(height: 5),
+                    Text('外网映射与链接分享', style: serifTitleStyle(c, size: 24)),
+                    const SizedBox(height: 4),
                     Text(
-                      '把刚做好的视频、静态网页或本地运行中的网站端口（如 :3000）一键变成手机和外网可直接打开的链接，用完随时关停。',
+                      '将本地视频、静态网页或网站端口（如 :3000）生成临时外网链接，随时一键收回。',
                       style: sansStyle(
                         c,
-                        size: 13.2,
+                        size: 12.8,
                         color: c.muted,
-                        height: 1.48,
+                        height: 1.4,
                       ),
                     ),
                   ],
@@ -274,52 +276,167 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             ),
             const SizedBox(height: 14),
           ],
-          LayoutBuilder(
-            builder: (ctx, box) {
-              final cols = box.maxWidth < 760 ? 1 : 3;
-              const gap = 12.0;
-              final tileW = (box.maxWidth - gap * (cols - 1)) / cols;
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  SizedBox(
-                    width: tileW,
-                    child: _ChannelStatusTile(
-                      icon: Icons.hub_rounded,
-                      title: 'Tailscale 组网 / Funnel',
-                      badge: !_tsEnabled
-                          ? '已关闭'
-                          : (tsReachable ? '已连通' : '待启动'),
-                      active: _tsEnabled && tsReachable,
-                      subtitle: tsSummary,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: ShapeDecoration(
+              color: c.paper2,
+              shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline)),
+              shadows: c.whisperShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Wrap(
+                      spacing: 14,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClaudeStatusDot(
+                              color: (_tsEnabled && tsReachable)
+                                  ? c.sage
+                                  : c.meta,
+                              pulsing: _tsEnabled && tsReachable,
+                              size: 6.5,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Tailscale · ${!_tsEnabled ? '已关闭' : (tsReachable ? '已连通' : '待启动')}',
+                              style: sansStyle(
+                                c,
+                                size: 12.5,
+                                weight: FontWeight.w600,
+                                color: (_tsEnabled && tsReachable)
+                                    ? c.sage
+                                    : c.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClaudeStatusDot(
+                              color: _enabled ? c.sage : c.meta,
+                              size: 6.5,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '网关直享 (/share) · ${_pubBases.isNotEmpty ? '公网秒出' : '局域网就绪'}',
+                              style: sansStyle(c, size: 12.5, color: c.inkSoft),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClaudeStatusDot(
+                              color: _cfInstalled ? c.sage : c.meta,
+                              size: 6.5,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '临时隧道 · ${_cfInstalled ? '按需可用' : '未安装'}',
+                              style: sansStyle(c, size: 12.5, color: c.muted),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        ClaudeButton(
+                          label: _showChannelDetails ? '收起通道详情' : '通道详情',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          onPressed: () => setState(
+                            () => _showChannelDetails = !_showChannelDetails,
+                          ),
+                        ),
+                        if (items.isNotEmpty)
+                          ClaudeButton(
+                            label: _showGuide ? '收起说明' : '用法说明',
+                            compact: true,
+                            variant: ClaudeBtnVariant.ghost,
+                            onPressed: () =>
+                                setState(() => _showGuide = !_showGuide),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                ClaudeCollapsible(
+                  expanded: _showChannelDetails,
+                  builder: (_) => Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: LayoutBuilder(
+                      builder: (ctx, box) {
+                        final cols = box.maxWidth < 760 ? 1 : 3;
+                        const gap = 10.0;
+                        final tileW = (box.maxWidth - gap * (cols - 1)) / cols;
+                        return Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [
+                            SizedBox(
+                              width: tileW,
+                              child: _ChannelStatusTile(
+                                icon: Icons.hub_rounded,
+                                title: 'Tailscale 组网 / Funnel',
+                                badge: !_tsEnabled
+                                    ? '已关闭'
+                                    : (tsReachable ? '已连通' : '待启动'),
+                                active: _tsEnabled && tsReachable,
+                                subtitle: tsSummary,
+                              ),
+                            ),
+                            SizedBox(
+                              width: tileW,
+                              child: _ChannelStatusTile(
+                                icon: Icons.bolt_rounded,
+                                title: '网关直享通道 (/share)',
+                                badge: _pubBases.isNotEmpty ? '公网秒出' : '局域网就绪',
+                                active: _enabled,
+                                subtitle: gwSummary,
+                              ),
+                            ),
+                            SizedBox(
+                              width: tileW,
+                              child: _ChannelStatusTile(
+                                icon: Icons.cloud_outlined,
+                                title: '临时公网隧道兜底',
+                                badge: _cfInstalled ? '按需可用' : '未安装',
+                                active: _cfInstalled,
+                                subtitle: cfSummary,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                  SizedBox(
-                    width: tileW,
-                    child: _ChannelStatusTile(
-                      icon: Icons.bolt_rounded,
-                      title: '网关直享通道 (/share)',
-                      badge: _pubBases.isNotEmpty ? '公网秒出' : '局域网就绪',
-                      active: _enabled,
-                      subtitle: gwSummary,
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileW,
-                    child: _ChannelStatusTile(
-                      icon: Icons.cloud_outlined,
-                      title: '临时公网隧道兜底',
-                      badge: _cfInstalled ? '按需可用' : '未安装',
-                      active: _cfInstalled,
-                      subtitle: cfSummary,
-                    ),
-                  ),
-                ],
-              );
-            },
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          ClaudeCollapsible(
+            expanded: items.isNotEmpty && _showGuide,
+            builder: (_) => Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _buildEmptyGuideCard(c, hasActiveItems: true),
+            ),
+          ),
+          const SizedBox(height: 14),
           if (items.isEmpty)
             _buildEmptyGuideCard(c)
           else
@@ -350,7 +467,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     );
   }
 
-  Widget _buildEmptyGuideCard(ClaudePalette c) {
+  Widget _buildEmptyGuideCard(ClaudePalette c, {bool hasActiveItems = false}) {
     return ClaudeCard(
       padding: const EdgeInsets.all(22),
       child: Column(
@@ -360,9 +477,13 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             children: [
               Icon(Icons.public_rounded, size: 20, color: c.clay),
               const SizedBox(width: 9),
-              Text(
-                '当前没有活跃的外网分享 · 两种方式随时用起来',
-                style: serifTitleStyle(c, size: 17),
+              Expanded(
+                child: Text(
+                  hasActiveItems
+                      ? '外网分享使用指南 · 两种方式随时调用'
+                      : '当前没有活跃的外网分享 · 两种方式随时用起来',
+                  style: serifTitleStyle(c, size: 17),
+                ),
               ),
             ],
           ),
@@ -631,17 +752,9 @@ class _ActiveExposureCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  ClaudePill(text: scopeText, mono: false),
-                  ClaudePill(text: ttlText, mono: false),
-                  ClaudePill(
-                    text: '访问 $hitCount 次 · $bytesHuman',
-                    mono: false,
-                  ),
-                ],
+              Text(
+                '$scopeText · $ttlText · 访问 $hitCount 次 ($bytesHuman)',
+                style: sansStyle(c, size: 12, color: c.muted),
               ),
             ],
           ),
