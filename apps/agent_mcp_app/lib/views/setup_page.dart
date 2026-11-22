@@ -545,30 +545,19 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 final badge = Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: ShapeDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF4F46E5), Color(0xFF312E81)],
-                        ),
-                        shape: claudeSuperellipse(12),
-                        shadows: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(11),
+                        boxShadow: [
                           BoxShadow(
                             color: const Color(0xFF4338CA)
-                                .withValues(alpha: c.isDark ? 0.35 : 0.22),
+                                .withValues(alpha: c.isDark ? 0.38 : 0.22),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                      alignment: Alignment.center,
-                      child: const ClaudeSparkIcon(
-                        size: 20,
-                        color: Color(0xFFFAF9F6),
-                      ),
+                      child: const ClaudeSparkIcon(size: 44),
                     ),
                     Positioned(
                       right: -2,

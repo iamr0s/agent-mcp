@@ -156,21 +156,19 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: ShapeDecoration(
-                      color: c.clay.withValues(alpha: 0.12),
-                      shape: claudeSuperellipse(
-                        12,
-                        side: BorderSide(color: c.clay.withValues(alpha: 0.25)),
-                      ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4338CA)
+                              .withValues(alpha: c.isDark ? 0.35 : 0.20),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.system_update_alt_rounded,
-                      size: 20,
-                      color: c.clay,
-                    ),
+                    child: const ClaudeSparkIcon(size: 42),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

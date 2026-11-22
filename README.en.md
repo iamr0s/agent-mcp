@@ -24,7 +24,7 @@
 
 ```bash
 # 1. Download & extract (includes both native `agent-mcp` binary and compiled `/dashboard/` Web UI)
-curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.4.2/AgentMCP-v2.4.2-linux-x64-cli.tar.gz | tar -xzf -
+curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.4.3/AgentMCP-v2.4.3-linux-x64-cli.tar.gz | tar -xzf -
 
 # 2. One-line non-interactive setup (auto-detects LAN & Tailscale 100.x IPs + generates Bearer key)
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
@@ -92,11 +92,11 @@ Grab prebuilt binaries from [**GitHub Releases**](https://github.com/iamr0s/agen
 
 | Target Platform | Release Asset | Description |
 | :--- | :--- | :--- |
-| **Linux Server / NAS (x64)** | `AgentMCP-v2.4.2-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
-| **Android (ARM64 Recommended)** | `AgentMCP-v2.4.2-android-arm64-v8a.apk` | Dual-mode remote multi-node controller + 3-tier local MCP server |
-| **Android (Universal)** | `AgentMCP-v2.4.2-android-universal.apk` | Multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
-| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v2.4.2-windows-x64-sfx.exe` | Windows 11 Mica desktop console + Web UI + standalone `agent-mcp.exe` CLI |
-| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v2.4.2-windows-x64-portable.zip` | Portable archive storing config & logs locally |
+| **Linux Server / NAS (x64)** | `AgentMCP-v2.4.3-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
+| **Android (ARM64 Recommended)** | `AgentMCP-v2.4.3-android-arm64-v8a.apk` | Dual-mode remote multi-node controller + 3-tier local MCP server |
+| **Android (Universal)** | `AgentMCP-v2.4.3-android-universal.apk` | Multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v2.4.3-windows-x64-sfx.exe` | Windows 11 Mica desktop console + Web UI + standalone `agent-mcp.exe` CLI |
+| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v2.4.3-windows-x64-portable.zip` | Portable archive storing config & logs locally |
 
 ## License
 

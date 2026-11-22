@@ -597,7 +597,7 @@ class ClaudeFormRow extends StatelessWidget {
   }
 }
 
-/// Signature 4-point Anthropic Terracotta Sparkle Icon
+/// Unified Agent MCP Brand Icon (matches Windows taskbar/tray, macOS dock & Android launcher)
 class ClaudeSparkIcon extends StatelessWidget {
   final double size;
   final Color? color;
@@ -606,10 +606,26 @@ class ClaudeSparkIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? ClaudePalette.of(context).clay;
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _SparkPainter(c),
+    if (color != null) {
+      return CustomPaint(
+        size: Size.square(size),
+        painter: _SparkPainter(color!),
+      );
+    }
+    final fallbackColor = ClaudePalette.of(context).clay;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.24),
+      child: Image.asset(
+        'assets/app_icon.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (_, __, ___) => CustomPaint(
+          size: Size.square(size),
+          painter: _SparkPainter(fallbackColor),
+        ),
+      ),
     );
   }
 }

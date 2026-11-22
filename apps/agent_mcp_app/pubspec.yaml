@@ -1,7 +1,7 @@
 name: agent_mcp_app
 description: Anthropic Editorial-Style Desktop & Web Console for Agent MCP
 publish_to: none
-version: 2.4.2+8
+version: 2.4.3+2403
 
 resolution: workspace
 
@@ -27,6 +27,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon.ico
+    - assets/app_icon.png
   fonts:
     - family: AnthropicSerif
       fonts:
