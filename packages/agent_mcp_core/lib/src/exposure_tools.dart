@@ -1785,10 +1785,10 @@ class ExposureManager {
       }
       return Response.notFound(
         '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
-        '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F4EC;color:#1F1E1B;font-family:sans-serif">'
-        '<div style="background:#FFF;padding:28px 32px;border-radius:20px;max-width:440px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
+        '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#EEF1F7;color:#0F172A;font-family:system-ui,sans-serif">'
+        '<div style="background:#FFF;padding:28px 32px;border-radius:14px;border:1px solid #E2E8F0;max-width:440px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.06)">'
         '<h3 style="margin:0 0 8px">未找到网页入口 index.html</h3>'
-        '<p style="margin:0;color:#6E6A61;font-size:14px;line-height:1.6">当前为「静态网站分享」模式（不会暴露目录文件列表）。如果你想展示文件夹目录，请在分享页切换为「文件夹目录」模式。</p>'
+        '<p style="margin:0;color:#64748B;font-size:14px;line-height:1.6">当前为「静态网站分享」模式（不会暴露目录文件列表）。如果你想展示文件夹目录，请在分享页切换为「文件夹目录」模式。</p>'
         '</div></body></html>',
         headers: const {'content-type': 'text/html; charset=utf-8'},
       );
@@ -2373,10 +2373,10 @@ class ExposureManager {
           502,
           body: '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
               '<meta http-equiv="refresh" content="4">'
-              '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F4EC;color:#1F1E1B;font-family:sans-serif">'
-              '<div style="background:#FFF;padding:28px 32px;border-radius:22px;max-width:420px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
+              '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#EEF1F7;color:#0F172A;font-family:system-ui,sans-serif">'
+              '<div style="background:#FFF;padding:28px 32px;border-radius:14px;border:1px solid #E2E8F0;max-width:420px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.06)">'
               '<h3 style="margin:0 0 8px">正在等待本机端口 :$port 启动...</h3>'
-              '<p style="margin:0;color:#6E6A61;font-size:13.5px;line-height:1.6">当前尚未检测到 127.0.0.1:$port 的响应，本页面每 4 秒会自动刷新一次。</p>'
+              '<p style="margin:0;color:#64748B;font-size:13.5px;line-height:1.6">当前尚未检测到 127.0.0.1:$port 的响应，本页面每 4 秒会自动刷新一次。</p>'
               '</div></body></html>',
           headers: const {'content-type': 'text/html; charset=utf-8'},
         );
@@ -2398,14 +2398,13 @@ class ExposureManager {
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
       '<title>${_htmlEscape(item.label)} · 输入提取码</title>'
       '<style>'
-      ':root{--bg:#FAF9F6;--card:rgba(255,255,255,0.90);--soft:#EEF0F6;--ink:#121316;--muted:#646873;--accent:#4F46E5;--err:#DC2626}'
-      '@media(prefers-color-scheme:dark){:root{--bg:#111317;--card:rgba(24,26,32,0.90);--soft:#1E212B;--ink:#F4F5F7;--muted:#8E93A0;--accent:#6366F1;--err:#F87171}}'
-      'body{background-image:radial-gradient(560px 380px at 20% 10%,rgba(79,70,229,0.10),transparent 70%),radial-gradient(520px 360px at 80% 90%,rgba(14,165,233,0.08),transparent 70%)}'
+      ':root{--bg:#EEF1F7;--card:#FFFFFF;--soft:#F8FAFC;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B;--accent:#4F46E5;--err:#DC2626}'
+      '@media(prefers-color-scheme:dark){:root{--bg:#080A0F;--card:#141821;--soft:#0E1117;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8;--accent:#6366F1;--err:#F87171}}'
       '*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;padding:16px}'
-      '.box{width:100%;max-width:380px;padding:30px 28px;background:var(--card);border-radius:24px;box-shadow:0 14px 40px rgba(0,0,0,.07);text-align:center}'
-      'h2{margin:0 0 6px;font-size:19px;font-weight:700}p{margin:0 0 18px;color:var(--muted);font-size:13.5px;line-height:1.55}'
-      'input{width:100%;padding:12px 16px;border-radius:14px;border:none;background:var(--soft);color:var(--ink);font-size:16px;text-align:center;letter-spacing:.12em;outline:none;margin-bottom:12px}'
-      'button{width:100%;padding:12px;border-radius:99px;border:none;background:var(--accent);color:#FFF;font-size:14px;font-weight:600;cursor:pointer}'
+      '.box{width:100%;max-width:380px;padding:28px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 36px rgba(15,23,42,.08);text-align:center}'
+      'h2{margin:0 0 6px;font-size:18px;font-weight:600}p{margin:0 0 18px;color:var(--muted);font-size:13.5px;line-height:1.55}'
+      'input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:var(--soft);color:var(--ink);font-size:16px;text-align:center;letter-spacing:.12em;outline:none;margin-bottom:12px}'
+      'button{width:100%;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#FFF;font-size:14px;font-weight:600;cursor:pointer}'
       '.err{color:var(--err);font-size:13px;margin-bottom:12px;font-weight:500}'
       '</style></head><body><form class="box" method="POST" action="${_htmlEscape(actionPath)}?__pin_unlock=1">'
       '<h2>${_htmlEscape(item.label)}</h2>'
@@ -2418,9 +2417,9 @@ class ExposureManager {
       '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
       '<title>分享链接已收起</title>'
-      '<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#FAF9F6;color:#121316;font-family:-apple-system,sans-serif;text-align:center;background-image:radial-gradient(520px 360px at 50% 35%,rgba(79,70,229,0.10),transparent 70%)}@media(prefers-color-scheme:dark){body{background:#111317;color:#F4F5F7}}'
-      '.box{padding:28px 32px;background:#FFF;border-radius:22px;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.06)}'
-      'h2{margin:0 0 8px;font-size:18px}p{margin:0;color:#6E6A61;font-size:13.5px;line-height:1.55}</style>'
+      '<style>:root{--bg:#EEF1F7;--card:#FFFFFF;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B}@media(prefers-color-scheme:dark){:root{--bg:#080A0F;--card:#141821;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8}}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,sans-serif;text-align:center}'
+      '.box{padding:28px 32px;background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:400px;box-shadow:0 12px 32px rgba(15,23,42,.08)}'
+      'h2{margin:0 0 8px;font-size:17px;font-weight:600}p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.55}</style>'
       '</head><body><div class="box"><h2>这条分享链接已经收起或到期</h2>'
       '<p>如果还需要查看，可以在「随手分享」页重新开启，或让 AI 再发一次。</p></div></body></html>';
 }

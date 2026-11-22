@@ -153,44 +153,30 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
             ? rootManagers.map((m) => m['name'] ?? '').join(' / ')
             : 'UID 0');
 
-    return ClaudeCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 8,
+    return ClaudeListGroup(
+      headerLabel: 'Android 运行权限级别',
+      headerTrailing: ClaudePill(
+        leading: ClaudeStatusDot(
+          color: statusColor,
+          pulsing: bridgeReady,
+          size: 7,
+        ),
+        text: isDegraded ? '等待授权 · 暂驻沙盒' : effectiveLabel,
+        mono: false,
+        fg: statusColor,
+        bg: statusBg,
+        border: isDegraded ? c.clay.withValues(alpha: 0.28) : null,
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Android 运行权限级别',
-                    style: serifTitleStyle(c, size: 18),
-                  ),
-                ],
+              Text(
+                '按需选择手机本地工具的执行权限：平时管共享文件或远控电脑选「普通沙盒」即可；需要抓系统日志、管理安装包或跨目录排障时，点选 Shizuku 或 Root SU 一键提权。',
+                style: sansStyle(c, size: 12.4, color: c.muted, height: 1.5),
               ),
-              ClaudePill(
-                leading: ClaudeStatusDot(
-                  color: statusColor,
-                  pulsing: bridgeReady,
-                  size: 7,
-                ),
-                text: isDegraded ? '等待授权 · 暂驻沙盒' : effectiveLabel,
-                mono: false,
-                fg: statusColor,
-                bg: statusBg,
-                border: isDegraded ? c.clay.withValues(alpha: 0.28) : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '按需选择手机本地工具的执行权限：平时管共享文件或远控电脑选「普通沙盒」即可；需要抓系统日志、管理安装包或跨目录排障时，点选 Shizuku 或 Root SU 一键提权。',
-            style: sansStyle(c, size: 12.8, color: c.muted, height: 1.54),
-          ),
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (ctx, box) {
@@ -409,8 +395,10 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
               ),
             ),
           ),
-        ],
-      ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

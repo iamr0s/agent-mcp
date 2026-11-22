@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'console_backend_interface.dart';
-import 'update_service.dart';
 import 'remote_http_client_io.dart';
 
 class UnauthorizedConsoleException implements Exception {

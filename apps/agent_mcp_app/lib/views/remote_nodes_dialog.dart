@@ -10,9 +10,8 @@ Future<void> showRemoteNodesManagerDialog(
   required ValueChanged<String> onToast,
   required Future<void> Function(String nodeId) onSwitchNode,
 }) {
-  return showDialog<void>(
+  return showClaudeDialog<void>(
     context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.45),
     builder: (ctx) => _RemoteNodesDialog(
       backend: backend,
       onToast: onToast,
@@ -51,7 +50,6 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
   @override
   void initState() {
     super.initState();
-    // Auto-open form if user has no remote nodes saved yet
     if (widget.backend.savedNodes.where((n) => !n.isLocal).isEmpty) {
       _formOpen = true;
     }
@@ -147,6 +145,25 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     }
   }
 
+  Future<void> _confirmDeleteNode(ConsoleNodeProfile node, String activeId) async {
+    final ok = await showClaudeConfirmDialog(
+      context,
+      title: '移除远程节点',
+      message: '确认移除远程节点「${node.name}」吗？（不会影响远端正在运行的服务）',
+      confirmText: '移除节点',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final wasActive = node.id == activeId;
+    await widget.backend.deleteRemoteNode(node.id);
+    if (!mounted) return;
+    setState(() {});
+    widget.onToast('已移除节点「${node.name}」');
+    if (wasActive) {
+      await widget.onSwitchNode('local');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
@@ -156,101 +173,98 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
 
     return SafeArea(
       child: Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
-        child: ClaudeCard(
-          radius: 22,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        backgroundColor: c.paper,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: ShapeDecoration(
-                      color: c.clay.withValues(alpha: 0.12),
-                      shape: claudeSuperellipse(11),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: ShapeDecoration(
+                        color: c.clay.withValues(alpha: 0.12),
+                        shape: claudeSuperellipse(9),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.hub_rounded,
+                        size: 17,
+                        color: c.clay,
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.hub_rounded,
-                      size: 18,
-                      color: c.clay,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '节点切换与远程连接档案',
+                            style: serifTitleStyle(c, size: 17),
+                          ),
+                          Text(
+                            '在本机服务与多台远程服务器、电脑或手机节点间切换',
+                            style: sansStyle(c, size: 11.8, color: c.muted),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '节点切换与远程连接档案',
-                          style: serifTitleStyle(c, size: 17.5),
-                        ),
-                        Text(
-                          '在本机服务与多台远程服务器、电脑或手机节点间随时切换',
-                          style: sansStyle(c, size: 12, color: c.muted),
-                        ),
-                      ],
+                    ClaudeButton(
+                      label: '',
+                      compact: true,
+                      variant: ClaudeBtnVariant.ghost,
+                      leading: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                  ),
-                  ClaudeButton(
-                    label: '',
-                    compact: true,
-                    variant: ClaudeBtnVariant.ghost,
-                    leading: const Icon(Icons.close_rounded, size: 18),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 14),
               Divider(color: c.hairline, height: 1),
-              const SizedBox(height: 12),
               Flexible(
                 child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final node in nodes) ...[
-                        _NodeProfileTile(
-                          node: node,
-                          isActive: node.id == activeId,
-                          lanIps: node.isLocal ? lanIps : const [],
-                          onConnect: () async {
-                            Navigator.of(context).pop();
-                            await widget.onSwitchNode(node.id);
-                          },
-                          onEdit: node.isLocal ? null : () => _startEdit(node),
-                          onDelete: node.isLocal
-                              ? null
-                              : () async {
-                                  final wasActive = node.id == activeId;
-                                  await widget.backend.deleteRemoteNode(node.id);
-                                  if (!mounted) return;
-                                  setState(() {});
-                                  widget.onToast('已移除节点「${node.name}」');
-                                  if (wasActive) {
-                                    await widget.onSwitchNode('local');
-                                  }
-                                },
-                          onCopyEndpoint: (txt) {
-                            Clipboard.setData(ClipboardData(text: txt));
-                            widget.onToast('已复制地址：$txt');
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      const SizedBox(height: 4),
+                      ClaudeListGroup(
+                        dividerIndent: 46,
+                        children: [
+                          for (final node in nodes)
+                            _NodeProfileTile(
+                              node: node,
+                              isActive: node.id == activeId,
+                              lanIps: node.isLocal ? lanIps : const [],
+                              onConnect: () async {
+                                Navigator.of(context).pop();
+                                await widget.onSwitchNode(node.id);
+                              },
+                              onEdit:
+                                  node.isLocal ? null : () => _startEdit(node),
+                              onDelete: node.isLocal
+                                  ? null
+                                  : () => _confirmDeleteNode(node, activeId),
+                              onCopyEndpoint: (txt) {
+                                Clipboard.setData(ClipboardData(text: txt));
+                                widget.onToast('已复制地址：$txt');
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       if (!_formOpen)
                         Align(
                           alignment: Alignment.centerLeft,
                           child: ClaudeButton(
                             label: '添加远程节点（服务器 / 电脑 / 手机）',
+                            compact: true,
                             leading: const Icon(Icons.add_rounded),
                             onPressed: _startAdd,
                           ),
@@ -258,12 +272,12 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                       ClaudeCollapsible(
                         expanded: _formOpen,
                         builder: (_) => Container(
-                          margin: const EdgeInsets.only(top: 6),
+                          margin: const EdgeInsets.only(top: 4),
                           padding: const EdgeInsets.all(14),
                           decoration: ShapeDecoration(
-                            color: c.paper3.withValues(alpha: 0.55),
+                            color: c.paper2,
                             shape: claudeSuperellipse(
-                              14,
+                              12,
                               side: BorderSide(color: c.hairline),
                             ),
                           ),
@@ -275,11 +289,11 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                   Expanded(
                                     child: Text(
                                       _editingId == null
-                                          ? '新增远程电脑连接'
-                                          : '编辑远程电脑连接',
+                                          ? '新增远程节点连接'
+                                          : '编辑远程节点连接',
                                       style: sansStyle(
                                         c,
-                                        size: 13.5,
+                                        size: 13.2,
                                         weight: FontWeight.w600,
                                         color: c.ink,
                                       ),
@@ -301,7 +315,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                 style: sansStyle(c, size: 13, color: c.ink),
                                 decoration: const InputDecoration(
                                   labelText: '节点名称',
-                                  hintText: '例如：Omen 主力电脑 / 工作室台式机',
+                                  hintText: '例如：Omen 主力电脑 / 云端服务器 / 手机节点',
                                 ),
                               ),
                               const SizedBox(height: 10),
@@ -328,7 +342,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                   ),
                                   decoration: ShapeDecoration(
                                     color: _probeOk ? c.sageBg : c.dangerBg,
-                                    shape: claudeSuperellipse(10),
+                                    shape: claudeSuperellipse(8),
                                   ),
                                   child: Text(
                                     _probeMsg!,
@@ -379,7 +393,6 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
           ),
         ),
       ),
-      ),
     );
   }
 }
@@ -414,19 +427,11 @@ class _NodeProfileTile extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      decoration: ShapeDecoration(
-        color: isActive ? c.clay.withValues(alpha: 0.08) : c.paper2,
-        shape: claudeSuperellipse(
-          13,
-          side: BorderSide(
-            color: isActive ? c.clay.withValues(alpha: 0.45) : c.hairline,
-          ),
-        ),
-      ),
+      color: isActive ? c.clay.withValues(alpha: 0.06) : Colors.transparent,
       child: Row(
         children: [
           Icon(
-            node.isLocal ? Icons.smartphone_rounded : Icons.dns_rounded,
+            node.isLocal ? Icons.dns_rounded : Icons.computer_rounded,
             size: 18,
             color: isActive ? c.clay : c.muted,
           ),
@@ -444,7 +449,7 @@ class _NodeProfileTile extends StatelessWidget {
                       node.name,
                       style: sansStyle(
                         c,
-                        size: 13.5,
+                        size: 13.2,
                         weight: FontWeight.w600,
                         color: c.ink,
                       ),
@@ -464,7 +469,7 @@ class _NodeProfileTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 GestureDetector(
                   onTap: node.isLocal
                       ? null
@@ -473,7 +478,7 @@ class _NodeProfileTile extends StatelessWidget {
                     subText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: monoStyle(c, size: 11.5, color: c.muted),
+                    style: monoStyle(c, size: 11.4, color: c.muted),
                   ),
                 ),
               ],
@@ -494,7 +499,7 @@ class _NodeProfileTile extends StatelessWidget {
               label: '',
               compact: true,
               variant: ClaudeBtnVariant.ghost,
-              tooltip: '删除节点',
+              tooltip: '移除节点',
               leading: Icon(
                 Icons.delete_outline_rounded,
                 size: 16,

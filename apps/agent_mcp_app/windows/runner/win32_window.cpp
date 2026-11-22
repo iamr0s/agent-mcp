@@ -249,8 +249,8 @@ void WindowClassRegistrar::UnregisterWindowClass() {
 
 Win32Window::Win32Window() {
   ++g_active_window_count;
-  solid_dark_brush_ = CreateSolidBrush(RGB(0x14, 0x14, 0x13));
-  solid_light_brush_ = CreateSolidBrush(RGB(0xF5, 0xF4, 0xED));
+  solid_dark_brush_ = CreateSolidBrush(RGB(0x08, 0x0A, 0x0F));
+  solid_light_brush_ = CreateSolidBrush(RGB(0xEE, 0xF1, 0xF7));
   taskbar_created_msg_ = RegisterWindowMessageW(L"TaskbarCreated");
 }
 
@@ -861,7 +861,7 @@ void Win32Window::ShowTrayContextMenu() {
     DwmSetWindowAttribute(flyout, DWMWA_WINDOW_CORNER_PREFERENCE, &round_pref,
                           sizeof(round_pref));
     COLORREF border_col =
-        is_dark_mode_ ? RGB(0x36, 0x34, 0x2F) : RGB(0xDC, 0xD8, 0xCE);
+        is_dark_mode_ ? RGB(0x22, 0x27, 0x36) : RGB(0xD8, 0xDE, 0xEA);
     DwmSetWindowAttribute(flyout, DWMWA_BORDER_COLOR, &border_col,
                           sizeof(border_col));
     if (IsWindows11BackdropAvailable()) {
@@ -882,19 +882,15 @@ void Win32Window::ShowTrayContextMenu() {
 }
 
 bool Win32Window::IsBackdropSupported() const {
-  return IsWindows11BackdropAvailable();
+  return false;
 }
 
 bool Win32Window::IsBackdropEffectEnabled() const {
-  return backdrop_enabled_ && IsWindows11BackdropAvailable();
+  return false;
 }
 
-void Win32Window::SetBackdropEffect(bool enabled) {
-  const bool next = enabled && IsWindows11BackdropAvailable();
-  if (backdrop_enabled_ == next && window_handle_ == nullptr) {
-    return;
-  }
-  backdrop_enabled_ = next;
+void Win32Window::SetBackdropEffect(bool /*enabled*/) {
+  backdrop_enabled_ = false;
   if (window_handle_) {
     ApplyFramelessStyle();
     InvalidateRect(window_handle_, nullptr, TRUE);
@@ -1002,7 +998,7 @@ void Win32Window::SetDarkTheme(bool is_dark) {
 
   if (IsWindows11OrGreater()) {
     COLORREF border_col =
-        is_dark ? RGB(0x2E, 0x2D, 0x2A) : RGB(0xDA, 0xD7, 0xCC);
+        is_dark ? RGB(0x22, 0x27, 0x36) : RGB(0xD8, 0xDE, 0xEA);
     DwmSetWindowAttribute(window_handle_, DWMWA_BORDER_COLOR, &border_col,
                           sizeof(border_col));
   }

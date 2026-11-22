@@ -207,8 +207,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       return true;
     }
     final cfgLog = (cfg['log_level'] ?? 'INFO').toString().toUpperCase();
-    final normCfgLog =
-        {'DEBUG', 'INFO', 'WARNING', 'ERROR'}.contains(cfgLog) ? cfgLog : 'INFO';
+    final normCfgLog = {'DEBUG', 'INFO', 'WARNING', 'ERROR'}.contains(cfgLog)
+        ? cfgLog
+        : 'INFO';
     if (_logLevel != normCfgLog) return true;
     if (_logFileCtrl.text.trim() != (cfg['log_file'] ?? '').toString().trim()) {
       return true;
@@ -280,6 +281,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     }
   }
 
+  void _discardUnsavedChanges() {
+    setState(() {
+      _pwdCtrl.clear();
+      _syncFromConfig(force: true);
+    });
+    widget.onToast('已还原未保存的修改');
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -311,13 +320,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   }
 
   String _osAutoStartCaption() {
-    final os =
-        (widget.config['host_os'] ?? 'windows').toString().toLowerCase();
+    final os = (widget.config['host_os'] ?? 'windows').toString().toLowerCase();
     return switch (os) {
       'macos' =>
         '写入 macOS LaunchAgents (~/Library/LaunchAgents/com.iamr0s.agentmcp.plist)',
-      'linux' =>
-        '写入 Linux XDG 自启 (~/.config/autostart/agent-mcp.desktop)',
+      'linux' => '写入 Linux XDG 自启 (~/.config/autostart/agent-mcp.desktop)',
       _ =>
         r'写入 Windows 当前用户注册表 (HKCU\Software\Microsoft\Windows\CurrentVersion\Run)',
     };
@@ -414,6 +421,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       widget.onToast('全局权限与日志策略已热加载生效');
     } finally {
       if (mounted) setState(() => _savingPerm = false);
+    }
+  }
+
+  Future<void> _saveAllDirty({required bool restart}) async {
+    final wasBasic = _basicDirty;
+    final wasPerm = _permDirty;
+    if (wasPerm) {
+      await _savePerm();
+    }
+    if (wasBasic || restart) {
+      await _saveBasic(restart: restart);
     }
   }
 
@@ -521,7 +539,6 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     );
   }
 
-
   String _formatLastChecked(UpdatePreferences prefs) {
     final dt = prefs.lastCheckedAt?.toLocal();
     if (dt == null) return '尚未检查过更新';
@@ -529,7 +546,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     return '上次检查：${dt.year}-${pad(dt.month)}-${pad(dt.day)} ${pad(dt.hour)}:${pad(dt.minute)}';
   }
 
-  Widget _buildAppUpdateCard(ClaudePalette c) {
+  Widget _buildAppUpdateGroup(ClaudePalette c) {
     final prefs = widget.updatePrefs;
     final curVer = widget.backend.currentAppVersion;
     final latest = widget.latestUpdate;
@@ -538,287 +555,253 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     final hasMirror = prefs.mirrorPrefix.trim().isNotEmpty;
     final showMirror = _showMirrorConfig || hasMirror;
 
-    return ClaudeCard(
-      padding: const EdgeInsets.all(0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Hero Software Update Banner (responsive, zero-overflow)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: LayoutBuilder(
-              builder: (ctx, box) {
-                final isNarrow = box.maxWidth < 420;
-                final badge = Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    DecoratedBox(
+    return ClaudeListGroup(
+      headerLabel: '应用更新',
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: LayoutBuilder(
+            builder: (ctx, box) {
+              final isNarrow = box.maxWidth < 420;
+              final badge = Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const ClaudeSparkIcon(size: 38),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      width: 13,
+                      height: 13,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(11),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4338CA)
-                                .withValues(alpha: c.isDark ? 0.38 : 0.22),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        color: hasNewer ? c.clay : c.sage,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: c.paper2, width: 2),
                       ),
-                      child: const ClaudeSparkIcon(size: 44),
+                      child: Icon(
+                        hasNewer
+                            ? Icons.arrow_upward_rounded
+                            : Icons.check_rounded,
+                        size: 8,
+                        color: Colors.white,
+                      ),
                     ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: hasNewer ? c.clay : c.sage,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: c.paper2, width: 2),
-                        ),
-                        child: Icon(
+                  ),
+                ],
+              );
+              final infoCol = Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
                           hasNewer
-                              ? Icons.arrow_upward_rounded
-                              : Icons.check_rounded,
-                          size: 8.5,
-                          color: Colors.white,
+                              ? '发现新版本 v${latest.version}'
+                              : 'Agent MCP 已是最新版本',
+                          style: sansStyle(
+                            c,
+                            size: 14,
+                            weight: FontWeight.w600,
+                            color: c.ink,
+                          ),
                         ),
-                      ),
+                        if (hasNewer)
+                          ClaudePill(
+                            text: '可升级',
+                            mono: false,
+                            bg: c.clay.withValues(alpha: 0.14),
+                            fg: c.clay,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '当前 v$curVer · ${_formatLastChecked(prefs)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(c, size: 11.5, color: c.muted),
                     ),
                   ],
-                );
-                final infoCol = Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            hasNewer
-                                ? '发现新版本 v${latest.version}'
-                                : 'Agent MCP 已是最新版本',
-                            style: sansStyle(
-                              c,
-                              size: 15,
-                              weight: FontWeight.w600,
-                              color: c.ink,
-                            ),
-                          ),
-                          if (hasNewer)
-                            ClaudePill(
-                              text: '可升级',
-                              bg: c.clay.withValues(alpha: 0.14),
-                              fg: c.clay,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '当前 v$curVer · ${_formatLastChecked(prefs)}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: monoStyle(c, size: 11.6, color: c.muted),
-                      ),
-                    ],
-                  ),
-                );
-                final actionBtn = ClaudeButton(
-                  label: widget.checkingUpdate
-                      ? '检查中...'
-                      : (hasNewer ? '查看更新' : '立即检查更新'),
-                  compact: true,
-                  expand: isNarrow,
-                  loading: widget.checkingUpdate,
-                  variant: hasNewer ? ClaudeBtnVariant.clay : ClaudeBtnVariant.ink,
-                  leading: Icon(
-                    hasNewer
-                        ? Icons.download_for_offline_rounded
-                        : Icons.refresh_rounded,
-                  ),
-                  onPressed: widget.checkingUpdate || widget.onCheckUpdate == null
-                      ? null
-                      : () => widget.onCheckUpdate!(),
-                );
+                ),
+              );
+              final actionBtn = ClaudeButton(
+                label: widget.checkingUpdate
+                    ? '检查中...'
+                    : (hasNewer ? '查看更新' : '立即检查更新'),
+                compact: true,
+                expand: isNarrow,
+                loading: widget.checkingUpdate,
+                variant: hasNewer ? ClaudeBtnVariant.clay : ClaudeBtnVariant.ink,
+                leading: Icon(
+                  hasNewer
+                      ? Icons.download_for_offline_rounded
+                      : Icons.refresh_rounded,
+                ),
+                onPressed:
+                    widget.checkingUpdate || widget.onCheckUpdate == null
+                        ? null
+                        : () => widget.onCheckUpdate!(),
+              );
 
-                if (isNarrow) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [badge, const SizedBox(width: 14), infoCol],
-                      ),
-                      const SizedBox(height: 12),
-                      actionBtn,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    badge,
-                    const SizedBox(width: 14),
-                    infoCol,
-                    const SizedBox(width: 12),
+                    Row(
+                      children: [badge, const SizedBox(width: 12), infoCol],
+                    ),
+                    const SizedBox(height: 10),
                     actionBtn,
                   ],
                 );
-              },
-            ),
+              }
+              return Row(
+                children: [
+                  badge,
+                  const SizedBox(width: 12),
+                  infoCol,
+                  const SizedBox(width: 12),
+                  actionBtn,
+                ],
+              );
+            },
           ),
-          Divider(color: c.hairline, height: 1),
-          // 2. Responsive Auto-Check Row (Switch + Frequency Pill)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            child: LayoutBuilder(
-              builder: (ctx, box) {
-                final isNarrow = box.maxWidth < 430;
-                final freqMenu = ClaudeDropMenu<int>(
-                  value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours)
-                      ? prefs.checkIntervalHours
-                      : 12,
-                  tooltip: '自动检测周期',
-                  minMenuWidth: 126,
-                  items: const [
-                    ClaudeDropMenuItem<int>(value: 6, label: '每 6 小时'),
-                    ClaudeDropMenuItem<int>(value: 12, label: '每 12 小时'),
-                    ClaudeDropMenuItem<int>(value: 24, label: '每天'),
-                    ClaudeDropMenuItem<int>(value: 168, label: '每周'),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          child: LayoutBuilder(
+            builder: (ctx, box) {
+              final isNarrow = box.maxWidth < 430;
+              final freqMenu = ClaudeDropMenu<int>(
+                value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours)
+                    ? prefs.checkIntervalHours
+                    : 12,
+                tooltip: '自动检测周期',
+                minMenuWidth: 126,
+                items: const [
+                  ClaudeDropMenuItem<int>(value: 6, label: '每 6 小时'),
+                  ClaudeDropMenuItem<int>(value: 12, label: '每 12 小时'),
+                  ClaudeDropMenuItem<int>(value: 24, label: '每天'),
+                  ClaudeDropMenuItem<int>(value: 168, label: '每周'),
+                ],
+                onChanged: (hours) async {
+                  final next = prefs.copyWith(checkIntervalHours: hours);
+                  await widget.onUpdatePrefsChanged?.call(next);
+                  widget.onToast('已更新自动检测周期');
+                },
+              );
+              final autoSwitch = ClaudeSwitch(
+                value: prefs.autoCheckEnabled,
+                onChanged: (v) async {
+                  final next = prefs.copyWith(autoCheckEnabled: v);
+                  await widget.onUpdatePrefsChanged?.call(next);
+                  widget.onToast(v ? '已开启定期自动检查更新' : '已关闭定期自动检查更新');
+                },
+              );
+              final titleCol = Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '定期自动检查更新',
+                      style: sansStyle(
+                        c,
+                        size: 13.4,
+                        weight: FontWeight.w500,
+                        color: c.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '优先拉取 Releases version.json（自动降级 API）',
+                      style: sansStyle(c, size: 11.8, color: c.muted),
+                    ),
                   ],
-                  onChanged: (hours) async {
-                    final next = prefs.copyWith(checkIntervalHours: hours);
-                    await widget.onUpdatePrefsChanged?.call(next);
-                    widget.onToast('已更新自动检测周期');
-                  },
-                );
-                final autoSwitch = ClaudeSwitch(
-                  value: prefs.autoCheckEnabled,
-                  onChanged: (v) async {
-                    final next = prefs.copyWith(autoCheckEnabled: v);
-                    await widget.onUpdatePrefsChanged?.call(next);
-                    widget.onToast(v ? '已开启定期自动检查更新' : '已关闭定期自动检查更新');
-                  },
-                );
-                final titleCol = Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '定期自动检查更新',
-                        style: sansStyle(
-                          c,
-                          size: 13.5,
-                          weight: FontWeight.w500,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '优先拉取 Releases version.json（自动降级 API）',
-                        style: sansStyle(c, size: 11.8, color: c.muted),
-                      ),
-                    ],
-                  ),
-                );
-                if (isNarrow) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                ),
+              );
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        titleCol,
+                        const SizedBox(width: 12),
+                        autoSwitch,
+                      ],
+                    ),
+                    if (prefs.autoCheckEnabled) ...[
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          titleCol,
-                          const SizedBox(width: 12),
-                          autoSwitch,
+                          Text(
+                            '检测频率',
+                            style: sansStyle(c, size: 12, color: c.muted),
+                          ),
+                          const Spacer(),
+                          freqMenu,
                         ],
                       ),
-                      if (prefs.autoCheckEnabled) ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Icon(Icons.schedule_rounded, size: 14, color: c.meta),
-                            const SizedBox(width: 6),
-                            Text(
-                              '检测频率',
-                              style: sansStyle(c, size: 12.2, color: c.muted),
-                            ),
-                            const Spacer(),
-                            freqMenu,
-                          ],
-                        ),
-                      ],
                     ],
-                  );
-                }
-                return Row(
-                  children: [
-                    titleCol,
-                    if (prefs.autoCheckEnabled) ...[
-                      const SizedBox(width: 10),
-                      freqMenu,
-                    ],
-                    const SizedBox(width: 10),
-                    autoSwitch,
                   ],
                 );
+              }
+              return Row(
+                children: [
+                  titleCol,
+                  if (prefs.autoCheckEnabled) ...[
+                    const SizedBox(width: 10),
+                    freqMenu,
+                  ],
+                  const SizedBox(width: 10),
+                  autoSwitch,
+                ],
+              );
+            },
+          ),
+        ),
+        if (prefs.skippedVersion.isNotEmpty)
+          ClaudeSettingsRow(
+            leading: Icon(
+              Icons.notifications_off_outlined,
+              size: 16,
+              color: c.meta,
+            ),
+            title: '已跳过 v${prefs.skippedVersion} 的自动弹窗提醒',
+            trailing: ClaudeButton(
+              label: '恢复提醒',
+              compact: true,
+              variant: ClaudeBtnVariant.ghost,
+              onPressed: () async {
+                await widget.onUpdatePrefsChanged
+                    ?.call(prefs.copyWith(skippedVersion: ''));
+                widget.onToast('已恢复所有版本的更新提醒');
               },
             ),
           ),
-          if (prefs.skippedVersion.isNotEmpty) ...[
-            Divider(color: c.hairline, height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              child: Row(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClaudeSettingsRow(
+              leading: Icon(Icons.bolt_rounded, size: 16, color: c.meta),
+              title: 'GitHub 下载加速镜像',
+              onTap: () =>
+                  setState(() => _showMirrorConfig = !_showMirrorConfig),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.notifications_off_outlined, size: 15, color: c.meta),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '已跳过 v${prefs.skippedVersion} 的自动弹窗提醒',
-                      style: sansStyle(c, size: 12, color: c.muted),
-                    ),
-                  ),
-                  ClaudeButton(
-                    label: '恢复提醒',
-                    compact: true,
-                    variant: ClaudeBtnVariant.ghost,
-                    onPressed: () async {
-                      await widget.onUpdatePrefsChanged
-                          ?.call(prefs.copyWith(skippedVersion: ''));
-                      widget.onToast('已恢复所有版本的更新提醒');
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-          Divider(color: c.hairline, height: 1),
-          // 3. Collapsible Advanced GitHub Mirror Row
-          InkWell(
-            onTap: () => setState(() => _showMirrorConfig = !_showMirrorConfig),
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-              child: Row(
-                children: [
-                  Icon(Icons.bolt_rounded, size: 15, color: c.meta),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'GitHub 下载加速镜像',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: sansStyle(c, size: 12.8, color: c.ink),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Text(
                     hasMirror ? '自定义镜像' : '直连',
-                    style: monoStyle(c, size: 11.5, color: hasMirror ? c.clay : c.meta),
+                    style: monoStyle(
+                      c,
+                      size: 11.5,
+                      color: hasMirror ? c.clay : c.meta,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Icon(
@@ -831,41 +814,143 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 ],
               ),
             ),
-          ),
-          ClaudeCollapsible(
-            expanded: showMirror,
-            builder: (_) => Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _mirrorCtrl,
-                      style: monoStyle(c, size: 12.2, color: c.ink),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: '留空直连 GitHub；如 https://gh-proxy.com/',
+            ClaudeCollapsible(
+              expanded: showMirror,
+              builder: (_) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _mirrorCtrl,
+                        style: monoStyle(c, size: 12.2, color: c.ink),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: '留空直连 GitHub；如 https://gh-proxy.com/',
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ClaudeButton(
-                    label: '应用',
-                    compact: true,
-                    onPressed: () async {
-                      final trimmed = _mirrorCtrl.text.trim();
-                      await widget.onUpdatePrefsChanged?.call(prefs.copyWith(mirrorPrefix: trimmed));
-                      widget.onToast(trimmed.isEmpty ? '已恢复直连 GitHub' : '已保存 GitHub 加速前缀');
-                    },
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    ClaudeButton(
+                      label: '应用',
+                      compact: true,
+                      onPressed: () async {
+                        final trimmed = _mirrorCtrl.text.trim();
+                        await widget.onUpdatePrefsChanged
+                            ?.call(prefs.copyWith(mirrorPrefix: trimmed));
+                        widget.onToast(
+                          trimmed.isEmpty
+                              ? '已恢复直连 GitHub'
+                              : '已保存 GitHub 加速前缀',
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFloatingUnsavedBar(ClaudePalette c) {
+    final anyDirty = _basicDirty || _permDirty;
+    if (!anyDirty) return const SizedBox.shrink();
+
+    final saving = _savingBasic || _restartingBasic || _savingPerm;
+    final label = _basicDirty && _permDirty
+        ? '基础配置与权限策略有未保存的更改'
+        : (_basicDirty ? '基础服务配置有未保存的更改' : '权限与日志策略有未保存的更改');
+
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: 14 + widget.extraBottomPadding,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: ShapeDecoration(
+              color: c.popover,
+              shape: claudeSuperellipse(
+                12,
+                side: BorderSide(color: c.clay.withValues(alpha: 0.42)),
+              ),
+              shadows: c.popoverShadow,
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: c.clay,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: sansStyle(
+                          c,
+                          size: 12.6,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ClaudeButton(
+                      label: '还原',
+                      compact: true,
+                      variant: ClaudeBtnVariant.ghost,
+                      onPressed: saving ? null : _discardUnsavedChanges,
+                    ),
+                    ClaudeButton(
+                      label: saving ? '保存中...' : '保存修改',
+                      compact: true,
+                      loading: _savingBasic || _savingPerm,
+                      onPressed: saving
+                          ? null
+                          : () => _saveAllDirty(restart: false),
+                    ),
+                    if (_basicDirty)
+                      ClaudeButton(
+                        label: _restartingBasic ? '重启中...' : '保存并重启',
+                        compact: true,
+                        loading: _restartingBasic,
+                        variant: ClaudeBtnVariant.clay,
+                        leading: const Icon(Icons.restart_alt_rounded),
+                        onPressed: saving
+                            ? null
+                            : () => _saveAllDirty(restart: true),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
@@ -880,8 +965,6 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     final isAndroidHost =
         (widget.config['host_os'] ?? '').toString().toLowerCase() == 'android';
 
-    final showDesktopWindowToggle =
-        widget.backend.hasCustomTitleBar && !widget.backend.isRemoteNodeActive;
     final showBasic = _setupSection == 'basic' || _setupSection == 'all';
     final showProfiles = _setupSection == 'profiles' || _setupSection == 'all';
     final showExpose = _setupSection == 'expose' || _setupSection == 'all';
@@ -889,11 +972,16 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
 
     final screenW = MediaQuery.sizeOf(context).width;
     final isWideDesktop = screenW >= 820;
-    final bottomPad = (screenW < 700 ? 124.0 : 42.0) + widget.extraBottomPadding;
-    final curPort = _portCtrl.text.trim().isEmpty ? '8000' : _portCtrl.text.trim();
+    final hasDirty = _basicDirty || _permDirty;
+    final bottomPad = (screenW < 700 ? 124.0 : 42.0) +
+        (hasDirty ? 64.0 : 0.0) +
+        widget.extraBottomPadding;
+    final curPort =
+        _portCtrl.text.trim().isEmpty ? '8000' : _portCtrl.text.trim();
     final curVer = widget.backend.currentAppVersion;
     final hasUpdate = widget.latestUpdate != null &&
         compareSemVer(widget.latestUpdate!.version, curVer) > 0;
+
     final navCategories = <(String, IconData, String, String, bool)>[
       (
         'basic',
@@ -927,908 +1015,404 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
 
     Widget buildCategoryDetailContent() {
       return Column(
+        key: ValueKey('setup-sec-$_setupSection'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (showBasic) ...[
-                ClaudeStaggeredReveal(
-                  index: 1,
-                  child: ClaudeCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('基础服务与全局密码', style: serifTitleStyle(c, size: 18)),
-                        const SizedBox(height: 16),
-                        _ResponsiveGridRow(
-                          label: 'MCP 服务名称',
-                          child: TextField(
-                            controller: _nameCtrl,
-                            onChanged: (_) => setState(() {}),
-                            style: sansStyle(c, size: 13.5, color: c.ink),
+            ClaudeListGroup(
+              headerLabel: '基础服务与全局密码',
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                  child: Column(
+                    children: [
+                      _ResponsiveGridRow(
+                        label: 'MCP 服务名称',
+                        child: TextField(
+                          controller: _nameCtrl,
+                          onChanged: (_) => setState(() {}),
+                          style: sansStyle(c, size: 13.4, color: c.ink),
+                        ),
+                      ),
+                      _ResponsiveGridRow(
+                        label: '工具名前缀 (可选)',
+                        trailing: ClaudeButton(
+                          label: '用服务名',
+                          compact: true,
+                          onPressed: () {
+                            _prefixCtrl.text = _nameCtrl.text
+                                .trim()
+                                .replaceAll(RegExp(r'[^a-zA-Z0-9_]+'), '_');
+                            setState(() {});
+                          },
+                        ),
+                        child: TextField(
+                          controller: _prefixCtrl,
+                          onChanged: (_) => setState(() {}),
+                          style: monoStyle(c, size: 13, color: c.ink),
+                          decoration: const InputDecoration(
+                            hintText: '留空不加前缀，多台设备防重名可填如 omen_pc',
                           ),
                         ),
-                        _ResponsiveGridRow(
-                          label: '工具名前缀 (可选)',
-                          trailing: ClaudeButton(
-                            label: '用服务名',
-                            compact: true,
-                            onPressed: () {
-                              _prefixCtrl.text = _nameCtrl.text
-                                  .trim()
-                                  .replaceAll(RegExp(r'[^a-zA-Z0-9_]+'), '_');
-                              setState(() {});
-                            },
-                          ),
-                          child: TextField(
-                            controller: _prefixCtrl,
-                            onChanged: (_) => setState(() {}),
-                            style: monoStyle(c, size: 13, color: c.ink),
-                            decoration: const InputDecoration(
-                              hintText: '留空不加前缀，多台设备防重名可填如 omen_pc',
-                            ),
-                          ),
-                        ),
-                        _ResponsiveGridRow(
-                          label: '监听 Host / Port',
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 8,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  ClaudeSegmented<bool>(
-                                    value: _bindAllInterfaces,
-                                    items: const [
-                                      (true, '全开 0.0.0.0'),
-                                      (false, '手动指定'),
-                                    ],
-                                    onChanged: (all) {
-                                      setState(() {
-                                        if (all) {
-                                          final cur = _hostCtrls
-                                              .map((x) => x.text.trim())
-                                              .where(
-                                                (s) =>
-                                                    s.isNotEmpty &&
-                                                    s != '0.0.0.0',
-                                              )
-                                              .toList();
-                                          if (cur.isNotEmpty) {
-                                            _customHostsBackup = cur;
-                                          }
-                                        } else {
-                                          final hasValid = _hostCtrls.any(
-                                            (x) =>
-                                                x.text.trim().isNotEmpty &&
-                                                x.text.trim() != '0.0.0.0',
-                                          );
-                                          if (!hasValid) {
-                                            _setHostControllers(
-                                              _customHostsBackup,
-                                            );
-                                          }
+                      ),
+                      _ResponsiveGridRow(
+                        label: '监听 Host / Port',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ClaudeSegmented<bool>(
+                                  value: _bindAllInterfaces,
+                                  items: const [
+                                    (true, '全开 0.0.0.0'),
+                                    (false, '手动指定'),
+                                  ],
+                                  onChanged: (all) {
+                                    setState(() {
+                                      if (all) {
+                                        final cur = _hostCtrls
+                                            .map((x) => x.text.trim())
+                                            .where(
+                                              (s) =>
+                                                  s.isNotEmpty &&
+                                                  s != '0.0.0.0',
+                                            )
+                                            .toList();
+                                        if (cur.isNotEmpty) {
+                                          _customHostsBackup = cur;
                                         }
-                                        _bindAllInterfaces = all;
-                                      });
-                                    },
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '端口',
-                                        style: sansStyle(
-                                          c,
-                                          size: 12.5,
-                                          color: c.muted,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 7),
-                                      SizedBox(
-                                        width: 96,
-                                        child: TextField(
-                                          controller: _portCtrl,
-                                          keyboardType: TextInputType.number,
-                                          onChanged: (_) => setState(() {}),
-                                          style: monoStyle(
-                                            c,
-                                            size: 13,
-                                            color: c.ink,
-                                          ),
-                                          decoration: const InputDecoration(
-                                            hintText: '8000',
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              ClaudeCollapsible(
-                                expanded: !_bindAllInterfaces,
-                                builder: (_) => Padding(
-                                  padding: const EdgeInsets.only(top: 9),
-                                  child: AnimatedSize(
-                                    duration: ClaudeMotion.duration(
-                                      context,
-                                      const Duration(milliseconds: 200),
-                                    ),
-                                    curve: ClaudeMotion.snappySpring,
-                                    alignment: Alignment.topLeft,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        for (var i = 0;
-                                            i < _hostCtrls.length;
-                                            i++) ...[
-                                          if (i > 0) const SizedBox(height: 7),
-                                          ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxWidth: 410,
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  child: TextField(
-                                                    controller: _hostCtrls[i],
-                                                    focusNode:
-                                                        _hostFocusNodes[i],
-                                                    onChanged: (_) {
-                                                      final cur = _hostCtrls
-                                                          .map((x) =>
-                                                              x.text.trim())
-                                                          .where(
-                                                            (s) =>
-                                                                s.isNotEmpty &&
-                                                                s != '0.0.0.0',
-                                                          )
-                                                          .toList();
-                                                      if (cur.isNotEmpty) {
-                                                        _customHostsBackup =
-                                                            cur;
-                                                      }
-                                                      setState(() {});
-                                                    },
-                                                    style: monoStyle(
-                                                      c,
-                                                      size: 13,
-                                                      color: c.ink,
-                                                    ),
-                                                    decoration: InputDecoration(
-                                                      hintText: i == 0
-                                                          ? '127.0.0.1（本机回环）'
-                                                          : '如 192.168.1.x 或 Tailscale IP',
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (_hostCtrls.length > 1) ...[
-                                                  const SizedBox(width: 6),
-                                                  ClaudeButton(
-                                                    label: '',
-                                                    compact: true,
-                                                    tooltip: '移除此监听地址',
-                                                    leading: const Icon(
-                                                      Icons.remove_rounded,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _removeHostRow(i),
-                                                  ),
-                                                ],
-                                                if (i ==
-                                                    _hostCtrls.length - 1) ...[
-                                                  const SizedBox(width: 6),
-                                                  ClaudeButton(
-                                                    label: '',
-                                                    compact: true,
-                                                    variant:
-                                                        ClaudeBtnVariant.clay,
-                                                    tooltip: '再添加一个监听地址',
-                                                    leading: const Icon(
-                                                      Icons.add_rounded,
-                                                    ),
-                                                    onPressed: _addHostRow,
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              ClaudeCollapsible(
-                                expanded: _bindAllInterfaces,
-                                builder: (_) => Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    '监听全部网卡 0.0.0.0:${_portCtrl.text.trim().isEmpty ? '8000' : _portCtrl.text.trim()}（允许本机、局域网其他设备与容器访问）',
-                                    style: sansStyle(
-                                      c,
-                                      size: 11.5,
-                                      color: c.muted,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _ResponsiveGridRow(
-                          label: 'OAuth 2.1 本地密码',
-                          trailing: ClaudeButton(
-                            label: '随机生成',
-                            compact: true,
-                            leading: const Icon(Icons.casino_outlined),
-                            onPressed: () {
-                              _pwdCtrl.text = generateRandomToken('', 14);
-                              setState(() {});
-                            },
-                          ),
-                          child: ClaudePasswordField(
-                            controller: _pwdCtrl,
-                            onChanged: (_) => setState(() {}),
-                            hintText: widget.config['has_password'] == true
-                                ? '已设置密码（留空保持不变，输入新密码保存即刻生效）'
-                                : '用于 OAuth 2.1 客户端网页授权与 /dashboard 登录',
-                          ),
-                        ),
-                        _ResponsiveGridRow(
-                          label: '界面主题',
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: ClaudeSegmented<ThemeMode>(
-                              value: widget.themeMode,
-                              items: const [
-                                (ThemeMode.system, '跟随系统'),
-                                (ThemeMode.light, '暖纸浅色'),
-                                (ThemeMode.dark, '深岩暗色'),
-                              ],
-                              onChanged: widget.onThemeChanged,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: ShapeDecoration(
-                            color: c.recessed,
-                            shape: claudeSuperellipse(16),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (isAndroidHost) ...[
-                                _StartupSwitchRow(
-                                  palette: c,
-                                  title: '动态配色 (Android Material You)',
-                                  subtitle: widget.dynamicColorSupported
-                                      ? '跟随系统壁纸动态提取主题强调色（支持 Android 12+ 莫奈取色与桌面动态图标）'
-                                      : '当前系统版本不支持莫奈壁纸取色（需 Android 12 及以上）',
-                                  value: widget.dynamicColor,
-                                  onChanged: (v) {
-                                    if (!widget.dynamicColorSupported && v) {
-                                      widget.onToast('当前系统暂不支持 Android 12+ 动态配色');
-                                      return;
-                                    }
-                                    widget.onDynamicColorChanged?.call(v);
-                                    widget.onToast(
-                                      v ? '已开启动态壁纸配色' : '已恢复默认 Indigo 配色',
-                                    );
+                                      } else {
+                                        final hasValid = _hostCtrls.any(
+                                          (x) =>
+                                              x.text.trim().isNotEmpty &&
+                                              x.text.trim() != '0.0.0.0',
+                                        );
+                                        if (!hasValid) {
+                                          _setHostControllers(
+                                            _customHostsBackup,
+                                          );
+                                        }
+                                      }
+                                      _bindAllInterfaces = all;
+                                    });
                                   },
                                 ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                  child: Divider(color: c.hairline, height: 1),
-                                ),
-                              ],
-                              _StartupSwitchRow(
-                                palette: c,
-                                title: showDesktopWindowToggle
-                                    ? '窗口云母与毛玻璃透光 (Win11 Mica)'
-                                    : '界面毛玻璃与柔光背板',
-                                subtitle: showDesktopWindowToggle
-                                    ? '启用 Windows 11 原生 DWM Mica Alt 云母材质与半透明侧边栏叠色（支持实时切换）'
-                                    : '启用毛玻璃虚化侧栏、悬浮底栏与柔光背景；macOS 同步启用原生窗口虚化',
-                                value: _windowEffect,
-                                onChanged: (v) => _applyStartupToggle(
-                                  windowEffect: v,
-                                  toastMsg: v
-                                      ? (showDesktopWindowToggle
-                                          ? '已启用 Win11 云母透光背板'
-                                          : '已启用界面毛玻璃效果')
-                                      : '已切换为纯色纸感背板',
-                                ),
-                              ),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 10),
-                                child: Divider(color: c.hairline, height: 1),
-                              ),
-                              if (isAndroidHost) ...[
                                 Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.notifications_active_outlined,
-                                      size: 18,
-                                      color: c.clay,
+                                    Text(
+                                      '端口',
+                                      style: sansStyle(
+                                        c,
+                                        size: 12.5,
+                                        color: c.muted,
+                                      ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '通知栏常驻保活与快捷启停',
-                                            style: sansStyle(
-                                              c,
-                                              size: 13.5,
-                                              weight: FontWeight.w600,
-                                              color: c.ink,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '手机锁屏或切到后台时保持本机服务不断连，下拉通知栏即可随时停止或重启。',
-                                            style: sansStyle(
-                                              c,
-                                              size: 12,
-                                              color: c.muted,
-                                            ),
-                                          ),
-                                        ],
+                                    const SizedBox(width: 7),
+                                    SizedBox(
+                                      width: 96,
+                                      child: TextField(
+                                        controller: _portCtrl,
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (_) => setState(() {}),
+                                        style: monoStyle(
+                                          c,
+                                          size: 13,
+                                          color: c.ink,
+                                        ),
+                                        decoration: const InputDecoration(
+                                          hintText: '8000',
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                  child: Divider(color: c.hairline, height: 1),
-                                ),
-                              ] else ...[
-                                _StartupSwitchRow(
-                                  palette: c,
-                                  title: '开机自动启动应用',
-                                  subtitle:
-                                      '${_osAutoStartCaption()}；配合静默模式自动附带 --silent 参数',
-                                  value: _launchAtStartup,
-                                  onChanged: (v) => _applyStartupToggle(
-                                    launchAtStartup: v,
-                                    toastMsg: v
-                                        ? (_silentStart
-                                            ? '已开启系统开机静默自启'
-                                            : '已开启系统开机自启')
-                                        : '已移除系统开机自启项',
-                                  ),
-                                ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                  child: Divider(color: c.hairline, height: 1),
-                                ),
-                                _StartupSwitchRow(
-                                  palette: c,
-                                  title: '静默启动至后台托盘（不弹出窗口）',
-                                  subtitle:
-                                      '启动时跳过主窗口绘制、零闪烁驻留系统托盘（支持命令行 --silent，点击托盘或再次运行可唤醒）',
-                                  value: _silentStart,
-                                  onChanged: (v) => _applyStartupToggle(
-                                    silentStart: v,
-                                    toastMsg: v
-                                        ? '已开启静默驻留托盘启动模式'
-                                        : '已恢复常规窗口启动模式',
-                                  ),
-                                ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                  child: Divider(color: c.hairline, height: 1),
-                                ),
-                              ],
-                              _StartupSwitchRow(
-                                palette: c,
-                                title: '启动后自动开启 MCP 服务与隧道',
-                                subtitle:
-                                    '进程拉起后立即监听 HTTP 端口并自动连接已启用的公网隧道',
-                                value: _autoStart,
-                                onChanged: (v) => _applyStartupToggle(
-                                  autoStart: v,
-                                  toastMsg: v
-                                      ? '已开启启动自动运行 MCP 服务'
-                                      : '已关闭启动自动运行 MCP 服务',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Divider(color: c.hairline, height: 1),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              _basicDirty
-                                  ? '● 有未保存的修改（改端口或前缀建议保存并重启）'
-                                  : '修改密码保存即生效；修改监听端口建议保存并重启',
-                              style: sansStyle(
-                                c,
-                                size: 12.5,
-                                color: _basicDirty ? c.clay : c.meta,
-                                weight: _basicDirty
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ClaudeButton(
-                                  label: _savingBasic ? '保存中...' : '保存基础配置',
-                                  compact: true,
-                                  loading: _savingBasic,
-                                  leading: const Icon(Icons.save_outlined),
-                                  onPressed: _restartingBasic
-                                      ? null
-                                      : () => _saveBasic(restart: false),
-                                ),
-                                ClaudeButton(
-                                  label: _restartingBasic ? '重启中...' : '保存并重启',
-                                  compact: true,
-                                  loading: _restartingBasic,
-                                  leading: const Icon(Icons.restart_alt_rounded),
-                                  variant: ClaudeBtnVariant.ink,
-                                  onPressed: _savingBasic
-                                      ? null
-                                      : () => _saveBasic(restart: true),
-                                ),
                               ],
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 2,
-                  child: _buildAppUpdateCard(c),
-                ),
-                if (isAndroidHost) ...[
-                  const SizedBox(height: 16),
-                  ClaudeStaggeredReveal(
-                    index: 2,
-                    child: AndroidPrivilegeCard(
-                      backend: widget.backend,
-                      config: widget.config,
-                      onRefreshStatus: widget.onRefreshStatus,
-                      onToast: widget.onToast,
-                    ),
-                  ),
-                ],
-          ],
-          if (showProfiles) ...[
-                if (showBasic) const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 2,
-                  child: ClaudeCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              '传输、鉴权与权限入口',
-                              style: serifTitleStyle(c, size: 18),
-                            ),
-                            ClaudeButton(
-                              label: '添加入口',
-                              compact: true,
-                              leading: const Icon(Icons.add_rounded),
-                              variant: ClaudeBtnVariant.clay,
-                              onPressed: () => _openProfileModal(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '为不同 AI 客户端分配独立的连接方式与目录权限：例如主力编程助手开放代码读写，远程网页端开启登录验证或只读目录，保存立即生效。',
-                          style: sansStyle(
-                            c,
-                            size: 13,
-                            color: c.muted,
-                            height: 1.56,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        for (var i = 0; i < profs.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          _buildProfileItem(c, profs, i, tMap),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-          ],
-          if (showExpose) ...[
-                if (showBasic || showProfiles) const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 2,
-                  child: TailscaleExposureSettingsCard(
-                    backend: widget.backend,
-                    config: widget.config,
-                    exposureSummary: widget.exposureSummary,
-                    onRefreshStatus: widget.onRefreshStatus,
-                    onToast: widget.onToast,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 3,
-                  child: ClaudeCard(
-                    child: _buildCloudflaredCard(c, ti, inst, tMap),
-                  ),
-                ),
-          ],
-          if (showSecurity) ...[
-                if (showBasic || showProfiles || showExpose)
-                  const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 4,
-                  child: ClaudeCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('全局默认权限与日志', style: serifTitleStyle(c, size: 18)),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 20,
-                          runSpacing: 8,
-                          children: [
-                            ClaudeCheckToggle(
-                              value: _writable,
-                              label: '允许写入与执行',
-                              onChanged: (v) => setState(() => _writable = v),
-                            ),
-                            ClaudeCheckToggle(
-                              value: _allowSecrets,
-                              label: '允许读取敏感文件',
-                              onChanged: (v) =>
-                                  setState(() => _allowSecrets = v),
-                            ),
-                            ClaudeCheckToggle(
-                              value: _relaxedCmd,
-                              label: '客户端免弹窗声明（全工具静默注解）',
-                              onChanged: (v) => setState(() => _relaxedCmd = v),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _ResponsiveGridRow(
-                          label: '默认目录白名单\n(留空 = 全盘)',
-                          child: TextField(
-                            controller: _rootsCtrl,
-                            maxLines: 2,
-                            onChanged: (_) => setState(() {}),
-                            style: monoStyle(c, size: 12.5, color: c.ink),
-                            decoration: const InputDecoration(
-                              hintText: '每行一个目录路径，留空允许全盘访问',
-                            ),
-                          ),
-                        ),
-                        _ResponsiveGridRow(
-                          label: '日志等级 / 日志文件',
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              ClaudeDropMenu<String>(
-                                value: _logLevel,
-                                leadingIcon: Icons.tune_rounded,
-                                minMenuWidth: 168,
-                                items: const [
-                                  ClaudeDropMenuItem(
-                                    value: 'DEBUG',
-                                    label: 'DEBUG · 调试',
-                                    icon: Icons.bug_report_outlined,
-                                  ),
-                                  ClaudeDropMenuItem(
-                                    value: 'INFO',
-                                    label: 'INFO · 标准',
-                                    icon: Icons.info_outline_rounded,
-                                  ),
-                                  ClaudeDropMenuItem(
-                                    value: 'WARNING',
-                                    label: 'WARN · 告警',
-                                    icon: Icons.warning_amber_rounded,
-                                  ),
-                                  ClaudeDropMenuItem(
-                                    value: 'ERROR',
-                                    label: 'ERROR · 仅异常',
-                                    icon: Icons.error_outline_rounded,
-                                  ),
-                                ],
-                                onChanged: (v) => setState(() => _logLevel = v),
-                              ),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minWidth: 160,
-                                  maxWidth: 260,
-                                ),
-                                child: TextField(
-                                  controller: _logFileCtrl,
-                                  onChanged: (_) => setState(() {}),
-                                  style: monoStyle(c, size: 12.5, color: c.ink),
-                                  decoration: const InputDecoration(
-                                    hintText: '可选: logs/mcp.log',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Divider(color: c.hairline, height: 1),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              _permDirty
-                                  ? '● 有未保存的权限修改'
-                                  : '保存后全局默认权限即时热加载生效',
-                              style: sansStyle(
-                                c,
-                                size: 12.5,
-                                color: _permDirty ? c.clay : c.meta,
-                                weight: _permDirty
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                            ClaudeButton(
-                              label: _savingPerm ? '保存中...' : '保存权限与日志',
-                              compact: true,
-                              loading: _savingPerm,
-                              leading: const Icon(Icons.save_outlined),
-                              onPressed: _savePerm,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 5,
-                  child: ClaudeCard(
-                    child: _buildStorageCard(c),
-                  ),
-                ),
-          ],
-        ],
-      );
-    }
-
-    // 1. Desktop Wide Screen (>= 820px): FlClash / macOS System Settings 2-Pane Master-Detail
-    if (isWideDesktop) {
-      return Padding(
-        padding: EdgeInsets.only(top: widget.topPadding),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 214,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(right: 16, bottom: bottomPad),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('服务配置', style: serifTitleStyle(c, size: 22)),
-                          const SizedBox(height: 2),
-                          Text(
-                            '按分类快速管理各项参数',
-                            style: sansStyle(c, size: 12, color: c.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    for (final item in navCategories)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: _SetupNavTile(
-                          icon: item.$2,
-                          title: item.$3,
-                          badgeDot: item.$5,
-                          active: _setupSection == item.$1,
-                          onTap: () => setState(() => _setupSection = item.$1),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Divider(color: c.hairline, height: 1),
-                    ),
-                    _SetupNavTile(
-                      icon: Icons.view_agenda_outlined,
-                      title: '全部展开',
-                      badgeDot: false,
-                      active: _setupSection == 'all',
-                      onTap: () => setState(() => _setupSection = 'all'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(width: 1, color: c.hairline.withValues(alpha: 0.55)),
-            const SizedBox(width: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollCtrl,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.only(right: 2, bottom: bottomPad),
-                child: buildCategoryDetailContent(),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // 2. Mobile / Narrow Screen (< 820px): Level-1 Category List -> Level-2 Detail Page
-    if (!_mobileInDetail) {
-      return SingleChildScrollView(
-        controller: _scrollCtrl,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(
-          top: widget.topPadding,
-          right: 2,
-          bottom: bottomPad,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClaudeStaggeredReveal(
-              index: 0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('服务配置', style: serifTitleStyle(c, size: 24)),
-                  const SizedBox(height: 3),
-                  Text(
-                    '轻点下方分组进入对应设置项，界面更专注清爽。',
-                    style: sansStyle(c, size: 12.5, color: c.muted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            ClaudeCard(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
-                children: [
-                  for (var i = 0; i < navCategories.length; i++) ...[
-                    if (i > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 62, right: 16),
-                        child: Divider(color: c.hairline, height: 1),
-                      ),
-                    InkWell(
-                      onTap: () => setState(() {
-                        _setupSection = navCategories[i].$1;
-                        _mobileInDetail = true;
-                      }),
-                      borderRadius: BorderRadius.circular(14),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 13,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: ShapeDecoration(
-                                color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10),
-                                shape: claudeSuperellipse(11),
-                              ),
-                              child: Icon(
-                                navCategories[i].$2,
-                                size: 19,
-                                color: c.clay,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          navCategories[i].$3,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: sansStyle(
-                                            c,
-                                            size: 14.5,
-                                            weight: FontWeight.w600,
-                                            color: c.ink,
-                                          ),
+                            ClaudeCollapsible(
+                              expanded: !_bindAllInterfaces,
+                              builder: (_) => Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    for (var i = 0;
+                                        i < _hostCtrls.length;
+                                        i++) ...[
+                                      if (i > 0) const SizedBox(height: 7),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 410,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller: _hostCtrls[i],
+                                                focusNode: _hostFocusNodes[i],
+                                                onChanged: (_) {
+                                                  final cur = _hostCtrls
+                                                      .map((x) => x.text.trim())
+                                                      .where(
+                                                        (s) =>
+                                                            s.isNotEmpty &&
+                                                            s != '0.0.0.0',
+                                                      )
+                                                      .toList();
+                                                  if (cur.isNotEmpty) {
+                                                    _customHostsBackup = cur;
+                                                  }
+                                                  setState(() {});
+                                                },
+                                                style: monoStyle(
+                                                  c,
+                                                  size: 13,
+                                                  color: c.ink,
+                                                ),
+                                                decoration: InputDecoration(
+                                                  hintText: i == 0
+                                                      ? '127.0.0.1（本机回环）'
+                                                      : '如 192.168.1.x 或 Tailscale IP',
+                                                ),
+                                              ),
+                                            ),
+                                            if (_hostCtrls.length > 1) ...[
+                                              const SizedBox(width: 6),
+                                              ClaudeButton(
+                                                label: '',
+                                                compact: true,
+                                                tooltip: '移除此监听地址',
+                                                leading: const Icon(
+                                                  Icons.remove_rounded,
+                                                ),
+                                                onPressed: () =>
+                                                    _removeHostRow(i),
+                                              ),
+                                            ],
+                                            if (i == _hostCtrls.length - 1) ...[
+                                              const SizedBox(width: 6),
+                                              ClaudeButton(
+                                                label: '',
+                                                compact: true,
+                                                variant: ClaudeBtnVariant.clay,
+                                                tooltip: '再添加一个监听地址',
+                                                leading: const Icon(
+                                                  Icons.add_rounded,
+                                                ),
+                                                onPressed: _addHostRow,
+                                              ),
+                                            ],
+                                          ],
                                         ),
                                       ),
-                                      if (navCategories[i].$5) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          width: 7,
-                                          height: 7,
-                                          decoration: BoxDecoration(
-                                            color: c.clay,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      ],
                                     ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    navCategories[i].$4,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: sansStyle(
-                                      c,
-                                      size: 12,
-                                      color: c.muted,
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              size: 20,
-                              color: c.meta,
+                            ClaudeCollapsible(
+                              expanded: _bindAllInterfaces,
+                              builder: (_) => Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '监听全部网卡 0.0.0.0:$curPort（允许本机、局域网其他设备与容器访问）',
+                                  style: sansStyle(
+                                    c,
+                                    size: 11.5,
+                                    color: c.muted,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      _ResponsiveGridRow(
+                        label: 'OAuth 2.1 本地密码',
+                        trailing: ClaudeButton(
+                          label: '随机生成',
+                          compact: true,
+                          leading: const Icon(Icons.casino_outlined),
+                          onPressed: () {
+                            _pwdCtrl.text = generateRandomToken('', 14);
+                            setState(() {});
+                          },
+                        ),
+                        child: ClaudePasswordField(
+                          controller: _pwdCtrl,
+                          onChanged: (_) => setState(() {}),
+                          hintText: widget.config['has_password'] == true
+                              ? '已设置密码（留空保持不变，输入新密码保存即刻生效）'
+                              : '用于 OAuth 2.1 客户端网页授权与 /dashboard 登录',
+                        ),
+                      ),
+                      _ResponsiveGridRow(
+                        label: '界面主题',
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ClaudeSegmented<ThemeMode>(
+                            value: widget.themeMode,
+                            items: const [
+                              (ThemeMode.system, '跟随系统'),
+                              (ThemeMode.light, '冷瓷浅色'),
+                              (ThemeMode.dark, '曜石暗色'),
+                            ],
+                            onChanged: widget.onThemeChanged,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        _basicDirty
+                            ? '● 有未保存的修改（改端口或前缀建议保存并重启）'
+                            : '修改密码保存即生效；修改监听端口建议保存并重启',
+                        style: sansStyle(
+                          c,
+                          size: 12.2,
+                          color: _basicDirty ? c.clay : c.meta,
+                          weight:
+                              _basicDirty ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ClaudeButton(
+                            label: _savingBasic ? '保存中...' : '保存基础配置',
+                            compact: true,
+                            loading: _savingBasic,
+                            leading: const Icon(Icons.save_outlined),
+                            onPressed: _restartingBasic
+                                ? null
+                                : () => _saveBasic(restart: false),
+                          ),
+                          ClaudeButton(
+                            label: _restartingBasic ? '重启中...' : '保存并重启',
+                            compact: true,
+                            loading: _restartingBasic,
+                            leading: const Icon(Icons.restart_alt_rounded),
+                            variant: ClaudeBtnVariant.ink,
+                            onPressed: _savingBasic
+                                ? null
+                                : () => _saveBasic(restart: true),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
+            ClaudeListGroup(
+              headerLabel: '外观与自启策略',
+              children: [
+                if (isAndroidHost)
+                  ClaudeSettingsRow(
+                    title: '动态配色 (Android Material You)',
+                    subtitle: widget.dynamicColorSupported
+                        ? '跟随系统壁纸动态提取主题强调色（支持 Android 12+ 莫奈取色）'
+                        : '当前系统版本不支持莫奈壁纸取色（需 Android 12 及以上）',
+                    trailing: ClaudeSwitch(
+                      value: widget.dynamicColor,
+                      onChanged: (v) {
+                        if (!widget.dynamicColorSupported && v) {
+                          widget.onToast('当前系统暂不支持 Android 12+ 动态配色');
+                          return;
+                        }
+                        widget.onDynamicColorChanged?.call(v);
+                        widget.onToast(
+                          v ? '已开启动态壁纸配色' : '已恢复默认 Indigo 配色',
+                        );
+                      },
+                    ),
+                  ),
+                if (!widget.backend.hasCustomTitleBar)
+                  ClaudeSettingsRow(
+                    title: '界面毛玻璃与柔光背板',
+                    subtitle: '启用悬浮导航条与顶栏的实时虚化玻璃质感',
+                    trailing: ClaudeSwitch(
+                      value: _windowEffect,
+                      onChanged: (v) => _applyStartupToggle(
+                        windowEffect: v,
+                        toastMsg: v ? '已启用界面毛玻璃效果' : '已切换为纯色背板',
+                      ),
+                    ),
+                  ),
+                if (isAndroidHost)
+                  ClaudeSettingsRow(
+                    leading: Icon(
+                      Icons.notifications_active_outlined,
+                      size: 18,
+                      color: c.clay,
+                    ),
+                    title: '通知栏常驻保活与快捷启停',
+                    subtitle: '手机锁屏或切到后台时保持本机服务不断连，下拉通知栏即可随时停止或重启。',
+                  )
+                else ...[
+                  ClaudeSettingsRow(
+                    title: '开机自动启动应用',
+                    subtitle:
+                        '${_osAutoStartCaption()}；配合静默模式自动附带 --silent 参数',
+                    trailing: ClaudeSwitch(
+                      value: _launchAtStartup,
+                      onChanged: (v) => _applyStartupToggle(
+                        launchAtStartup: v,
+                        toastMsg: v
+                            ? (_silentStart ? '已开启系统开机静默自启' : '已开启系统开机自启')
+                            : '已移除系统开机自启项',
+                      ),
+                    ),
+                  ),
+                  ClaudeSettingsRow(
+                    title: '静默启动至后台托盘（不弹出窗口）',
+                    subtitle:
+                        '启动时跳过主窗口绘制、零闪烁驻留系统托盘（支持命令行 --silent，点击托盘可唤醒）',
+                    trailing: ClaudeSwitch(
+                      value: _silentStart,
+                      onChanged: (v) => _applyStartupToggle(
+                        silentStart: v,
+                        toastMsg: v ? '已开启静默驻留托盘启动模式' : '已恢复常规窗口启动模式',
+                      ),
+                    ),
+                  ),
+                ],
+                ClaudeSettingsRow(
+                  title: '启动后自动开启 MCP 服务与隧道',
+                  subtitle: '进程拉起后立即监听 HTTP 端口并自动连接已启用的公网隧道',
+                  trailing: ClaudeSwitch(
+                    value: _autoStart,
+                    onChanged: (v) => _applyStartupToggle(
+                      autoStart: v,
+                      toastMsg:
+                          v ? '已开启启动自动运行 MCP 服务' : '已关闭启动自动运行 MCP 服务',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildAppUpdateGroup(c),
             if (isAndroidHost) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               AndroidPrivilegeCard(
                 backend: widget.backend,
                 config: widget.config,
@@ -1837,59 +1421,393 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
               ),
             ],
           ],
-        ),
+          if (showProfiles) ...[
+            if (showBasic) const SizedBox(height: 18),
+            ClaudeListGroup(
+              headerLabel: '传输、鉴权与权限入口',
+              headerTrailing: ClaudeButton(
+                label: '添加入口',
+                compact: true,
+                leading: const Icon(Icons.add_rounded),
+                variant: ClaudeBtnVariant.clay,
+                onPressed: () => _openProfileModal(),
+              ),
+              children: [
+                for (var i = 0; i < profs.length; i++)
+                  _buildProfileRow(c, profs, i, tMap),
+              ],
+            ),
+          ],
+          if (showExpose) ...[
+            if (showBasic || showProfiles) const SizedBox(height: 18),
+            TailscaleExposureSettingsCard(
+              backend: widget.backend,
+              config: widget.config,
+              exposureSummary: widget.exposureSummary,
+              onRefreshStatus: widget.onRefreshStatus,
+              onToast: widget.onToast,
+            ),
+            const SizedBox(height: 16),
+            _buildCloudflaredGroup(c, ti, inst, tMap),
+          ],
+          if (showSecurity) ...[
+            if (showBasic || showProfiles || showExpose)
+              const SizedBox(height: 18),
+            ClaudeListGroup(
+              headerLabel: '全局默认权限与日志',
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
+                  child: Wrap(
+                    spacing: 20,
+                    runSpacing: 8,
+                    children: [
+                      ClaudeCheckToggle(
+                        value: _writable,
+                        label: '允许写入与执行',
+                        onChanged: (v) => setState(() => _writable = v),
+                      ),
+                      ClaudeCheckToggle(
+                        value: _allowSecrets,
+                        label: '允许读取敏感文件',
+                        onChanged: (v) => setState(() => _allowSecrets = v),
+                      ),
+                      ClaudeCheckToggle(
+                        value: _relaxedCmd,
+                        label: '客户端免弹窗声明（全工具静默注解）',
+                        onChanged: (v) => setState(() => _relaxedCmd = v),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+                  child: Column(
+                    children: [
+                      _ResponsiveGridRow(
+                        label: '默认目录白名单\n(留空 = 全盘)',
+                        child: TextField(
+                          controller: _rootsCtrl,
+                          maxLines: 2,
+                          onChanged: (_) => setState(() {}),
+                          style: monoStyle(c, size: 12.5, color: c.ink),
+                          decoration: const InputDecoration(
+                            hintText: '每行一个目录路径，留空允许全盘访问',
+                          ),
+                        ),
+                      ),
+                      _ResponsiveGridRow(
+                        label: '日志等级 / 日志文件',
+                        child: Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ClaudeDropMenu<String>(
+                              value: _logLevel,
+                              leadingIcon: Icons.tune_rounded,
+                              minMenuWidth: 168,
+                              items: const [
+                                ClaudeDropMenuItem(
+                                  value: 'DEBUG',
+                                  label: 'DEBUG · 调试',
+                                  icon: Icons.bug_report_outlined,
+                                ),
+                                ClaudeDropMenuItem(
+                                  value: 'INFO',
+                                  label: 'INFO · 标准',
+                                  icon: Icons.info_outline_rounded,
+                                ),
+                                ClaudeDropMenuItem(
+                                  value: 'WARNING',
+                                  label: 'WARN · 告警',
+                                  icon: Icons.warning_amber_rounded,
+                                ),
+                                ClaudeDropMenuItem(
+                                  value: 'ERROR',
+                                  label: 'ERROR · 仅异常',
+                                  icon: Icons.error_outline_rounded,
+                                ),
+                              ],
+                              onChanged: (v) => setState(() => _logLevel = v),
+                            ),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 160,
+                                maxWidth: 260,
+                              ),
+                              child: TextField(
+                                controller: _logFileCtrl,
+                                onChanged: (_) => setState(() {}),
+                                style: monoStyle(c, size: 12.5, color: c.ink),
+                                decoration: const InputDecoration(
+                                  hintText: '可选: logs/mcp.log',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        _permDirty
+                            ? '● 有未保存的权限修改'
+                            : '保存后全局默认权限即时热加载生效',
+                        style: sansStyle(
+                          c,
+                          size: 12.2,
+                          color: _permDirty ? c.clay : c.meta,
+                          weight:
+                              _permDirty ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      ClaudeButton(
+                        label: _savingPerm ? '保存中...' : '保存权限与日志',
+                        compact: true,
+                        loading: _savingPerm,
+                        leading: const Icon(Icons.save_outlined),
+                        onPressed: _savePerm,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildStorageGroup(c),
+          ],
+        ],
       );
     }
 
-    // Mobile Level-2 Detail Page with crisp back bar
-    final currentCatTitle = navCategories
-        .where((e) => e.$1 == _setupSection)
-        .map((e) => e.$3)
-        .firstOrNull ?? '全部配置';
-    return SingleChildScrollView(
-      controller: _scrollCtrl,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.only(
-        top: widget.topPadding,
-        right: 2,
-        bottom: bottomPad,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    // 1. Desktop Wide Screen (>= 820px): 2-Pane Master-Detail + Floating Unsaved Bar
+    if (isWideDesktop) {
+      return Stack(
         children: [
-          Row(
-            children: [
-              ClaudeButton(
-                label: '返回服务配置',
-                compact: true,
-                variant: ClaudeBtnVariant.ghost,
-                leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
-                onPressed: () => setState(() => _mobileInDetail = false),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  currentCatTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: sansStyle(
-                    c,
-                    size: 16,
-                    weight: FontWeight.w600,
-                    color: c.ink,
+          Padding(
+            padding: EdgeInsets.only(top: widget.topPadding),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 206,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(right: 14, bottom: bottomPad),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 2, 6, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('服务配置', style: serifTitleStyle(c, size: 20)),
+                              const SizedBox(height: 2),
+                              Text(
+                                '按分类管理节点参数',
+                                style: sansStyle(
+                                  c,
+                                  size: 11.8,
+                                  color: c.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        for (final item in navCategories)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: _SetupNavTile(
+                              icon: item.$2,
+                              title: item.$3,
+                              badgeDot: item.$5,
+                              active: _setupSection == item.$1,
+                              onTap: () =>
+                                  setState(() => _setupSection = item.$1),
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Divider(color: c.hairline, height: 1),
+                        ),
+                        _SetupNavTile(
+                          icon: Icons.view_agenda_outlined,
+                          title: '全部展开',
+                          badgeDot: false,
+                          active: _setupSection == 'all',
+                          onTap: () => setState(() => _setupSection = 'all'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                Container(width: 1, color: c.hairline),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _scrollCtrl,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.only(right: 2, bottom: bottomPad),
+                    child: AnimatedSwitcher(
+                      duration: ClaudeMotion.duration(
+                        context,
+                        const Duration(milliseconds: 140),
+                      ),
+                      child: buildCategoryDetailContent(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildFloatingUnsavedBar(c),
+        ],
+      );
+    }
+
+    // 2. Mobile / Narrow Screen (< 820px): Level-1 Category List -> Level-2 Detail Page
+    if (!_mobileInDetail) {
+      return Stack(
+        children: [
+          SingleChildScrollView(
+            controller: _scrollCtrl,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(
+              top: widget.topPadding,
+              right: 2,
+              bottom: bottomPad,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('服务配置', style: serifTitleStyle(c, size: 22)),
+                const SizedBox(height: 3),
+                Text(
+                  '轻点下方分组进入对应设置项',
+                  style: sansStyle(c, size: 12.2, color: c.muted),
+                ),
+                const SizedBox(height: 12),
+                ClaudeListGroup(
+                  dividerIndent: 58,
+                  children: [
+                    for (var i = 0; i < navCategories.length; i++)
+                      ClaudeSettingsRow(
+                        onTap: () => setState(() {
+                          _setupSection = navCategories[i].$1;
+                          _mobileInDetail = true;
+                        }),
+                        leading: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: ShapeDecoration(
+                            color: c.clay.withValues(
+                              alpha: c.isDark ? 0.16 : 0.10,
+                            ),
+                            shape: claudeSuperellipse(9),
+                          ),
+                          child: Icon(
+                            navCategories[i].$2,
+                            size: 18,
+                            color: c.clay,
+                          ),
+                        ),
+                        title: navCategories[i].$3,
+                        subtitle: navCategories[i].$4,
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          size: 19,
+                          color: c.meta,
+                        ),
+                      ),
+                  ],
+                ),
+                if (isAndroidHost) ...[
+                  const SizedBox(height: 14),
+                  AndroidPrivilegeCard(
+                    backend: widget.backend,
+                    config: widget.config,
+                    onRefreshStatus: widget.onRefreshStatus,
+                    onToast: widget.onToast,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _buildFloatingUnsavedBar(c),
+        ],
+      );
+    }
+
+    final currentCatTitle = navCategories
+            .where((e) => e.$1 == _setupSection)
+            .map((e) => e.$3)
+            .firstOrNull ??
+        '全部配置';
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          controller: _scrollCtrl,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(
+            top: widget.topPadding,
+            right: 2,
+            bottom: bottomPad,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  ClaudeButton(
+                    label: '返回服务配置',
+                    compact: true,
+                    variant: ClaudeBtnVariant.ghost,
+                    leading: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 14,
+                    ),
+                    onPressed: () => setState(() => _mobileInDetail = false),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      currentCatTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: sansStyle(
+                        c,
+                        size: 15.5,
+                        weight: FontWeight.w600,
+                        color: c.ink,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              buildCategoryDetailContent(),
             ],
           ),
-          const SizedBox(height: 12),
-          buildCategoryDetailContent(),
-        ],
-      ),
+        ),
+        _buildFloatingUnsavedBar(c),
+      ],
     );
   }
 
-  Widget _buildProfileItem(
+  Widget _buildProfileRow(
     ClaudePalette c,
     List<Map<String, dynamic>> profs,
     int idx,
@@ -1941,7 +1859,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     } else {
       endpointText = resolvedBases
           .map((u) => '${u.replaceAll(RegExp(r'/+$'), '')}$epSuffix')
-          .join('\n');
+          .join(' · ');
     }
 
     const authLabels = {
@@ -1955,35 +1873,36 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     return AnimatedOpacity(
       duration: ClaudeMotion.duration(context, ClaudeMotion.base),
       curve: ClaudeMotion.editorialOut,
-      opacity: enabled ? 1.0 : 0.58,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: ShapeDecoration(
-          color: c.recessed,
-          shape: claudeSuperellipse(17),
-        ),
+      opacity: enabled ? 1.0 : 0.56,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
+              spacing: 10,
               runSpacing: 8,
               children: [
                 Wrap(
-                  spacing: 8,
+                  spacing: 7,
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ClaudeStatusDot(
                       color: isLiveActive ? c.sage : c.meta,
                       pulsing: isLiveActive,
-                      size: 7.5,
+                      size: 7,
                     ),
                     Text(
                       (p['name'] ?? '入口').toString(),
-                      style: serifTitleStyle(c, size: 16.5),
+                      style: sansStyle(
+                        c,
+                        size: 14.5,
+                        weight: FontWeight.w600,
+                        color: c.ink,
+                      ),
                     ),
                     ClaudePill(
                       text: (p['transport'] ?? 'dual').toString().toUpperCase(),
@@ -1992,9 +1911,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                     ),
                     ClaudePill(
                       text: authLabels[authMode] ?? authMode,
+                      mono: false,
                       fg: c.clay,
                       bg: c.clay.withValues(alpha: 0.12),
-                      border: c.clay.withValues(alpha: 0.24),
                     ),
                     if (hasTun)
                       ClaudePill(
@@ -2005,7 +1924,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                 : 'Token 在线')
                             : '隧道未启动',
                         mono: false,
-                        bg: c.paper2,
+                        bg: c.paper3,
                       ),
                   ],
                 ),
@@ -2014,15 +1933,6 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    ClaudeSwitch(
-                      value: enabled,
-                      onChanged: (v) async {
-                        final next = List<Map<String, dynamic>>.from(profs);
-                        next[idx] = Map<String, dynamic>.from(p)
-                          ..['enabled'] = v;
-                        await _saveProfilesList(next);
-                      },
-                    ),
                     if (hasTun)
                       ClaudeButton(
                         label: _togglingTunnels.contains(pid)
@@ -2043,12 +1953,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                 await widget.backend.stopTunnel(pid);
                                 widget.onToast('已停止隧道');
                               } else {
-                                final r = await widget.backend.startTunnel(pid);
+                                final r =
+                                    await widget.backend.startTunnel(pid);
                                 if (r['ok'] == true) {
                                   widget.onToast('隧道已启动，正在连接...');
                                 } else {
                                   widget.onToast(
-                                      r['error']?.toString() ?? '启动失败');
+                                    r['error']?.toString() ?? '启动失败',
+                                  );
                                 }
                               }
                               await widget.onRefreshStatus();
@@ -2105,38 +2017,39 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                           }
                         },
                       ),
+                    ClaudeSwitch(
+                      value: enabled,
+                      onChanged: (v) async {
+                        final next = List<Map<String, dynamic>>.from(profs);
+                        next[idx] = Map<String, dynamic>.from(p)
+                          ..['enabled'] = v;
+                        await _saveProfilesList(next);
+                      },
+                    ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-              decoration: ShapeDecoration(
-                color: c.paper2,
-                shape: claudeSuperellipse(12),
-              ),
-              child: SelectableText(
-                endpointText,
-                style: monoStyle(
-                  c,
-                  size: 12,
-                  color: tunReady ? c.inkSoft : c.meta,
-                ),
+            const SizedBox(height: 6),
+            SelectableText(
+              endpointText,
+              style: monoStyle(
+                c,
+                size: 12,
+                color: tunReady ? c.clay : c.meta,
               ),
             ),
             ClaudeCollapsible(
               expanded: (tState['error'] ?? '').toString().isNotEmpty,
               builder: (_) => Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: 5),
                 child: Text(
                   'Cloudflared: ${tState['error']}',
                   style: monoStyle(c, size: 11.5, color: c.danger),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Icon(
@@ -2145,10 +2058,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                       : (p['read_only'] == true
                           ? Icons.lock_outline_rounded
                           : Icons.tune_rounded),
-                  size: 13.5,
+                  size: 13,
                   color: c.meta,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     p['inherit_permissions'] != false
@@ -2162,7 +2075,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                 ? '限定 ${(p['roots'] as List).length} 个目录'
                                 : '全盘访问',
                           ].join(' · '),
-                    style: sansStyle(c, size: 12, color: c.meta, tabular: true),
+                    style: sansStyle(c, size: 11.8, color: c.meta, tabular: true),
                   ),
                 ),
               ],
@@ -2173,7 +2086,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     );
   }
 
-  Widget _buildCloudflaredCard(
+  Widget _buildCloudflaredGroup(
     ClaudePalette c,
     Map<String, dynamic> ti,
     Map<String, dynamic> inst,
@@ -2188,226 +2101,224 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     final activeCnt =
         tMap.values.where((x) => x is Map && x['running'] == true).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            Text('Cloudflared 隧道组件', style: serifTitleStyle(c, size: 18)),
-            ClaudePill(
-              leading: Icon(
-                installed ? Icons.check_circle_outline_rounded : Icons.cloud_off,
-              ),
-              text: activeDl
-                  ? '下载中 ${pct.toInt()}%'
-                  : (pausedDl
-                      ? '已暂停 ${pct.toInt()}%'
-                      : (installed
-                          ? '已安装${ver.isNotEmpty ? ' v$ver' : ''}'
-                          : '未安装')),
-              fg: installed ? c.sage : c.clay,
-              bg: installed ? c.sageBg : c.clay.withValues(alpha: 0.12),
-              border: installed ? null : c.clay.withValues(alpha: 0.24),
-            ),
-          ],
+    return ClaudeListGroup(
+      headerLabel: 'Cloudflared 隧道组件',
+      headerTrailing: ClaudePill(
+        leading: Icon(
+          installed ? Icons.check_circle_outline_rounded : Icons.cloud_off,
         ),
-        const SizedBox(height: 12),
-        if (activeDl || pausedDl) ...[
-          Text(
-            (inst['status'] ?? '正在下载 cloudflared...').toString(),
-            style: sansStyle(c, size: 12.5, color: c.muted),
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0, end: pct / 100.0),
-              duration: ClaudeMotion.duration(context, ClaudeMotion.base),
-              curve: ClaudeMotion.editorialOut,
-              builder: (ctx, val, _) => LinearProgressIndicator(
-                value: val,
-                minHeight: 7,
-                backgroundColor: c.paper3,
-                valueColor: AlwaysStoppedAnimation<Color>(c.clay),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+        text: activeDl
+            ? '下载中 ${pct.toInt()}%'
+            : (pausedDl
+                ? '已暂停 ${pct.toInt()}%'
+                : (installed
+                    ? '已安装${ver.isNotEmpty ? ' v$ver' : ''}'
+                    : '未安装')),
+        mono: false,
+        fg: installed ? c.sage : c.clay,
+        bg: installed ? c.sageBg : c.clay.withValues(alpha: 0.12),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (pausedDl)
-                ClaudeButton(
-                  label: '继续下载',
-                  compact: true,
-                  leading: const Icon(Icons.play_arrow_rounded),
-                  variant: ClaudeBtnVariant.clay,
-                  onPressed: () async {
-                    await widget.backend.installCloudflared(resume: true);
-                    await widget.onRefreshStatus();
-                  },
-                )
-              else
-                ClaudeButton(
-                  label: '暂停',
-                  compact: true,
-                  leading: const Icon(Icons.pause_rounded),
-                  onPressed: () async {
-                    await widget.backend.pauseCloudflared();
-                    await widget.onRefreshStatus();
-                  },
+              if (activeDl || pausedDl) ...[
+                Text(
+                  (inst['status'] ?? '正在下载 cloudflared...').toString(),
+                  style: sansStyle(c, size: 12.5, color: c.muted),
                 ),
-              ClaudeButton(
-                label: '取消',
-                compact: true,
-                leading: const Icon(Icons.close_rounded),
-                onPressed: () async {
-                  await widget.backend.cancelCloudflared();
-                  await widget.onRefreshStatus();
-                },
-              ),
-            ],
-          ),
-        ] else if (installed) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: ShapeDecoration(
-              color: c.recessed,
-              shape: claudeSuperellipse(
-                10,
-                side: BorderSide(color: c.hairline),
-              ),
-            ),
-            child: SelectableText(
-              (ti['binary'] ?? 'cloudflared').toString(),
-              style: monoStyle(c, size: 12),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Text(
-                activeCnt > 0
-                    ? '当前有 $activeCnt 条隧道运行中'
-                    : '已就绪，可在上方任意入口启用 Token 或 Quick 隧道',
-                style: sansStyle(c, size: 12.5, color: c.muted, tabular: true),
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ClaudeButton(
-                    label: '更新到最新版',
-                    compact: true,
-                    leading: const Icon(Icons.refresh_rounded),
-                    onPressed: () async {
-                      await widget.backend.installCloudflared(force: true);
-                      await widget.onRefreshStatus();
-                    },
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: pct / 100.0),
+                    duration:
+                        ClaudeMotion.duration(context, ClaudeMotion.base),
+                    curve: ClaudeMotion.editorialOut,
+                    builder: (ctx, val, _) => LinearProgressIndicator(
+                      value: val,
+                      minHeight: 6,
+                      backgroundColor: c.paper3,
+                      valueColor: AlwaysStoppedAnimation<Color>(c.clay),
+                    ),
                   ),
-                  ClaudeButton(
-                    label: '导入替换',
-                    compact: true,
-                    leading: const Icon(Icons.upload_file_outlined),
-                    onPressed: () async {
-                      final r = await widget.backend.pickAndImportCloudflared();
-                      if (r != null) {
-                        widget.onToast(
-                          (r['message'] ?? r['error'] ?? '').toString(),
-                        );
-                        await widget.onRefreshStatus();
-                      }
-                    },
-                  ),
-                  if (ti['local_managed'] == true)
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (pausedDl)
+                      ClaudeButton(
+                        label: '继续下载',
+                        compact: true,
+                        leading: const Icon(Icons.play_arrow_rounded),
+                        variant: ClaudeBtnVariant.clay,
+                        onPressed: () async {
+                          await widget.backend.installCloudflared(resume: true);
+                          await widget.onRefreshStatus();
+                        },
+                      )
+                    else
+                      ClaudeButton(
+                        label: '暂停',
+                        compact: true,
+                        leading: const Icon(Icons.pause_rounded),
+                        onPressed: () async {
+                          await widget.backend.pauseCloudflared();
+                          await widget.onRefreshStatus();
+                        },
+                      ),
                     ClaudeButton(
-                      label: '移除本地副本',
+                      label: '取消',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
+                      leading: const Icon(Icons.close_rounded),
                       onPressed: () async {
-                        final r = await widget.backend.uninstallCloudflared();
-                        widget.onToast(
-                          (r['message'] ?? r['error'] ?? '').toString(),
-                        );
+                        await widget.backend.cancelCloudflared();
                         await widget.onRefreshStatus();
                       },
                     ),
-                ],
-              ),
-            ],
-          ),
-        ] else ...[
-          Text(
-            '未检测到 cloudflared。可一键在线下载到项目 bin/ 目录（支持断点续传），或从官方地址手动下载后导入。',
-            style: sansStyle(c, size: 13, color: c.muted, height: 1.56),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ClaudeButton(
-                label: '一键下载 cloudflared',
-                compact: true,
-                leading: const Icon(Icons.download_rounded),
-                variant: ClaudeBtnVariant.clay,
-                onPressed: () async {
-                  await widget.backend.installCloudflared();
-                  await widget.onRefreshStatus();
-                },
-              ),
-              ClaudeButton(
-                label: '选择文件导入',
-                compact: true,
-                leading: const Icon(Icons.upload_file_outlined),
-                onPressed: () async {
-                  final r = await widget.backend.pickAndImportCloudflared();
-                  if (r != null) {
-                    widget.onToast(
-                      (r['message'] ?? r['error'] ?? '').toString(),
-                    );
-                    await widget.onRefreshStatus();
-                  }
-                },
-              ),
-              if (dlUrl.isNotEmpty)
-                ClaudeButton(
-                  label: '复制官方直链',
-                  compact: true,
-                  leading: const Icon(Icons.copy_rounded),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: dlUrl));
-                    widget.onToast('已复制官方下载地址');
-                  },
+                  ],
                 ),
+              ] else if (installed) ...[
+                SelectableText(
+                  (ti['binary'] ?? 'cloudflared').toString(),
+                  style: monoStyle(c, size: 12, color: c.inkSoft),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      activeCnt > 0
+                          ? '当前有 $activeCnt 条隧道运行中'
+                          : '已就绪，可在接入入口启用 Token 或 Quick 隧道',
+                      style: sansStyle(
+                        c,
+                        size: 12.2,
+                        color: c.muted,
+                        tabular: true,
+                      ),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ClaudeButton(
+                          label: '更新到最新版',
+                          compact: true,
+                          leading: const Icon(Icons.refresh_rounded),
+                          onPressed: () async {
+                            await widget.backend.installCloudflared(
+                              force: true,
+                            );
+                            await widget.onRefreshStatus();
+                          },
+                        ),
+                        ClaudeButton(
+                          label: '导入替换',
+                          compact: true,
+                          leading: const Icon(Icons.upload_file_outlined),
+                          onPressed: () async {
+                            final r =
+                                await widget.backend.pickAndImportCloudflared();
+                            if (r != null) {
+                              widget.onToast(
+                                (r['message'] ?? r['error'] ?? '').toString(),
+                              );
+                              await widget.onRefreshStatus();
+                            }
+                          },
+                        ),
+                        if (ti['local_managed'] == true)
+                          ClaudeButton(
+                            label: '移除本地副本',
+                            compact: true,
+                            variant: ClaudeBtnVariant.ghost,
+                            onPressed: () async {
+                              final r =
+                                  await widget.backend.uninstallCloudflared();
+                              widget.onToast(
+                                (r['message'] ?? r['error'] ?? '').toString(),
+                              );
+                              await widget.onRefreshStatus();
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Text(
+                  '未检测到 cloudflared。可一键在线下载到项目 bin/ 目录（支持断点续传），或从官方地址手动下载后导入。',
+                  style: sansStyle(c, size: 12.6, color: c.muted, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ClaudeButton(
+                      label: '一键下载 cloudflared',
+                      compact: true,
+                      leading: const Icon(Icons.download_rounded),
+                      variant: ClaudeBtnVariant.clay,
+                      onPressed: () async {
+                        await widget.backend.installCloudflared();
+                        await widget.onRefreshStatus();
+                      },
+                    ),
+                    ClaudeButton(
+                      label: '选择文件导入',
+                      compact: true,
+                      leading: const Icon(Icons.upload_file_outlined),
+                      onPressed: () async {
+                        final r =
+                            await widget.backend.pickAndImportCloudflared();
+                        if (r != null) {
+                          widget.onToast(
+                            (r['message'] ?? r['error'] ?? '').toString(),
+                          );
+                          await widget.onRefreshStatus();
+                        }
+                      },
+                    ),
+                    if (dlUrl.isNotEmpty)
+                      ClaudeButton(
+                        label: '复制官方直链',
+                        compact: true,
+                        leading: const Icon(Icons.copy_rounded),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: dlUrl));
+                          widget.onToast('已复制官方下载地址');
+                        },
+                      ),
+                  ],
+                ),
+              ],
+              ClaudeCollapsible(
+                expanded: (inst['error'] ?? '').toString().isNotEmpty,
+                builder: (_) => Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    inst['error'].toString(),
+                    style: monoStyle(c, size: 11.5, color: c.danger),
+                  ),
+                ),
+              ),
             ],
-          ),
-        ],
-        ClaudeCollapsible(
-          expanded: (inst['error'] ?? '').toString().isNotEmpty,
-          builder: (_) => Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              inst['error'].toString(),
-              style: monoStyle(c, size: 11.5, color: c.danger),
-            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStorageCard(ClaudePalette c) {
+  Widget _buildStorageGroup(ClaudePalette c) {
     final st = widget.storageStats;
     const labels = [
       ('config', '配置文件 (config/)'),
@@ -2416,178 +2327,181 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       ('logs', '日志文件 (logs/)'),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ClaudeListGroup(
+      headerLabel: '存储与维护',
+      headerTrailing: ClaudeButton(
+        label: _refreshingStorage ? '刷新中...' : '刷新占用',
+        compact: true,
+        loading: _refreshingStorage,
+        leading: const Icon(Icons.refresh_rounded),
+        onPressed: () async {
+          setState(() => _refreshingStorage = true);
+          try {
+            await runWithMinDuration(widget.onRefreshStorage);
+            widget.onToast('已更新磁盘占用统计');
+          } finally {
+            if (mounted) setState(() => _refreshingStorage = false);
+          }
+        },
+      ),
       children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            Text('存储与维护', style: serifTitleStyle(c, size: 18)),
-            ClaudeButton(
-              label: _refreshingStorage ? '刷新中...' : '刷新占用',
-              compact: true,
-              loading: _refreshingStorage,
-              leading: const Icon(Icons.refresh_rounded),
-              onPressed: () async {
-                setState(() => _refreshingStorage = true);
-                try {
-                  await runWithMinDuration(widget.onRefreshStorage);
-                  widget.onToast('已更新磁盘占用统计');
-                } finally {
-                  if (mounted) setState(() => _refreshingStorage = false);
-                }
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        LayoutBuilder(
-          builder: (ctx, sbox) {
-            final cols = sbox.maxWidth < 380
-                ? 1
-                : (sbox.maxWidth < 720 ? 2 : 4);
-            const gap = 10.0;
-            final tileW = (sbox.maxWidth - gap * (cols - 1)) / cols;
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: LayoutBuilder(
+            builder: (ctx, sbox) {
+              final cols =
+                  sbox.maxWidth < 380 ? 1 : (sbox.maxWidth < 720 ? 2 : 4);
+              const gap = 10.0;
+              final tileW = (sbox.maxWidth - gap * (cols - 1)) / cols;
 
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: labels.map((item) {
-                final d = st[item.$1] is Map
-                    ? Map<String, dynamic>.from(st[item.$1] as Map)
-                    : const <String, dynamic>{};
-                final sizeText = formatBytesHuman(d['bytes'] as num?);
-                return SizedBox(
-                  width: tileW,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: ShapeDecoration(
-                      color: c.recessed,
-                      shape: claudeSuperellipse(
-                        13,
-                        side: BorderSide(color: c.hairline),
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: labels.map((item) {
+                  final d = st[item.$1] is Map
+                      ? Map<String, dynamic>.from(st[item.$1] as Map)
+                      : const <String, dynamic>{};
+                  final sizeText = formatBytesHuman(d['bytes'] as num?);
+                  return SizedBox(
+                    width: tileW,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 10,
+                      ),
+                      decoration: ShapeDecoration(
+                        color: c.recessed,
+                        shape: claudeSuperellipse(
+                          10,
+                          side: BorderSide(color: c.hairline),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.$2,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: sansStyle(c, size: 11.4, color: c.muted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            sizeText,
+                            maxLines: 1,
+                            style: monoStyle(
+                              c,
+                              size: 14.5,
+                              color: c.ink,
+                              weight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${d['files'] ?? 0} 个文件',
+                            style: sansStyle(
+                              c,
+                              size: 11,
+                              color: c.meta,
+                              tabular: true,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.$2,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: sansStyle(c, size: 11.5, color: c.muted),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          sizeText,
-                          maxLines: 1,
-                          style: monoStyle(
-                            c,
-                            size: 15,
-                            color: c.ink,
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${d['files'] ?? 0} 个文件',
-                          style: sansStyle(
-                            c,
-                            size: 11,
-                            color: c.meta,
-                            tabular: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
+                  );
+                }).toList(),
+              );
+            },
+          ),
         ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ClaudeButton(
-              label: _cleaningTarget == 'cache' ? '清理中...' : '清理缓存',
-              compact: true,
-              loading: _cleaningTarget == 'cache',
-              leading: const Icon(Icons.cleaning_services_outlined),
-              onPressed: _cleaningTarget != null
-                  ? null
-                  : () async {
-                      setState(() => _cleaningTarget = 'cache');
-                      try {
-                        final r = await runWithMinDuration(
-                          () => widget.backend.cleanStorageTarget('cache'),
-                        );
-                        widget.onToast((r['message'] ?? '已清理缓存').toString());
-                        await widget.onRefreshStorage();
-                      } finally {
-                        if (mounted) setState(() => _cleaningTarget = null);
-                      }
-                    },
-            ),
-            ClaudeButton(
-              label: _cleaningTarget == 'logs' ? '清理中...' : '清理日志',
-              compact: true,
-              loading: _cleaningTarget == 'logs',
-              leading: const Icon(Icons.notes_rounded),
-              onPressed: _cleaningTarget != null
-                  ? null
-                  : () async {
-                      setState(() => _cleaningTarget = 'logs');
-                      try {
-                        final r = await runWithMinDuration(
-                          () => widget.backend.cleanStorageTarget('logs'),
-                        );
-                        widget.onToast((r['message'] ?? '已清理日志').toString());
-                        await widget.onRefreshStorage();
-                      } finally {
-                        if (mounted) setState(() => _cleaningTarget = null);
-                      }
-                    },
-            ),
-            ClaudeButton(
-              label: _cleaningTarget == 'oauth' ? '清空中...' : '清空 OAuth 会话',
-              compact: true,
-              loading: _cleaningTarget == 'oauth',
-              leading: const Icon(Icons.key_off_outlined),
-              onPressed: _cleaningTarget != null
-                  ? null
-                  : () async {
-                      final ok = await showClaudeConfirmDialog(
-                        context,
-                        title: '清空 OAuth 会话',
-                        message:
-                            '清空后已绑定的远程客户端（如 Gemini 网页端）需要重新授权登录，确定继续？',
-                        confirmText: '清空会话',
-                        destructive: true,
-                      );
-                      if (ok) {
-                        setState(() => _cleaningTarget = 'oauth');
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ClaudeButton(
+                label: _cleaningTarget == 'cache' ? '清理中...' : '清理缓存',
+                compact: true,
+                loading: _cleaningTarget == 'cache',
+                leading: const Icon(Icons.cleaning_services_outlined),
+                onPressed: _cleaningTarget != null
+                    ? null
+                    : () async {
+                        setState(() => _cleaningTarget = 'cache');
                         try {
                           final r = await runWithMinDuration(
-                            () => widget.backend.cleanStorageTarget('oauth'),
+                            () => widget.backend.cleanStorageTarget('cache'),
                           );
-                          widget.onToast((r['message'] ?? '已清空').toString());
+                          widget.onToast(
+                            (r['message'] ?? '已清理缓存').toString(),
+                          );
                           await widget.onRefreshStorage();
                         } finally {
                           if (mounted) setState(() => _cleaningTarget = null);
                         }
-                      }
-                    },
-            ),
-          ],
+                      },
+              ),
+              ClaudeButton(
+                label: _cleaningTarget == 'logs' ? '清理中...' : '清理日志',
+                compact: true,
+                loading: _cleaningTarget == 'logs',
+                leading: const Icon(Icons.notes_rounded),
+                onPressed: _cleaningTarget != null
+                    ? null
+                    : () async {
+                        setState(() => _cleaningTarget = 'logs');
+                        try {
+                          final r = await runWithMinDuration(
+                            () => widget.backend.cleanStorageTarget('logs'),
+                          );
+                          widget.onToast(
+                            (r['message'] ?? '已清理日志').toString(),
+                          );
+                          await widget.onRefreshStorage();
+                        } finally {
+                          if (mounted) setState(() => _cleaningTarget = null);
+                        }
+                      },
+              ),
+              ClaudeButton(
+                label:
+                    _cleaningTarget == 'oauth' ? '清空中...' : '清空 OAuth 会话',
+                compact: true,
+                loading: _cleaningTarget == 'oauth',
+                leading: const Icon(Icons.key_off_outlined),
+                onPressed: _cleaningTarget != null
+                    ? null
+                    : () async {
+                        final ok = await showClaudeConfirmDialog(
+                          context,
+                          title: '清空 OAuth 会话',
+                          message:
+                              '清空后已绑定的远程客户端（如 Gemini 网页端）需要重新授权登录，确定继续？',
+                          confirmText: '清空会话',
+                          destructive: true,
+                        );
+                        if (ok) {
+                          setState(() => _cleaningTarget = 'oauth');
+                          try {
+                            final r = await runWithMinDuration(
+                              () => widget.backend.cleanStorageTarget('oauth'),
+                            );
+                            widget.onToast(
+                              (r['message'] ?? '已清空').toString(),
+                            );
+                            await widget.onRefreshStorage();
+                          } finally {
+                            if (mounted) {
+                              setState(() => _cleaningTarget = null);
+                            }
+                          }
+                        }
+                      },
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2613,7 +2527,7 @@ class _ResponsiveGridRow extends StatelessWidget {
         final compact = box.maxWidth < 480;
         if (compact) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.only(bottom: 13),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -2625,7 +2539,7 @@ class _ResponsiveGridRow extends StatelessWidget {
                         label.replaceAll('\n', ' '),
                         style: sansStyle(
                           c,
-                          size: 13,
+                          size: 12.8,
                           weight: FontWeight.w500,
                           color: c.muted,
                         ),
@@ -2650,12 +2564,12 @@ class _ResponsiveGridRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
-                width: 162,
+                width: 158,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 12),
                   child: Text(
                     label,
-                    style: sansStyle(c, size: 13, color: c.muted),
+                    style: sansStyle(c, size: 12.8, color: c.muted),
                   ),
                 ),
               ),
@@ -2671,70 +2585,6 @@ class _ResponsiveGridRow extends StatelessWidget {
     );
   }
 }
-
-class _StartupSwitchRow extends StatelessWidget {
-  final ClaudePalette palette;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _StartupSwitchRow({
-    required this.palette,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => onChanged(!value),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: sansStyle(
-                      palette,
-                      size: 13.5,
-                      color: palette.ink,
-                      weight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2.5),
-                  Text(
-                    subtitle,
-                    style: sansStyle(
-                      palette,
-                      size: 12,
-                      color: palette.muted,
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            ClaudeSwitch(
-              value: value,
-              onChanged: onChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
 
 class _SetupNavTile extends StatefulWidget {
   final IconData icon;
@@ -2762,7 +2612,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final bg = widget.active
-        ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.11)
+        ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.10)
         : (_hovered
             ? (c.isDark
                 ? Colors.white.withValues(alpha: 0.05)
@@ -2777,16 +2627,16 @@ class _SetupNavTileState extends State<_SetupNavTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(11),
+            shape: claudeSuperellipse(8),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 17, color: fg),
-              const SizedBox(width: 10),
+              Icon(widget.icon, size: 16.5, color: fg),
+              const SizedBox(width: 9),
               Expanded(
                 child: Text(
                   widget.title,
@@ -2794,7 +2644,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
                   overflow: TextOverflow.ellipsis,
                   style: sansStyle(
                     c,
-                    size: 13.2,
+                    size: 13,
                     weight: widget.active ? FontWeight.w600 : FontWeight.w500,
                     color: fg,
                   ),

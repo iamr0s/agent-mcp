@@ -246,41 +246,45 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
             activeSeq = (activeEv['_seq'] as int?) ?? 0;
           }
         }
-        final filterBarWidget = ClaudeGlassBar(
-            blurSigma: 16,
-            borderRadius: 16,
-            tintColor: c.paper2.withValues(alpha: c.isDark ? 0.84 : 0.88),
-            boxShadow: c.whisperShadow,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        final filterBarWidget = DecoratedBox(
+          decoration: ShapeDecoration(
+            color: c.paper2,
+            shape: claudeSuperellipse(
+              10,
+              side: BorderSide(color: c.hairline),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             child: LayoutBuilder(
               builder: (ctx, fbox) {
-                final narrowFilter = fbox.maxWidth < 640;
+                final narrowFilter = fbox.maxWidth < 680;
                 final searchField = SizedBox(
-                  height: 35,
+                  height: 30,
                   child: TextField(
                     controller: _searchCtrl,
                     focusNode: _searchFocusNode,
                     onChanged: (_) => setState(() {}),
-                    style: sansStyle(c, size: 13, color: c.ink),
+                    style: sansStyle(c, size: 12.5, color: c.ink),
                     decoration: InputDecoration(
                       hintText: '搜索参数、路径或关键词...',
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                       prefixIcon: Icon(
                         Icons.search_rounded,
-                        size: 16,
+                        size: 14.5,
                         color: c.meta,
                       ),
                       prefixIconConstraints: const BoxConstraints(
-                        minWidth: 34,
-                        minHeight: 32,
+                        minWidth: 30,
+                        minHeight: 28,
                       ),
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
                           : IconButton(
-                              iconSize: 14,
+                              iconSize: 13.5,
                               padding: EdgeInsets.zero,
                               onPressed: () {
                                 _searchCtrl.clear();
@@ -299,129 +303,157 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     _activeTool != 'ALL' ||
                     _searchCtrl.text.trim().isNotEmpty;
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        ClaudeSegmented<String>(
-                          value: _cat,
-                          items: const [
-                            ('ALL', '全部'),
-                            ('TOOL', '工具'),
-                            ('OAUTH', '鉴权'),
-                            ('ERR', '异常'),
-                          ],
-                          onChanged: (v) => setState(() => _cat = v),
+                final filterChips = <Widget>[
+                  ClaudeSegmented<String>(
+                    value: _cat,
+                    items: const [
+                      ('ALL', '全部'),
+                      ('TOOL', '工具'),
+                      ('OAUTH', '鉴权'),
+                      ('ERR', '异常'),
+                    ],
+                    onChanged: (v) => setState(() => _cat = v),
+                  ),
+                  ClaudeDropMenu<String>(
+                    value: _sort,
+                    leadingIcon: Icons.swap_vert_rounded,
+                    highlightActive: _sort != 'newest',
+                    minMenuWidth: 152,
+                    items: const [
+                      ClaudeDropMenuItem(
+                        value: 'newest',
+                        label: '最新优先',
+                        icon: Icons.schedule_rounded,
+                      ),
+                      ClaudeDropMenuItem(
+                        value: 'oldest',
+                        label: '最早优先',
+                        icon: Icons.history_rounded,
+                      ),
+                      ClaudeDropMenuItem(
+                        value: 'slowest',
+                        label: '耗时最长',
+                        icon: Icons.speed_rounded,
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => _sort = v),
+                  ),
+                  if (sortedSources.isNotEmpty)
+                    ClaudeDropMenu<String>(
+                      value: _activeSource,
+                      leadingIcon: Icons.login_rounded,
+                      highlightActive: _activeSource != 'ALL',
+                      minMenuWidth: 184,
+                      items: [
+                        ClaudeDropMenuItem(
+                          value: 'ALL',
+                          label: '全部入口',
+                          icon: Icons.public_rounded,
+                          badge: '${widget.events.length}',
                         ),
-                        ClaudeDropMenu<String>(
-                          value: _sort,
-                          leadingIcon: Icons.swap_vert_rounded,
-                          highlightActive: _sort != 'newest',
-                          minMenuWidth: 156,
-                          items: const [
-                            ClaudeDropMenuItem(
-                              value: 'newest',
-                              label: '最新优先',
-                              icon: Icons.schedule_rounded,
-                            ),
-                            ClaudeDropMenuItem(
-                              value: 'oldest',
-                              label: '最早优先',
-                              icon: Icons.history_rounded,
-                            ),
-                            ClaudeDropMenuItem(
-                              value: 'slowest',
-                              label: '耗时最长',
-                              icon: Icons.speed_rounded,
-                            ),
-                          ],
-                          onChanged: (v) => setState(() => _sort = v),
-                        ),
-                        if (sortedSources.isNotEmpty)
-                          ClaudeDropMenu<String>(
-                            value: _activeSource,
-                            leadingIcon: Icons.login_rounded,
-                            highlightActive: _activeSource != 'ALL',
-                            minMenuWidth: 190,
-                            items: [
-                              ClaudeDropMenuItem(
-                                value: 'ALL',
-                                label: '全部入口',
-                                icon: Icons.public_rounded,
-                                badge: '${widget.events.length}',
-                              ),
-                              for (final sName in sortedSources)
-                                ClaudeDropMenuItem(
-                                  value: sName,
-                                  label: sName,
-                                  icon: Icons.login_rounded,
-                                  badge: '${sourceCounts[sName]}',
-                                ),
-                            ],
-                            onChanged: (v) => setState(() => _activeSource = v),
-                          ),
-                        if (sortedTools.isNotEmpty)
-                          ClaudeDropMenu<String>(
-                            value: _activeTool,
-                            leadingIcon: Icons.handyman_outlined,
-                            highlightActive: _activeTool != 'ALL',
-                            minMenuWidth: 200,
-                            items: [
-                              ClaudeDropMenuItem(
-                                value: 'ALL',
-                                label: '全部工具',
-                                icon: Icons.apps_rounded,
-                                badge: '$toolCalls',
-                              ),
-                              for (final tName in sortedTools)
-                                ClaudeDropMenuItem(
-                                  value: tName,
-                                  label: resolveToolMeta(tName).$2,
-                                  icon: resolveToolMeta(tName).$1,
-                                  badge: '${toolCounts[tName]}',
-                                ),
-                            ],
-                            onChanged: (v) => setState(() => _activeTool = v),
-                          ),
-                        if (hasActiveFilter)
-                          ClaudeButton(
-                            label: '重置',
-                            compact: true,
-                            variant: ClaudeBtnVariant.ghost,
-                            leading: const Icon(Icons.filter_alt_off_outlined),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() {
-                                _cat = 'ALL';
-                                _activeSource = 'ALL';
-                                _activeTool = 'ALL';
-                              });
-                            },
-                          ),
-                        if (!narrowFilter)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 180,
-                              maxWidth: 280,
-                            ),
-                            child: searchField,
+                        for (final sName in sortedSources)
+                          ClaudeDropMenuItem(
+                            value: sName,
+                            label: sName,
+                            icon: Icons.login_rounded,
+                            badge: '${sourceCounts[sName]}',
                           ),
                       ],
+                      onChanged: (v) => setState(() => _activeSource = v),
                     ),
-                    if (narrowFilter) ...[
-                      const SizedBox(height: 8),
+                  if (sortedTools.isNotEmpty)
+                    ClaudeDropMenu<String>(
+                      value: _activeTool,
+                      leadingIcon: Icons.handyman_outlined,
+                      highlightActive: _activeTool != 'ALL',
+                      minMenuWidth: 206,
+                      searchable: sortedTools.length >= 6,
+                      items: [
+                        ClaudeDropMenuItem(
+                          value: 'ALL',
+                          label: '全部工具',
+                          icon: Icons.apps_rounded,
+                          badge: '$toolCalls',
+                        ),
+                        for (final tName in sortedTools)
+                          ClaudeDropMenuItem(
+                            value: tName,
+                            label: resolveToolMeta(tName).$2,
+                            subtitle: tName,
+                            icon: resolveToolMeta(tName).$1,
+                            badge: '${toolCounts[tName]}',
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _activeTool = v),
+                    ),
+                  if (hasActiveFilter)
+                    ClaudeButton(
+                      label: '重置',
+                      compact: true,
+                      variant: ClaudeBtnVariant.ghost,
+                      leading: const Icon(Icons.filter_alt_off_outlined),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() {
+                          _cat = 'ALL';
+                          _activeSource = 'ALL';
+                          _activeTool = 'ALL';
+                        });
+                      },
+                    ),
+                ];
+
+                if (narrowFilter) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       searchField,
+                      const SizedBox(height: 6),
+                      ClaudeScrollHintRow(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (var i = 0; i < filterChips.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 6),
+                              filterChips[i],
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 180,
+                        maxWidth: 250,
+                      ),
+                      child: searchField,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ClaudeScrollHintRow(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (var i = 0; i < filterChips.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 6),
+                              filterChips[i],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 );
               },
             ),
-          );
+          ),
+        );
 
         final headerSliver = SliverToBoxAdapter(
           child: Column(
@@ -434,14 +466,14 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 12,
-                  runSpacing: 10,
+                  runSpacing: 8,
                   children: [
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 14,
+                      spacing: 12,
                       runSpacing: 6,
                       children: [
-                        Text('活动与调用流', style: serifTitleStyle(c, size: 24)),
+                        Text('活动与调用流', style: serifTitleStyle(c, size: 20)),
                         _InlineTelemetryRibbon(
                           total: widget.events.length,
                           toolCalls: toolCalls,
@@ -451,8 +483,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                       ],
                     ),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         if (canSplit)
@@ -481,9 +513,9 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 11),
-              ClaudeStaggeredReveal(index: 1, child: filterBarWidget),
               const SizedBox(height: 10),
+              ClaudeStaggeredReveal(index: 1, child: filterBarWidget),
+              const SizedBox(height: 8),
             ],
           ),
         );
@@ -539,12 +571,12 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
         else
           SliverPadding(
             padding: EdgeInsets.only(
-              bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 36) + widget.extraBottomPadding,
+              bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 28) +
+                  widget.extraBottomPadding,
             ),
-            sliver: SliverList.separated(
+            sliver: SliverList.builder(
               key: const ValueKey('event-list'),
               itemCount: filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (ctx, idx) {
                 final ev = filtered[idx];
                 final seqId = (ev['_seq'] as int?) ?? idx;
@@ -557,6 +589,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     expanded: open,
                     selected: isSelected,
                     splitMode: useSplit,
+                    isFirst: idx == 0,
+                    isLast: idx == filtered.length - 1,
                     onToggle: () {
                       setState(() {
                         if (useSplit) {
@@ -609,7 +643,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                         spacing: 14,
                         runSpacing: 6,
                         children: [
-                          Text('活动与调用流', style: serifTitleStyle(c, size: 24)),
+                          Text('活动与调用流', style: serifTitleStyle(c, size: 20)),
                           _InlineTelemetryRibbon(
                             total: widget.events.length,
                             toolCalls: toolCalls,
@@ -791,7 +825,7 @@ class _InlineTelemetryRibbon extends StatelessWidget {
   }
 }
 
-class _DockedInspectorPane extends StatelessWidget {
+class _DockedInspectorPane extends StatefulWidget {
   final Map<String, dynamic> ev;
   final void Function(String text, String msg) onCopy;
 
@@ -801,8 +835,16 @@ class _DockedInspectorPane extends StatelessWidget {
   });
 
   @override
+  State<_DockedInspectorPane> createState() => _DockedInspectorPaneState();
+}
+
+class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
+  String _tab = 'overview'; // overview | json
+
+  @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
+    final ev = widget.ev;
     final kind = (ev['kind'] ?? 'info').toString();
     final status = (ev['status'] ?? 'done').toString();
     final isRunning = status == 'running';
@@ -827,13 +869,24 @@ class _DockedInspectorPane extends StatelessWidget {
       _ => c.muted,
     };
 
+    final rawJsonStr = const JsonEncoder.withIndent('  ').convert({
+      'tool': toolRaw,
+      'status': status,
+      if (ms != null) 'latency_ms': ms,
+      if (source.isNotEmpty) 'source': source,
+      if (ts.isNotEmpty) 'timestamp': ts,
+      if (argsMap != null) 'arguments': argsMap,
+      if (resultStr.isNotEmpty) 'result': resultStr,
+    });
+
     return ClaudeCard(
+      radius: 12,
       padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
+            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -846,16 +899,16 @@ class _DockedInspectorPane extends StatelessWidget {
                     ClaudeStatusDot(
                       color: accent,
                       pulsing: isRunning,
-                      size: 7,
+                      size: 6.5,
                     ),
                     const SizedBox(width: 7),
-                    Icon(tm.$1, size: 16, color: c.inkSoft),
+                    Icon(tm.$1, size: 15, color: c.inkSoft),
                     const SizedBox(width: 6),
                     Text(
                       tm.$2,
                       style: sansStyle(
                         c,
-                        size: 14,
+                        size: 13.5,
                         weight: FontWeight.w600,
                         color: c.ink,
                       ),
@@ -863,14 +916,14 @@ class _DockedInspectorPane extends StatelessWidget {
                     if (toolRaw.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Text(
-                        '($toolRaw)',
-                        style: monoStyle(c, size: 11.5, color: c.meta),
+                        toolRaw,
+                        style: monoStyle(c, size: 11.2, color: c.meta),
                       ),
                     ],
                   ],
                 ),
                 Wrap(
-                  spacing: 8,
+                  spacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ClaudePill(
@@ -881,12 +934,14 @@ class _DockedInspectorPane extends StatelessWidget {
                       fg: accent,
                       bg: accent.withValues(alpha: 0.12),
                     ),
-                    if (source.isNotEmpty || ts.isNotEmpty)
-                      Text(
-                        [if (source.isNotEmpty) source, if (ts.isNotEmpty) ts]
-                            .join(' · '),
-                        style: sansStyle(c, size: 12, color: c.muted),
-                      ),
+                    ClaudeSegmented<String>(
+                      value: _tab,
+                      items: const [
+                        ('overview', '结构化'),
+                        ('json', 'Raw JSON'),
+                      ],
+                      onChanged: (v) => setState(() => _tab = v),
+                    ),
                   ],
                 ),
               ],
@@ -894,18 +949,66 @@ class _DockedInspectorPane extends StatelessWidget {
           ),
           Divider(color: c.hairline, height: 1),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(top: 12),
-              child: _RichToolDetailDrawer(
-                ev: ev,
-                toolRaw: toolRaw,
-                argsMap: argsMap,
-                resultStr: resultStr,
-                summary: summary,
-                onCopy: onCopy,
-                docked: true,
-              ),
-            ),
+            child: _tab == 'json'
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              [
+                                if (source.isNotEmpty) '来源: $source',
+                                if (ts.isNotEmpty) '时间: $ts',
+                              ].join('  ·  '),
+                              style: monoStyle(c, size: 11.2, color: c.muted),
+                            ),
+                            ClaudeButton(
+                              label: '复制 JSON',
+                              compact: true,
+                              leading: const Icon(Icons.copy_rounded),
+                              onPressed: () =>
+                                  widget.onCopy(rawJsonStr, '已复制完整 JSON'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: ShapeDecoration(
+                              color: c.termBg,
+                              shape: claudeSuperellipse(
+                                9,
+                                side: const BorderSide(color: Color(0xFF1F2533)),
+                              ),
+                            ),
+                            child: SingleChildScrollView(
+                              child: SelectableText(
+                                rawJsonStr,
+                                style: monoStyle(c, size: 11.8, color: c.termFg),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: _RichToolDetailDrawer(
+                      ev: ev,
+                      toolRaw: toolRaw,
+                      argsMap: argsMap,
+                      resultStr: resultStr,
+                      summary: summary,
+                      onCopy: widget.onCopy,
+                      docked: true,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -918,6 +1021,8 @@ class _EventCard extends StatefulWidget {
   final bool expanded;
   final bool selected;
   final bool splitMode;
+  final bool isFirst;
+  final bool isLast;
   final VoidCallback onToggle;
   final void Function(String text, String msg) onCopy;
 
@@ -927,6 +1032,8 @@ class _EventCard extends StatefulWidget {
     required this.expanded,
     this.selected = false,
     this.splitMode = false,
+    this.isFirst = false,
+    this.isLast = false,
     required this.onToggle,
     required this.onCopy,
   });
@@ -1032,32 +1139,38 @@ class _EventCardState extends State<_EventCard> {
       );
     }
 
+    final borderRad = BorderRadius.vertical(
+      top: widget.isFirst ? const Radius.circular(11) : Radius.zero,
+      bottom: widget.isLast ? const Radius.circular(11) : Radius.zero,
+    );
+    final rowBg = widget.selected
+        ? Color.alphaBlend(
+            c.clay.withValues(alpha: c.isDark ? 0.16 : 0.08),
+            c.paper2,
+          )
+        : (_hovered
+            ? Color.alphaBlend(
+                c.paper3.withValues(alpha: 0.65),
+                c.paper2,
+              )
+            : c.paper2);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-        curve: ClaudeMotion.editorialOut,
-        decoration: ShapeDecoration(
-          color: widget.selected
-              ? Color.alphaBlend(c.clay.withValues(alpha: 0.06), c.paper2)
-              : c.paper2,
-          shape: claudeSuperellipse(
-            14,
-            side: BorderSide(
-              color: widget.selected
-                  ? c.clay.withValues(alpha: 0.62)
-                  : (widget.expanded
-                      ? accent.withValues(alpha: 0.42)
-                      : (_hovered ? c.ringHover : c.hairline)),
-              width: widget.selected ? 1.3 : 1.0,
-            ),
-          ),
-          shadows: _hovered ? c.cardHoverShadow : c.whisperShadow,
+      child: CustomPaint(
+        foregroundPainter: _EventRowBorderPainter(
+          borderColor: c.hairline,
+          selectedColor: widget.selected ? c.clay : null,
+          isFirst: widget.isFirst,
+          isLast: widget.isLast,
+          radius: 11,
         ),
-        child: ClipRSuperellipse(
-          borderRadius: BorderRadius.circular(14),
-          child: Column(
+        child: ClipRRect(
+          borderRadius: borderRad,
+          child: ColoredBox(
+            color: rowBg,
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               GestureDetector(
@@ -1067,12 +1180,12 @@ class _EventCardState extends State<_EventCard> {
                   cursor: SystemMouseCursors.click,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 10,
+                      horizontal: 12,
+                      vertical: 8.5,
                     ),
                     child: LayoutBuilder(
                       builder: (ctx, rowBox) {
-                        final isCompactRow = rowBox.maxWidth < 560;
+                        final isCompactRow = rowBox.maxWidth < 640;
                         final chevron = widget.splitMode
                             ? Icon(
                                 Icons.chevron_right_rounded,
@@ -1242,8 +1355,95 @@ class _EventCardState extends State<_EventCard> {
             ),
           ),
         ),
+      ),
     );
   }
+}
+
+class _EventRowBorderPainter extends CustomPainter {
+  final Color borderColor;
+  final Color? selectedColor;
+  final bool isFirst;
+  final bool isLast;
+  final double radius;
+
+  const _EventRowBorderPainter({
+    required this.borderColor,
+    required this.selectedColor,
+    required this.isFirst,
+    required this.isLast,
+    required this.radius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = borderColor
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    final rTop = isFirst ? Radius.circular(radius) : Radius.zero;
+    final rBot = isLast ? Radius.circular(radius) : Radius.zero;
+    final rect = (Offset.zero & size).deflate(0.5);
+
+    if (isFirst) {
+      final rrect = RRect.fromRectAndCorners(
+        rect,
+        topLeft: rTop,
+        topRight: rTop,
+        bottomLeft: rBot,
+        bottomRight: rBot,
+      );
+      canvas.drawRRect(rrect, p);
+    } else if (isLast) {
+      final path = Path()
+        ..moveTo(rect.left, 0)
+        ..lineTo(rect.left, rect.bottom - radius)
+        ..arcToPoint(
+          Offset(rect.left + radius, rect.bottom),
+          radius: Radius.circular(radius),
+          clockwise: false,
+        )
+        ..lineTo(rect.right - radius, rect.bottom)
+        ..arcToPoint(
+          Offset(rect.right, rect.bottom - radius),
+          radius: Radius.circular(radius),
+          clockwise: false,
+        )
+        ..lineTo(rect.right, 0);
+      canvas.drawPath(path, p);
+    } else {
+      canvas.drawLine(Offset(rect.left, 0), Offset(rect.left, size.height), p);
+      canvas.drawLine(Offset(rect.right, 0), Offset(rect.right, size.height), p);
+      canvas.drawLine(
+        Offset(rect.left, rect.bottom),
+        Offset(rect.right, rect.bottom),
+        p,
+      );
+    }
+
+    if (selectedColor != null) {
+      final clipRRect = RRect.fromRectAndCorners(
+        Offset.zero & size,
+        topLeft: rTop,
+        bottomLeft: rBot,
+      );
+      canvas.save();
+      canvas.clipRRect(clipRRect);
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, 3.0, size.height),
+        Paint()..color = selectedColor!,
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EventRowBorderPainter oldDelegate) =>
+      oldDelegate.borderColor != borderColor ||
+      oldDelegate.selectedColor != selectedColor ||
+      oldDelegate.isFirst != isFirst ||
+      oldDelegate.isLast != isLast;
 }
 
 (String dir, String base) _splitCompactPath(String rawPath) {
@@ -1364,41 +1564,45 @@ class _RichEventSummary extends StatelessWidget {
       List<Widget> pills = const [],
     }) {
       final (dir, base) = _splitCompactPath(path);
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+      return Wrap(
+        spacing: 6,
+        runSpacing: 3,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13.5, color: c.muted),
-            const SizedBox(width: 5),
-          ],
-          Flexible(
-            child: RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                children: [
-                  if (dir.isNotEmpty)
-                    TextSpan(
-                      text: dir,
-                      style: monoStyle(c, size: 11.5, color: c.meta),
-                    ),
-                  TextSpan(
-                    text: base,
-                    style: monoStyle(
-                      c,
-                      size: 12,
-                      color: c.inkSoft,
-                      weight: FontWeight.w600,
-                    ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13.5, color: c.muted),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    children: [
+                      if (dir.isNotEmpty)
+                        TextSpan(
+                          text: dir,
+                          style: monoStyle(c, size: 11.5, color: c.meta),
+                        ),
+                      TextSpan(
+                        text: base,
+                        style: monoStyle(
+                          c,
+                          size: 12,
+                          color: c.inkSoft,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-          for (final p in pills) ...[
-            const SizedBox(width: 6),
-            p,
-          ],
+          ...pills,
         ],
       );
     }
@@ -1920,7 +2124,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                     color: c.termBg,
                     shape: claudeSuperellipse(
                       11,
-                      side: const BorderSide(color: Color(0xFF2E2D29)),
+                      side: const BorderSide(color: Color(0xFF1F2533)),
                     ),
                   ),
                   child: SingleChildScrollView(
@@ -2166,7 +2370,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
               color: c.termBg,
               shape: claudeSuperellipse(
                 10,
-                side: const BorderSide(color: Color(0xFF2E2D29)),
+                side: const BorderSide(color: Color(0xFF1F2533)),
               ),
             ),
             child: SingleChildScrollView(
@@ -2530,7 +2734,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
             color: c.termBg,
             shape: claudeSuperellipse(
               10,
-              side: const BorderSide(color: Color(0xFF2E2D29)),
+              side: const BorderSide(color: Color(0xFF1F2533)),
             ),
           ),
           child: SingleChildScrollView(
@@ -2561,7 +2765,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
         color: c.termBg,
         shape: claudeSuperellipse(
           10,
-          side: const BorderSide(color: Color(0xFF2E2D29)),
+          side: const BorderSide(color: Color(0xFF1F2533)),
         ),
       ),
       child: Column(
@@ -2583,21 +2787,21 @@ class _RichToolDetailDrawer extends StatelessWidget {
                       text: '后台驻留进程',
                       mono: false,
                       fg: c.sage,
-                      bg: const Color(0xFF233126),
+                      bg: const Color(0x2834D399),
                     ),
                   if (shell.isNotEmpty)
                     ClaudePill(
                       text: shell,
-                      fg: const Color(0xFFFAF9F5),
-                      bg: const Color(0xFF2B2A27),
-                      border: const Color(0xFF45433E),
+                      fg: const Color(0xFFE2E8F0),
+                      bg: const Color(0xFF182030),
+                      border: const Color(0xFF2D3748),
                     ),
                   if (timeout != null)
                     ClaudePill(
                       text: '超时 ${timeout}s',
                       mono: false,
-                      fg: const Color(0xFFA09E96),
-                      bg: const Color(0xFF252421),
+                      fg: const Color(0xFF94A3B8),
+                      bg: const Color(0xFF141A26),
                     ),
                   if (cwd.isNotEmpty)
                     Text(
@@ -2605,7 +2809,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                       style: monoStyle(
                         c,
                         size: 11,
-                        color: const Color(0xFFA09E96),
+                        color: const Color(0xFF94A3B8),
                       ),
                     ),
                 ],
@@ -2620,7 +2824,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           const SizedBox(height: 6),
           SelectableText(
             '\$ $cmd',
-            style: monoStyle(c, size: 12.2, color: const Color(0xFFE9C49A)),
+            style: monoStyle(c, size: 12.2, color: const Color(0xFF93C5FD)),
           ),
         ],
       ),
@@ -2651,7 +2855,7 @@ class _InlineDiffBlock extends StatelessWidget {
         color: palette.termBg,
         shape: claudeSuperellipse(
           10,
-          side: const BorderSide(color: Color(0xFF2E2D29)),
+          side: const BorderSide(color: Color(0xFF1F2533)),
         ),
       ),
       child: ClipRSuperellipse(
@@ -2661,13 +2865,13 @@ class _InlineDiffBlock extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: const Color(0xFF22211E),
+              color: const Color(0xFF131824),
               child: Text(
                 '变更片段 #$index',
                 style: monoStyle(
                   palette,
                   size: 11,
-                  color: const Color(0xFFD99A6C),
+                  color: const Color(0xFF818CF8),
                   weight: FontWeight.w600,
                 ),
               ),

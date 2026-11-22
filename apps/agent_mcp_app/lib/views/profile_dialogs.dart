@@ -261,21 +261,21 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
     final previewEps = _previewDirectEndpoints;
 
     return Dialog(
-      backgroundColor: c.paper2,
+      backgroundColor: c.paper,
       elevation: 0,
       insetPadding: EdgeInsets.symmetric(
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(22, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            compact ? 18 : 26,
-            20,
-            compact ? 18 : 26,
+            compact ? 18 : 24,
             18,
+            compact ? 18 : 24,
+            16,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -895,21 +895,21 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
     final hasMultiUrls = widget.effectiveBaseUrls.length > 1;
 
     return Dialog(
-      backgroundColor: c.paper2,
+      backgroundColor: c.paper,
       elevation: 0,
       insetPadding: EdgeInsets.symmetric(
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(22, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 585, maxHeight: 700),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            compact ? 18 : 26,
-            20,
-            compact ? 18 : 26,
+            compact ? 18 : 24,
             18,
+            compact ? 18 : 24,
+            16,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

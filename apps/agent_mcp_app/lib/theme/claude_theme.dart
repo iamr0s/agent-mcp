@@ -4,28 +4,32 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'claude_motion.dart';
 
 export 'claude_motion.dart';
 
-const String kFontSerif = 'AnthropicSerif';
+/// Unified Modern Geometric UI Sans + Tabular Monospace Typography
+const String kFontSerif = 'AnthropicSans';
 const String kFontSans = 'AnthropicSans';
 const String kFontMono = 'JetBrainsMono';
 
 const List<String> kSerifFallback = [
-  'NotoSerifSC',
-  'Georgia',
-  'Iowan Old Style',
-  'Songti SC',
-  'STSong',
-  'SimSun',
-  'serif',
+  'NotoSansSC',
+  'PingFang SC',
+  'HarmonyOS Sans SC',
+  'MiSans',
+  'Microsoft YaHei UI',
+  'Segoe UI',
+  'sans-serif',
 ];
 
 const List<String> kSansFallback = [
   'NotoSansSC',
   'PingFang SC',
+  'HarmonyOS Sans SC',
+  'MiSans',
   'Microsoft YaHei UI',
   'Segoe UI',
   'sans-serif',
@@ -40,7 +44,7 @@ const List<String> kMonoFallback = [
   'monospace',
 ];
 
-/// Continuous-curvature Superellipse shape helper (continuous-curvature visual standard).
+/// Continuous-curvature Superellipse shape helper.
 RoundedSuperellipseBorder claudeSuperellipse(
   double radius, {
   BorderSide side = BorderSide.none,
@@ -51,48 +55,50 @@ RoundedSuperellipseBorder claudeSuperellipse(
   );
 }
 
-/// Anthropic / Claude Editorial Design Tokens + Frosted Glass / Mica Tokens.
+/// Linear / OrbStack High-Density Architectural Design Tokens.
 class ClaudePalette {
   final bool isDark;
 
-  /// Primary page canvas (Parchment in light, Near-Black in dark)
+  /// Primary workspace island canvas
   final Color paper;
 
-  /// Elevated card surface (Ivory in light, Warm Charcoal in dark)
+  /// Elevated group / modal / popover surface
   final Color paper2;
 
-  /// Warm Sand / interactive secondary surface
+  Color get popover => paper2;
+
+  /// Hover & secondary interactive surface
   final Color paper3;
 
-  /// Sidebar & recessed chrome surface
+  /// Outer architectural frame (sidebar & titlebar rail)
   final Color sidebar;
 
-  /// Recessed input / code inline background
+  /// Subtle recessed input / inline badge well
   final Color recessed;
 
-  /// Primary text (Anthropic Near-Black #141413 / Ivory #FAF9F5)
+  /// Primary high-contrast ink
   final Color ink;
 
-  /// Emphasized secondary text (Dark Warm #3D3D3A)
+  /// Emphasized body ink
   final Color inkSoft;
 
-  /// Secondary body text (Olive Gray #5E5D59 / Warm Silver #B0AEA5)
+  /// Secondary label & subtitle text
   final Color muted;
 
-  /// Tertiary metadata & timestamps (Stone Gray #87867F)
+  /// Tertiary metadata & timestamps
   final Color meta;
 
-  /// Standard 1px warm border (Border Cream / Border Dark)
+  /// Crisp 1px structural hairline ("felt, not seen")
   final Color hairline;
 
-  /// Interactive ring border on hover (Ring Warm #D1CFC5)
+  /// Interactive ring border on hover
   final Color ringHover;
 
-  /// Brand Terracotta CTA (#C96442 light / #D97757 dark)
+  /// Surgical Indigo primary accent
   final Color clay;
   final Color clayHover;
 
-  /// Accessibility input focus ring (#3898EC)
+  /// Input & keyboard focus ring
   final Color focusRing;
 
   final Color sage;
@@ -132,53 +138,53 @@ class ClaudePalette {
 
   static const light = ClaudePalette(
     isDark: false,
-    paper: Color(0xFFF6F7FB), // High-clarity porcelain canvas
-    paper2: Color(0xFFFFFFFF), // Pure elevated card surface
-    paper3: Color(0xFFEEF1F7), // Soft slate interactive fill
-    sidebar: Color(0xFFECEFF6), // Cool frosted-slate rail
-    recessed: Color(0xFFF2F4F9), // Subtle recessed well
-    ink: Color(0xFF0F172A), // Razor-crisp deep slate ink
-    inkSoft: Color(0xFF334155), // Balanced slate body
-    muted: Color(0xFF64748B), // Calm secondary text
-    meta: Color(0xFF94A3B8), // Subtle metadata
-    hairline: Color(0xFFE2E6F0), // Refined 1px border
-    ringHover: Color(0xFFCBD5E1), // Crisp hover ring
-    clay: Color(0xFF4F46E5), // Surgical Indigo primary accent
+    paper: Color(0xFFF8FAFC), // Crisp porcelain island canvas
+    paper2: Color(0xFFFFFFFF), // Pure elevated group / popover surface
+    paper3: Color(0xFFEEF2F8), // Soft cool slate hover fill
+    sidebar: Color(0xFFEDF0F7), // Recessed Linear architectural outer rail
+    recessed: Color(0xFFF2F5FA), // Subtle input well
+    ink: Color(0xFF0F172A), // Deep slate ink
+    inkSoft: Color(0xFF334155),
+    muted: Color(0xFF64748B),
+    meta: Color(0xFF94A3B8),
+    hairline: Color(0xFFE2E8F0), // Soft 1px structural hairline
+    ringHover: Color(0xFFCBD5E1),
+    clay: Color(0xFF4F46E5), // Surgical Indigo
     clayHover: Color(0xFF4338CA),
     focusRing: Color(0xFF4F46E5),
-    sage: Color(0xFF10B981),
-    sageBg: Color(0x1810B981),
-    danger: Color(0xFFEF4444),
-    dangerBg: Color(0x16EF4444),
+    sage: Color(0xFF059669),
+    sageBg: Color(0x1610B981),
+    danger: Color(0xFFDC2626),
+    dangerBg: Color(0x14EF4444),
     purple: Color(0xFF6366F1),
-    purpleBg: Color(0x166366F1),
-    termBg: Color(0xFF0B0D12),
+    purpleBg: Color(0x146366F1),
+    termBg: Color(0xFF0B0E14),
     termFg: Color(0xFFE2E8F0),
   );
 
   static const dark = ClaudePalette(
     isDark: true,
-    paper: Color(0xFF0C0E14), // Raycast deep blue-shifted obsidian
-    paper2: Color(0xFF141720), // Machined elevated obsidian card
-    paper3: Color(0xFF1C202E), // Interactive obsidian surface
-    sidebar: Color(0xFF090B10), // Deep recessed chrome rail
-    recessed: Color(0xFF10131C), // Subtle recessed well
-    ink: Color(0xFFF8FAFC), // Crisp luminous white ink
+    paper: Color(0xFF0E1117), // Linear / OrbStack deep workspace canvas
+    paper2: Color(0xFF141821), // Clean elevated group / popover surface
+    paper3: Color(0xFF1C2230), // Interactive slate hover fill
+    sidebar: Color(0xFF080A0F), // Dimmed outer architectural rail
+    recessed: Color(0xFF0B0E14), // Subtle recessed input / code well
+    ink: Color(0xFFF8FAFC),
     inkSoft: Color(0xFFCBD5E1),
-    muted: Color(0xFF8B95A8), // Airy slate silver
+    muted: Color(0xFF8B95A8),
     meta: Color(0xFF647084),
-    hairline: Color(0xFF222736), // Specular obsidian hairline
-    ringHover: Color(0xFF353D54),
-    clay: Color(0xFF6366F1), // Luminous Indigo punctuation
+    hairline: Color(0xFF1F2533), // Subtle 1px obsidian hairline
+    ringHover: Color(0xFF333D54),
+    clay: Color(0xFF6366F1), // Luminous Indigo
     clayHover: Color(0xFF818CF8),
     focusRing: Color(0xFF818CF8),
     sage: Color(0xFF34D399),
-    sageBg: Color(0x2234D399),
+    sageBg: Color(0x2034D399),
     danger: Color(0xFFF87171),
-    dangerBg: Color(0x22F87171),
+    dangerBg: Color(0x20F87171),
     purple: Color(0xFFA5B4FC),
-    purpleBg: Color(0x226366F1),
-    termBg: Color(0xFF080A0F),
+    purpleBg: Color(0x206366F1),
+    termBg: Color(0xFF090C12),
     termFg: Color(0xFFE2E8F0),
   );
 
@@ -266,103 +272,119 @@ class ClaudePalette {
         : activeLight;
   }
 
-  /// Translucent frosted glass tint for fixed bars & floating surfaces.
+  /// Translucent frosted glass tint for mobile/web floating bars & popovers.
   Color get glassBarTint => isDark
-      ? const Color(0xC813151A) // 78% obsidian glass
-      : const Color(0xD4EFF2F6); // 83% architectural mist
+      ? const Color(0xDC121620)
+      : const Color(0xE8F8FAFC);
 
-  /// Whisper-light translucent chrome tint so Win11 Native Acrylic frosted glass
-  /// shines unmistakably through the top titlebar & left vertical sidebar.
-  Color get micaSidebarTint => Colors.transparent;
+  /// Solid architectural outer rail tint.
+  Color get micaSidebarTint => sidebar;
 
-  /// Crisp Arc / Linear floating reading island over true Win11 Acrylic frosted chrome.
-  Color get micaCanvasTint => isDark
-      ? const Color(0xFA101218) // Raycast deep blue-shifted obsidian island
-      : const Color(0xFCFFFFFF); // Crisp porcelain floating island
+  /// Elevated workspace island surface.
+  Color get micaCanvasTint => paper;
 
-  /// Specular 1px top/inner highlight on frosted glass surfaces.
+  /// Specular 1px highlight on floating popovers.
   Color get glassSpecular => isDark
-      ? const Color(0x18FAF9F5)
-      : const Color(0x88FFFFFF);
+      ? const Color(0x1AF8FAFC)
+      : const Color(0x99FFFFFF);
 
-  /// Sigma-calibrated whisper shadow (`cssBlur -> Skia blurRadius`)
+  /// Whisper-subtle elevation shadow (cool slate, never muddy brown).
   List<BoxShadow> get whisperShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x4D000000),
-            offset: Offset(0, 4),
-            blurRadius: 16,
-            spreadRadius: -4,
+            color: Color(0x38000000),
+            offset: Offset(0, 2),
+            blurRadius: 8,
+            spreadRadius: -2,
           ),
         ]
       : const [
           BoxShadow(
-            color: Color(0x0A141413),
+            color: Color(0x080F172A),
             offset: Offset(0, 1),
-            blurRadius: 2,
-          ),
-          BoxShadow(
-            color: Color(0x0D141413),
-            offset: Offset(0, 6),
-            blurRadius: 18,
-            spreadRadius: -4,
+            blurRadius: 3,
           ),
         ];
 
-  /// Subtle elevated hover shadow for interactive superellipse cards
+  /// Subtle elevated hover shadow for interactive tiles.
   List<BoxShadow> get cardHoverShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x66000000),
-            offset: Offset(0, 8),
-            blurRadius: 22,
+            color: Color(0x52000000),
+            offset: Offset(0, 6),
+            blurRadius: 18,
             spreadRadius: -3,
           ),
         ]
       : const [
           BoxShadow(
-            color: Color(0x10141413),
-            offset: Offset(0, 2),
-            blurRadius: 4,
+            color: Color(0x0D0F172A),
+            offset: Offset(0, 4),
+            blurRadius: 14,
+            spreadRadius: -2,
+          ),
+        ];
+
+  /// Crisp popover / dropdown menu shadow (shadcn / Raycast elevation).
+  List<BoxShadow> get popoverShadow => isDark
+      ? const [
+          BoxShadow(
+            color: Color(0x7A000000),
+            offset: Offset(0, 10),
+            blurRadius: 28,
+            spreadRadius: -2,
           ),
           BoxShadow(
-            color: Color(0x18141413),
+            color: Color(0x3D000000),
+            offset: Offset(0, 2),
+            blurRadius: 6,
+          ),
+        ]
+      : const [
+          BoxShadow(
+            color: Color(0x1C0F172A),
             offset: Offset(0, 10),
-            blurRadius: 24,
+            blurRadius: 26,
             spreadRadius: -4,
+          ),
+          BoxShadow(
+            color: Color(0x0D0F172A),
+            offset: Offset(0, 2),
+            blurRadius: 6,
           ),
         ];
 }
 
-/// Editorial Serif headline style — intentionally capped at weight 500 per Anthropic spec.
+/// Modern Geometric Display Sans headline style (replaces legacy literary serif
+/// across the entire console for crisp Linear / OrbStack developer aesthetic).
 TextStyle serifTitleStyle(
   ClaudePalette c, {
-  double size = 24,
-  FontWeight weight = FontWeight.w500,
+  double size = 20,
+  FontWeight weight = FontWeight.w600,
   Color? color,
-  double height = 1.22,
+  double height = 1.24,
   bool tabular = true,
 }) {
-  final cappedWeight =
-      weight.value > FontWeight.w600.value ? FontWeight.w500 : weight;
+  final effectiveWeight =
+      weight.value < FontWeight.w600.value ? FontWeight.w600 : weight;
   return TextStyle(
-    fontFamily: kFontSerif,
-    fontFamilyFallback: kSerifFallback,
+    fontFamily: kFontSans,
+    fontFamilyFallback: kSansFallback,
     fontSize: size,
-    fontWeight: cappedWeight,
+    fontWeight: effectiveWeight,
     color: color ?? c.ink,
     height: height,
-    letterSpacing: size >= 22 ? -0.25 : -0.1,
+    letterSpacing: size >= 20 ? -0.35 : -0.2,
     fontFeatures: tabular ? const [ui.FontFeature.tabularFigures()] : null,
   );
 }
 
 TextStyle sansStyle(
   ClaudePalette c, {
-  double size = 13.5,
+  double size = 13.0,
   FontWeight weight = FontWeight.w400,
   Color? color,
-  double height = 1.5,
+  double height = 1.46,
   double? letterSpacing,
   bool tabular = false,
 }) {
@@ -380,10 +402,10 @@ TextStyle sansStyle(
 
 TextStyle monoStyle(
   ClaudePalette c, {
-  double size = 12.5,
+  double size = 12.0,
   Color? color,
   FontWeight weight = FontWeight.w400,
-  double height = 1.48,
+  double height = 1.45,
 }) {
   return TextStyle(
     fontFamily: kFontMono,
@@ -397,15 +419,18 @@ TextStyle monoStyle(
   );
 }
 
-ThemeData buildClaudeTheme(ClaudePalette c, {bool transparentScaffold = false}) {
+ThemeData buildClaudeTheme(
+  ClaudePalette c, {
+  bool transparentScaffold = false,
+}) {
   final scheme = ColorScheme(
     brightness: c.isDark ? Brightness.dark : Brightness.light,
     primary: c.clay,
-    onPrimary: const Color(0xFFFAF9F5),
+    onPrimary: Colors.white,
     secondary: c.sage,
-    onSecondary: const Color(0xFFFAF9F5),
+    onSecondary: Colors.white,
     error: c.danger,
-    onError: const Color(0xFFFAF9F5),
+    onError: Colors.white,
     surface: c.paper,
     onSurface: c.ink,
   );
@@ -425,73 +450,85 @@ ThemeData buildClaudeTheme(ClaudePalette c, {bool transparentScaffold = false}) 
     fontFamily: kFontSans,
     fontFamilyFallback: kSansFallback,
     textTheme: TextTheme(
-      displayLarge: serifTitleStyle(c, size: 36),
-      headlineMedium: serifTitleStyle(c, size: 25),
-      titleLarge: serifTitleStyle(c, size: 19),
-      titleMedium: baseText.copyWith(fontSize: 15, fontWeight: FontWeight.w500),
-      bodyLarge: baseText.copyWith(fontSize: 14.5, height: 1.58),
-      bodyMedium: baseText.copyWith(fontSize: 13.5, height: 1.54),
-      bodySmall: baseText.copyWith(fontSize: 12, color: c.muted, height: 1.45),
-      labelLarge: baseText.copyWith(fontSize: 13, fontWeight: FontWeight.w500),
+      displayLarge: serifTitleStyle(c, size: 30),
+      headlineMedium: serifTitleStyle(c, size: 22),
+      titleLarge: serifTitleStyle(c, size: 17.5),
+      titleMedium: baseText.copyWith(fontSize: 14.5, fontWeight: FontWeight.w600),
+      bodyLarge: baseText.copyWith(fontSize: 14, height: 1.52),
+      bodyMedium: baseText.copyWith(fontSize: 13, height: 1.48),
+      bodySmall: baseText.copyWith(fontSize: 12, color: c.muted, height: 1.42),
+      labelLarge: baseText.copyWith(fontSize: 12.8, fontWeight: FontWeight.w500),
       labelSmall: baseText.copyWith(
-        fontSize: 11.5,
+        fontSize: 11.2,
         color: c.muted,
-        letterSpacing: 0.15,
+        letterSpacing: 0.1,
       ),
     ),
     dividerColor: c.hairline,
+    dividerTheme: DividerThemeData(color: c.hairline, thickness: 1, space: 1),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
     hoverColor: Colors.transparent,
+    dialogTheme: DialogThemeData(
+      backgroundColor: c.paper2,
+      elevation: 0,
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: c.paper2,
+      elevation: 8,
+      surfaceTintColor: Colors.transparent,
+      shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+      textStyle: sansStyle(c, size: 12.5, weight: FontWeight.w500),
+    ),
     tooltipTheme: TooltipThemeData(
-      waitDuration: const Duration(milliseconds: 380),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      waitDuration: const Duration(milliseconds: 340),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: ShapeDecoration(
-        color: c.isDark ? const Color(0xF22E2D29) : const Color(0xF223221F),
+        color: c.isDark ? const Color(0xF51E2433) : const Color(0xF50F172A),
         shape: claudeSuperellipse(
-          9,
+          8,
           side: BorderSide(
-            color: c.isDark ? const Color(0xFF45433E) : const Color(0xFF3A3935),
+            color: c.isDark ? const Color(0xFF333D54) : const Color(0xFF1E293B),
           ),
         ),
       ),
       textStyle: const TextStyle(
         fontFamily: kFontSans,
         fontFamilyFallback: kSansFallback,
-        fontSize: 12,
-        color: Color(0xFFFAF9F5),
+        fontSize: 11.8,
+        fontWeight: FontWeight.w500,
+        color: Color(0xFFF8FAFC),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.recessed,
+      fillColor: c.isDark ? c.recessed : c.paper2,
       isDense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 13, vertical: 10.5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
       hintStyle: TextStyle(
         fontFamily: kFontSans,
         fontFamilyFallback: kSansFallback,
         color: c.meta,
-        fontSize: 13,
+        fontSize: 12.6,
       ),
+      // Fixed 10px radius across all states — zero hover/focus edge jitter!
       border: WidgetStateInputBorder.resolveWith((states) {
         if (states.contains(WidgetState.focused)) {
           return OutlineInputBorder(
-            borderRadius: BorderRadius.circular(11.5),
+            borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: c.focusRing, width: 1.4),
           );
         }
         if (states.contains(WidgetState.hovered)) {
           return OutlineInputBorder(
-            borderRadius: BorderRadius.circular(11.5),
+            borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: c.ringHover),
           );
         }
         return OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
-          borderSide: BorderSide(
-            color: c.hairline.withValues(alpha: c.isDark ? 0.5 : 0.3),
-          ),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: c.hairline),
         );
       }),
     ),
@@ -501,17 +538,15 @@ ThemeData buildClaudeTheme(ClaudePalette c, {bool transparentScaffold = false}) 
             states.contains(WidgetState.dragged)) {
           return c.muted.withValues(alpha: 0.55);
         }
-        return c.muted.withValues(alpha: 0.26);
+        return c.muted.withValues(alpha: 0.25);
       }),
       radius: const Radius.circular(99),
-      thickness: WidgetStateProperty.all(6),
+      thickness: WidgetStateProperty.all(5),
     ),
   );
 }
 
-/// Frosted Glass Chrome Surface — strictly reserved for fixed structural layers
-/// (header bar, sticky filter header, bottom status bar, floating toast, and
-/// modal sheets) so 120Hz scrolling stays under 2ms/frame.
+/// Frosted Glass Chrome Surface — reserved for mobile/web floating bars & popovers.
 class ClaudeGlassBar extends StatelessWidget {
   final Widget child;
   final double blurSigma;
@@ -588,9 +623,250 @@ class ClaudeGlassBar extends StatelessWidget {
   }
 }
 
-/// Responsive 2-Column / Stacked Form Row shared across Setup & Sub-MCP forms.
-/// Automatically stacks vertically below [stackBreakpoint] (`460dp`) so narrow
-/// mobile/split windows never suffer horizontal `RenderFlex` overflow.
+/// Linear / OrbStack De-Boxed Hairline Group Container.
+/// Replaces heavy nested cards with a crisp 12px-radius container and 1px
+/// inset row dividers ("structure felt, not seen").
+class ClaudeListGroup extends StatelessWidget {
+  final String? title;
+  final String? headerLabel;
+  final String? subtitle;
+  final Widget? headerTrailing;
+  final List<Widget> children;
+  final double radius;
+  final double dividerIndent;
+  final EdgeInsetsGeometry? margin;
+
+  const ClaudeListGroup({
+    super.key,
+    this.title,
+    this.headerLabel,
+    this.subtitle,
+    this.headerTrailing,
+    required this.children,
+    this.radius = 12,
+    this.dividerIndent = 16,
+    this.margin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final effTitle = title ?? headerLabel;
+    final hasHeader =
+        (effTitle != null && effTitle.isNotEmpty) || headerTrailing != null;
+
+    Widget box = DecoratedBox(
+      decoration: ShapeDecoration(
+        color: c.paper2,
+        shape: claudeSuperellipse(
+          radius,
+          side: BorderSide(color: c.hairline),
+        ),
+        shadows: c.whisperShadow,
+      ),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(radius),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0)
+                Padding(
+                  padding: EdgeInsets.only(left: dividerIndent),
+                  child: Divider(height: 1, thickness: 1, color: c.hairline),
+                ),
+              children[i],
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (hasHeader) {
+      box = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (effTitle != null && effTitle.isNotEmpty)
+                        Text(
+                          effTitle,
+                          style: sansStyle(
+                            c,
+                            size: 13.5,
+                            weight: FontWeight.w600,
+                            color: c.ink,
+                          ),
+                        ),
+                      if (subtitle != null && subtitle!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
+                          style: sansStyle(c, size: 11.8, color: c.muted),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (headerTrailing != null) ...[
+                  const SizedBox(width: 10),
+                  headerTrailing!,
+                ],
+              ],
+            ),
+          ),
+          box,
+        ],
+      );
+    }
+
+    if (margin != null) {
+      return Padding(padding: margin!, child: box);
+    }
+    return box;
+  }
+}
+
+/// Standardized macOS / Clash Verge Rev Settings Row inside a [ClaudeListGroup].
+class ClaudeSettingsRow extends StatelessWidget {
+  final IconData? icon;
+  final Color? iconColor;
+  final Widget? leading;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget? bottomChild;
+  final VoidCallback? onTap;
+  final double stackBreakpoint;
+
+  const ClaudeSettingsRow({
+    super.key,
+    this.icon,
+    this.iconColor,
+    this.leading,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.bottomChild,
+    this.onTap,
+    this.stackBreakpoint = 430,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        final stack = box.maxWidth < stackBreakpoint &&
+            trailing != null &&
+            trailing is! ClaudeSwitch &&
+            trailing is! Icon;
+        final labelBlock = Row(
+          crossAxisAlignment: subtitle != null && subtitle!.isNotEmpty
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
+          children: [
+            if (leading != null) ...[
+              leading!,
+              const SizedBox(width: 11),
+            ] else if (icon != null) ...[
+              Padding(
+                padding: EdgeInsets.only(
+                  top: (subtitle != null && subtitle!.isNotEmpty) ? 2 : 0,
+                ),
+                child: Icon(icon, size: 16.5, color: iconColor ?? c.muted),
+              ),
+              const SizedBox(width: 11),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: sansStyle(
+                      c,
+                      size: 13.2,
+                      weight: FontWeight.w500,
+                      color: c.ink,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: sansStyle(
+                        c,
+                        size: 11.8,
+                        color: c.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+
+        Widget content = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11.5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (stack) ...[
+                labelBlock,
+                if (trailing != null) ...[
+                  const SizedBox(height: 9),
+                  trailing!,
+                ],
+              ] else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: labelBlock),
+                    if (trailing != null) ...[
+                      const SizedBox(width: 14),
+                      Flexible(flex: 0, child: trailing!),
+                    ],
+                  ],
+                ),
+              if (bottomChild != null) ...[
+                const SizedBox(height: 10),
+                bottomChild!,
+              ],
+            ],
+          ),
+        );
+
+        if (onTap != null) {
+          content = Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              hoverColor: c.paper3.withValues(alpha: 0.55),
+              child: content,
+            ),
+          );
+        }
+        return content;
+      },
+    );
+  }
+}
+
+/// Responsive 2-Column / Stacked Form Row shared across modal forms.
 class ClaudeFormRow extends StatelessWidget {
   final String label;
   final String? subtitle;
@@ -604,7 +880,7 @@ class ClaudeFormRow extends StatelessWidget {
     required this.label,
     this.subtitle,
     required this.child,
-    this.labelWidth = 156,
+    this.labelWidth = 148,
     this.stackBreakpoint = 460,
     this.horizontalAlignment = CrossAxisAlignment.start,
   });
@@ -623,16 +899,16 @@ class ClaudeFormRow extends StatelessWidget {
               label,
               style: sansStyle(
                 c,
-                size: 13.5,
+                size: 13,
                 weight: FontWeight.w500,
                 color: c.ink,
               ),
             ),
             if (subtitle != null && subtitle!.isNotEmpty) ...[
-              const SizedBox(height: 2.5),
+              const SizedBox(height: 2),
               Text(
                 subtitle!,
-                style: sansStyle(c, size: 12, color: c.muted, height: 1.42),
+                style: sansStyle(c, size: 11.6, color: c.muted, height: 1.4),
               ),
             ],
           ],
@@ -640,13 +916,13 @@ class ClaudeFormRow extends StatelessWidget {
 
         if (compact) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.only(bottom: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
                 labelBlock,
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 child,
               ],
             ),
@@ -654,7 +930,7 @@ class ClaudeFormRow extends StatelessWidget {
         }
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(bottom: 13),
           child: Row(
             crossAxisAlignment: horizontalAlignment,
             children: [
@@ -663,7 +939,7 @@ class ClaudeFormRow extends StatelessWidget {
                 child: Padding(
                   padding: EdgeInsets.only(
                     top: horizontalAlignment == CrossAxisAlignment.start ? 7 : 0,
-                    right: 14,
+                    right: 12,
                   ),
                   child: labelBlock,
                 ),
@@ -677,7 +953,7 @@ class ClaudeFormRow extends StatelessWidget {
   }
 }
 
-/// Unified Agent MCP Brand Icon (matches Windows taskbar/tray, macOS dock & Android launcher)
+/// Unified Agent MCP Brand Icon (matches Windows taskbar/tray, macOS dock & Android launcher).
 class ClaudeSparkIcon extends StatelessWidget {
   final double size;
   final Color? color;
@@ -783,22 +1059,21 @@ class _ClaudeButtonState extends State<ClaudeButton> {
     switch (widget.variant) {
       case ClaudeBtnVariant.clay:
         bg = _hovered && !disabled ? c.clayHover : c.clay;
-        fg = const Color(0xFFFAF9F5);
+        fg = Colors.white;
         border = bg;
       case ClaudeBtnVariant.ink:
         bg = _hovered && !disabled
-            ? (c.isDark ? const Color(0xFFE6E3D8) : const Color(0xFF2B2A27))
+            ? (c.isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B))
             : c.ink;
-        fg = c.paper;
+        fg = c.paper2;
         border = bg;
       case ClaudeBtnVariant.danger:
         bg = _hovered && !disabled ? c.danger.withValues(alpha: 0.88) : c.danger;
-        fg = const Color(0xFFFAF9F5);
+        fg = Colors.white;
         border = bg;
       case ClaudeBtnVariant.ghost:
-        // Same-hue 0.0 alpha avoids black-RGB interpolation flash on hover
         bg = _hovered && !disabled
-            ? c.paper3.withValues(alpha: 0.72)
+            ? c.paper3.withValues(alpha: 0.85)
             : c.paper3.withValues(alpha: 0.0);
         fg = _hovered && !disabled ? c.ink : c.muted;
         border = _hovered && !disabled
@@ -806,13 +1081,14 @@ class _ClaudeButtonState extends State<ClaudeButton> {
             : c.hairline.withValues(alpha: 0.0);
       case ClaudeBtnVariant.neutral:
         bg = _hovered && !disabled ? c.paper3 : c.paper2;
-        fg = c.inkSoft;
+        fg = _hovered && !disabled ? c.ink : c.inkSoft;
         border = _hovered && !disabled ? c.ringHover : c.hairline;
     }
 
-    final radius = widget.compact ? 10.0 : 12.0;
-    final iconSize = widget.compact ? 14.5 : 16.0;
-    final effFg = (disabled && !widget.loading) ? fg.withValues(alpha: 0.5) : fg;
+    final iconOnly = widget.label.isEmpty && (widget.leading != null || widget.loading);
+    final radius = widget.compact ? 8.5 : 10.0;
+    final iconSize = widget.compact ? 14.5 : 15.5;
+    final effFg = (disabled && !widget.loading) ? fg.withValues(alpha: 0.45) : fg;
     final effBg = (disabled && !widget.loading) ? bg.withValues(alpha: 0.45) : bg;
     final effBorder =
         (disabled && !widget.loading) ? border.withValues(alpha: 0.4) : border;
@@ -821,14 +1097,14 @@ class _ClaudeButtonState extends State<ClaudeButton> {
         ? AnimatedSwitcher(
             duration: ClaudeMotion.duration(
               context,
-              const Duration(milliseconds: 180),
+              const Duration(milliseconds: 160),
             ),
             switchInCurve: ClaudeMotion.editorialOut,
             switchOutCurve: Curves.easeOut,
             transitionBuilder: (child, anim) => FadeTransition(
               opacity: anim,
               child: ScaleTransition(
-                scale: Tween<double>(begin: 0.82, end: 1.0).animate(anim),
+                scale: Tween<double>(begin: 0.84, end: 1.0).animate(anim),
                 child: child,
               ),
             ),
@@ -840,7 +1116,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
                     child: Padding(
                       padding: const EdgeInsets.all(1.0),
                       child: CircularProgressIndicator(
-                        strokeWidth: 1.85,
+                        strokeWidth: 1.8,
                         valueColor: AlwaysStoppedAnimation<Color>(effFg),
                       ),
                     ),
@@ -856,19 +1132,22 @@ class _ClaudeButtonState extends State<ClaudeButton> {
         : null;
 
     Widget content = AnimatedScale(
-      scale: (_pressed && !disabled) ? 0.965 : 1.0,
+      scale: (_pressed && !disabled) ? 0.97 : 1.0,
       duration: ClaudeMotion.duration(
         context,
         _pressed
-            ? const Duration(milliseconds: 85)
-            : const Duration(milliseconds: 200),
+            ? const Duration(milliseconds: 75)
+            : const Duration(milliseconds: 180),
       ),
       curve: _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
       child: AnimatedContainer(
         duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
         curve: ClaudeMotion.editorialOut,
-        height: widget.compact ? 32 : 38,
-        padding: EdgeInsets.symmetric(horizontal: widget.compact ? 11.5 : 16),
+        height: widget.compact ? 30 : 35,
+        width: iconOnly ? (widget.compact ? 30 : 35) : null,
+        padding: iconOnly
+            ? EdgeInsets.zero
+            : EdgeInsets.symmetric(horizontal: widget.compact ? 10.5 : 14),
         decoration: ShapeDecoration(
           color: effBg,
           shape: claudeSuperellipse(
@@ -882,7 +1161,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
           children: [
             if (leadingSlot != null) ...[
               leadingSlot,
-              if (widget.label.isNotEmpty) const SizedBox(width: 6.5),
+              if (widget.label.isNotEmpty) const SizedBox(width: 6),
             ],
             if (widget.label.isNotEmpty)
               Flexible(
@@ -893,10 +1172,9 @@ class _ClaudeButtonState extends State<ClaudeButton> {
                   style: TextStyle(
                     fontFamily: kFontSans,
                     fontFamilyFallback: kSansFallback,
-                    fontSize: widget.compact ? 12.5 : 13.5,
+                    fontSize: widget.compact ? 12.2 : 13.0,
                     fontWeight: FontWeight.w500,
                     color: effFg,
-                    letterSpacing: 0.05,
                   ),
                 ),
               ),
@@ -935,7 +1213,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
   }
 }
 
-/// Elevated Ivory / Charcoal Superellipse Editorial Card with 1px containment & whisper shadow.
+/// Crisp Surface Container Card with clean 12px default superellipse radius & 1px hairline.
 class ClaudeCard extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -946,10 +1224,10 @@ class ClaudeCard extends StatefulWidget {
   const ClaudeCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+    this.padding = const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
     this.onTap,
     this.hoverable = false,
-    this.radius = 20,
+    this.radius = 12,
   });
 
   @override
@@ -971,22 +1249,13 @@ class _ClaudeCardState extends State<ClaudeCard> {
       width: double.infinity,
       padding: widget.padding,
       decoration: ShapeDecoration(
-        color: c.isDark ? null : c.paper2,
-        gradient: c.isDark
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF181C28), Color(0xFF131620)],
-              )
-            : null,
+        color: (_hovered && interactive)
+            ? Color.lerp(c.paper2, c.paper3, 0.45)
+            : c.paper2,
         shape: claudeSuperellipse(
           widget.radius,
           side: BorderSide(
-            color: (_hovered && interactive)
-                ? c.ringHover
-                : (c.isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0x140F172A)),
+            color: (_hovered && interactive) ? c.ringHover : c.hairline,
           ),
         ),
         shadows: (_hovered && interactive) ? c.cardHoverShadow : c.whisperShadow,
@@ -1030,7 +1299,7 @@ class _ClaudeCardState extends State<ClaudeCard> {
   }
 }
 
-/// Spring Sliding-Pill Segmented Control (superellipse style + narrow-safe scroll).
+/// Spring Sliding-Pill Segmented Control (compact Linear / shadcn style).
 class ClaudeSegmented<T> extends StatefulWidget {
   final List<(T, String)> items;
   final T value;
@@ -1103,7 +1372,7 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final pillDur = _animatePill
-        ? ClaudeMotion.duration(context, const Duration(milliseconds: 250))
+        ? ClaudeMotion.duration(context, const Duration(milliseconds: 230))
         : Duration.zero;
 
     return SingleChildScrollView(
@@ -1111,11 +1380,14 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
       physics: const ClampingScrollPhysics(),
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          color: c.paper3.withValues(alpha: c.isDark ? 0.85 : 0.68),
-          shape: claudeSuperellipse(13),
+          color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
+          shape: claudeSuperellipse(
+            9.5,
+            side: BorderSide(color: c.hairline.withValues(alpha: 0.7)),
+          ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.all(2.5),
           child: IntrinsicWidth(
             child: Stack(
               alignment: Alignment.centerLeft,
@@ -1130,21 +1402,21 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
                     width: _pillWidth!,
                     child: DecoratedBox(
                       decoration: ShapeDecoration(
-                        color: c.paper2,
+                        color: c.isDark ? c.paper3 : c.paper2,
                         shape: claudeSuperellipse(
-                          9,
+                          7.5,
                           side: BorderSide(
                             color: c.isDark
                                 ? c.ringHover
-                                : c.hairline.withValues(alpha: 0.9),
+                                : c.hairline.withValues(alpha: 0.85),
                           ),
                         ),
                         shadows: [
                           BoxShadow(
                             color: Colors.black
-                                .withValues(alpha: c.isDark ? 0.28 : 0.06),
-                            blurRadius: 6,
-                            offset: const Offset(0, 1.5),
+                                .withValues(alpha: c.isDark ? 0.25 : 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
                           ),
                         ],
                       ),
@@ -1209,11 +1481,11 @@ class _SegmentTapItemState extends State<_SegmentTapItem> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11.5, vertical: 5.5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
           decoration: widget.fallbackHighlight
               ? ShapeDecoration(
-                  color: c.paper2,
-                  shape: claudeSuperellipse(9),
+                  color: c.isDark ? c.paper3 : c.paper2,
+                  shape: claudeSuperellipse(7.5),
                 )
               : null,
           child: Text(
@@ -1222,7 +1494,7 @@ class _SegmentTapItemState extends State<_SegmentTapItem> {
             style: TextStyle(
               fontFamily: kFontSans,
               fontFamilyFallback: kSansFallback,
-              fontSize: 12.5,
+              fontSize: 12.0,
               fontWeight: widget.active ? FontWeight.w600 : FontWeight.w500,
               color: widget.active
                   ? c.ink
@@ -1260,30 +1532,33 @@ class ClaudePill extends StatelessWidget {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: bg ?? c.recessed,
-        shape: StadiumBorder(side: BorderSide(color: border ?? c.hairline)),
+        shape: claudeSuperellipse(
+          6.5,
+          side: BorderSide(color: border ?? c.hairline.withValues(alpha: 0.85)),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (leading != null) ...[
               IconTheme(
-                data: IconThemeData(size: 12, color: effFg),
+                data: IconThemeData(size: 11.5, color: effFg),
                 child: leading!,
               ),
-              const SizedBox(width: 4.5),
+              const SizedBox(width: 4),
             ],
             Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: mono
-                  ? monoStyle(c, size: 11, color: effFg, weight: FontWeight.w500)
+                  ? monoStyle(c, size: 10.8, color: effFg, weight: FontWeight.w500)
                   : TextStyle(
                       fontFamily: kFontSans,
                       fontFamilyFallback: kSansFallback,
-                      fontSize: 11.5,
+                      fontSize: 11.2,
                       fontWeight: FontWeight.w500,
                       color: effFg,
                       fontFeatures: const [ui.FontFeature.tabularFigures()],
@@ -1296,7 +1571,7 @@ class ClaudePill extends StatelessWidget {
   }
 }
 
-/// Elastic Thumb-Stretch Toggle Switch (elastic thumb-stretch physics)
+/// Elastic Thumb-Stretch Toggle Switch.
 class ClaudeSwitch extends StatefulWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -1311,12 +1586,12 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
     with TickerProviderStateMixin {
   late final AnimationController _posCtrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 250),
+    duration: const Duration(milliseconds: 230),
     value: widget.value ? 1.0 : 0.0,
   );
   late final AnimationController _pressCtrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 130),
+    duration: const Duration(milliseconds: 120),
   );
   bool _hovered = false;
 
@@ -1326,7 +1601,7 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
     if (oldWidget.value != widget.value) {
       final d = ClaudeMotion.duration(
         context,
-        const Duration(milliseconds: 250),
+        const Duration(milliseconds: 230),
       );
       _posCtrl.duration = d;
       if (d == Duration.zero) {
@@ -1379,11 +1654,11 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
               final pressT =
                   ClaudeMotion.editorialOut.transform(_pressCtrl.value);
 
-              const trackW = 42.0;
-              const trackH = 24.0;
-              const pad = 2.5;
-              final thumbW = 18.0 + 4.0 * pressT;
-              const thumbH = 18.0;
+              const trackW = 38.0;
+              const trackH = 22.0;
+              const pad = 2.0;
+              final thumbW = 16.5 + 3.5 * pressT;
+              const thumbH = 16.5;
               final maxTravel = trackW - pad * 2 - thumbW;
               final thumbLeft =
                   pad + (maxTravel * springPos).clamp(-1.0, maxTravel + 1.0);
@@ -1418,12 +1693,12 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
                         height: thumbH,
                         child: DecoratedBox(
                           decoration: ShapeDecoration(
-                            color: const Color(0xFFFAF9F5),
+                            color: Colors.white,
                             shape: const StadiumBorder(),
                             shadows: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.18),
-                                blurRadius: 3,
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 2.5,
                                 offset: const Offset(0, 1),
                               ),
                             ],
@@ -1442,7 +1717,7 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
   }
 }
 
-/// Tactile Superellipse Checkbox Row with spring bounce
+/// Tactile Superellipse Checkbox Row with spring bounce.
 class ClaudeCheckToggle extends StatefulWidget {
   final bool value;
   final String label;
@@ -1493,17 +1768,17 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
                 child: AnimatedContainer(
                   duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
                   curve: ClaudeMotion.editorialOut,
-                  width: 18,
-                  height: 18,
+                  width: 17,
+                  height: 17,
                   decoration: ShapeDecoration(
                     color: widget.value ? c.clay : c.recessed,
                     shape: claudeSuperellipse(
-                      6,
+                      5.5,
                       side: BorderSide(
                         color: widget.value
                             ? c.clay
                             : (_hovered ? c.muted : c.ringHover),
-                        width: 1.35,
+                        width: 1.3,
                       ),
                     ),
                   ),
@@ -1518,8 +1793,8 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
                         ? const Icon(
                             Icons.check_rounded,
                             key: ValueKey('checked'),
-                            size: 13,
-                            color: Color(0xFFFAF9F5),
+                            size: 12.5,
+                            color: Colors.white,
                           )
                         : const SizedBox.shrink(key: ValueKey('unchecked')),
                   ),
@@ -1531,7 +1806,7 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
                   widget.label,
                   style: sansStyle(
                     c,
-                    size: 13,
+                    size: 12.8,
                     color: _hovered ? c.ink : c.inkSoft,
                   ),
                 ),
@@ -1573,13 +1848,13 @@ class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
       obscureText: _obscure,
       onSubmitted: widget.onSubmitted,
       onChanged: widget.onChanged,
-      style: monoStyle(c, size: 13, color: c.ink),
+      style: monoStyle(c, size: 12.6, color: c.ink),
       decoration: InputDecoration(
         hintText: widget.hintText,
         suffixIconConstraints:
-            const BoxConstraints(minWidth: 38, minHeight: 32),
+            const BoxConstraints(minWidth: 36, minHeight: 30),
         suffixIcon: IconButton(
-          iconSize: 16,
+          iconSize: 15.5,
           tooltip: _obscure ? '显示密钥' : '隐藏密钥',
           onPressed: () => setState(() => _obscure = !_obscure),
           icon: ClaudeFadeBox(
@@ -1598,7 +1873,7 @@ class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
   }
 }
 
-/// Opens a modal dialog with frosted scrim blur + critically-damped spring physics.
+/// Opens a modal dialog with cool obsidian scrim blur + critically-damped spring physics.
 Future<T?> showClaudeDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -1608,7 +1883,7 @@ Future<T?> showClaudeDialog<T>({
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: const Color(0x52141413),
+    barrierColor: const Color(0x59080B12),
     transitionDuration: ClaudeMotion.duration(context, ClaudeMotion.modal),
     pageBuilder: (ctx, _, __) => SafeArea(child: Builder(builder: builder)),
     transitionBuilder: (ctx, anim, _, child) {
@@ -1617,9 +1892,9 @@ Future<T?> showClaudeDialog<T>({
           ? Curves.easeInCubic.transform(anim.value)
           : ClaudeMotion.snappySpring.transform(anim.value);
       final opacity = Curves.easeOut.transform(anim.value).clamp(0.0, 1.0);
-      final scale = 0.95 + 0.05 * curved;
-      final dy = (1.0 - curved) * 8.0;
-      final blurSigma = (opacity * 5.0).clamp(0.0, 5.0);
+      final scale = 0.96 + 0.04 * curved;
+      final dy = (1.0 - curved) * 6.0;
+      final blurSigma = (opacity * 4.0).clamp(0.0, 4.0);
 
       return BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
@@ -1659,17 +1934,17 @@ Future<bool> showClaudeConfirmDialog(
           vertical: 20,
         ),
         shape: claudeSuperellipse(
-          22,
+          16,
           side: BorderSide(color: c.hairline),
         ),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
+          constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              compact ? 20 : 26,
-              22,
-              compact ? 20 : 26,
+              compact ? 18 : 22,
               20,
+              compact ? 18 : 22,
+              18,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1677,25 +1952,39 @@ Future<bool> showClaudeConfirmDialog(
               children: [
                 Row(
                   children: [
-                    ClaudeSparkIcon(
-                      size: 18,
-                      color: destructive ? c.danger : c.clay,
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: ShapeDecoration(
+                        color: destructive
+                            ? c.dangerBg
+                            : c.clay.withValues(alpha: 0.12),
+                        shape: claudeSuperellipse(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        destructive
+                            ? Icons.warning_amber_rounded
+                            : Icons.info_outline_rounded,
+                        size: 16,
+                        color: destructive ? c.danger : c.clay,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(title, style: serifTitleStyle(c, size: 19.5)),
+                      child: Text(title, style: serifTitleStyle(c, size: 16.5)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 11),
                 Text(
                   message,
-                  style: sansStyle(c, size: 13.5, height: 1.62, color: c.muted),
+                  style: sansStyle(c, size: 13.0, height: 1.56, color: c.muted),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 18),
                 Wrap(
                   alignment: WrapAlignment.end,
-                  spacing: 10,
+                  spacing: 8,
                   runSpacing: 8,
                   children: [
                     ClaudeButton(
@@ -1723,7 +2012,7 @@ Future<bool> showClaudeConfirmDialog(
   return res ?? false;
 }
 
-/// Pixel-aligned 10x10 Windows 11 Caption Glyphs (pixel-aligned 10x10 Win11 glyphs).
+/// Pixel-aligned 10x10 Windows 11 Caption Glyphs.
 enum ClaudeCaptionGlyph { minimize, maximize, restore, close }
 
 class ClaudeCaptionIcon extends StatelessWidget {
@@ -1836,7 +2125,7 @@ class ClaudeWindowCaptionActions extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         _WinCaptionBtn(
           tooltip: '最小化',
           glyph: ClaudeCaptionGlyph.minimize,
@@ -1907,10 +2196,10 @@ class _PinButtonState extends State<_PinButton> {
           curve: ClaudeMotion.snappySpring,
           child: AnimatedContainer(
             duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-            width: 30,
-            height: 30,
+            width: 28,
+            height: 28,
             decoration: ShapeDecoration(
-              shape: claudeSuperellipse(9),
+              shape: claudeSuperellipse(7.5),
               color: active
                   ? c.clay.withValues(alpha: 0.14)
                   : (_hovered ? c.paper3 : c.paper3.withValues(alpha: 0.0)),
@@ -1922,7 +2211,7 @@ class _PinButtonState extends State<_PinButton> {
               curve: ClaudeMotion.snappySpring,
               child: Icon(
                 active ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                size: 14.5,
+                size: 14,
                 color: active ? c.clay : (_hovered ? c.ink : c.muted),
               ),
             ),
@@ -1967,17 +2256,17 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
     if (widget.isClose) {
       if (_pressed) {
         bg = c.danger.withValues(alpha: 0.85);
-        fg = const Color(0xFFFAF9F5);
+        fg = Colors.white;
       } else if (_hovered) {
         bg = c.danger;
-        fg = const Color(0xFFFAF9F5);
+        fg = Colors.white;
       }
     } else {
       if (_pressed) {
-        bg = c.ink.withValues(alpha: 0.11);
+        bg = c.ink.withValues(alpha: 0.10);
         fg = c.ink;
       } else if (_hovered) {
-        bg = c.ink.withValues(alpha: 0.065);
+        bg = c.ink.withValues(alpha: 0.06);
         fg = c.ink;
       }
     }
@@ -2005,7 +2294,7 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
               context,
               const Duration(milliseconds: 110),
             ),
-            width: 44,
+            width: 42,
             color: bg,
             alignment: Alignment.center,
             child: ClaudeFadeBox(
@@ -2024,22 +2313,38 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
   }
 }
 
+// ============================================================================
+// Unified Popover, DropMenu v2, ActionMenu & SplitButton System
+// (shadcn/ui + Raycast + Linear 4-edge auto-flip & keyboard navigation)
+// ============================================================================
+
 class ClaudeDropMenuItem<T> {
   final T value;
   final String label;
+  final String? subtitle;
   final IconData? icon;
   final String? badge;
+  final String? shortcut;
+  final bool destructive;
+  final bool dividerBefore;
+  final String? groupLabel;
 
   const ClaudeDropMenuItem({
     required this.value,
     required this.label,
+    this.subtitle,
     this.icon,
     this.badge,
+    this.shortcut,
+    this.destructive = false,
+    this.dividerBefore = false,
+    this.groupLabel,
   });
 }
 
-/// Editorial frosted-glass floating DropMenu with hover elevation shadow,
-/// spring scale-in physics, and tactile item press feedback.
+/// High-craft Linear / shadcn Select & DropMenu with 4-edge viewport auto-flip,
+/// keyboard navigation (Esc / Up / Down / Enter), optional inline search,
+/// section dividers, and pure Cool Porcelain / Deep Obsidian surface.
 class ClaudeDropMenu<T> extends StatefulWidget {
   final T value;
   final List<ClaudeDropMenuItem<T>> items;
@@ -2050,6 +2355,8 @@ class ClaudeDropMenu<T> extends StatefulWidget {
   final double minMenuWidth;
   final double maxMenuWidth;
   final String? tooltip;
+  final bool? searchable;
+  final bool expandTrigger;
 
   const ClaudeDropMenu({
     super.key,
@@ -2059,9 +2366,11 @@ class ClaudeDropMenu<T> extends StatefulWidget {
     this.leadingIcon,
     this.prefixLabel,
     this.highlightActive = false,
-    this.minMenuWidth = 176,
-    this.maxMenuWidth = 280,
+    this.minMenuWidth = 184,
+    this.maxMenuWidth = 300,
     this.tooltip,
+    this.searchable,
+    this.expandTrigger = false,
   });
 
   @override
@@ -2072,21 +2381,41 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
     with SingleTickerProviderStateMixin {
   final LayerLink _layerLink = LayerLink();
   final OverlayPortalController _portalCtrl = OverlayPortalController();
+  final FocusNode _menuFocus = FocusNode(debugLabel: 'ClaudeDropMenuFocus');
+  final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _scrollCtrl = ScrollController();
+
   late final AnimationController _animCtrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 210),
-    reverseDuration: const Duration(milliseconds: 135),
+    duration: const Duration(milliseconds: 175),
+    reverseDuration: const Duration(milliseconds: 120),
   );
 
   bool _open = false;
   bool _hovered = false;
   bool _pressed = false;
   bool _alignRight = false;
+  bool _flipUp = false;
+  double _availMaxHeight = 320;
+  int _kbIndex = -1;
 
   @override
   void dispose() {
     _animCtrl.dispose();
+    _menuFocus.dispose();
+    _searchCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  List<ClaudeDropMenuItem<T>> get _filteredItems {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return widget.items;
+    return widget.items.where((it) {
+      return it.label.toLowerCase().contains(q) ||
+          (it.subtitle?.toLowerCase().contains(q) ?? false) ||
+          (it.badge?.toLowerCase().contains(q) ?? false);
+    }).toList();
   }
 
   void _toggleMenu() {
@@ -2099,15 +2428,29 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
 
   void _openMenu() {
     if (_open || widget.items.isEmpty) return;
+    _searchCtrl.clear();
     final renderObj = context.findRenderObject();
+    final screen = MediaQuery.sizeOf(context);
     if (renderObj is RenderBox && renderObj.hasSize) {
-      final globalX = renderObj.localToGlobal(Offset.zero).dx;
-      final screenW = MediaQuery.sizeOf(context).width;
-      _alignRight = (globalX + widget.minMenuWidth) > (screenW - 16);
+      final pos = renderObj.localToGlobal(Offset.zero);
+      final sz = renderObj.size;
+      _alignRight = (pos.dx + widget.minMenuWidth) > (screen.width - 14);
+      final spaceBelow = screen.height - (pos.dy + sz.height) - 16;
+      final spaceAbove = pos.dy - 16;
+      final estHeight = math.min(320.0, widget.items.length * 36.0 + 24.0);
+      _flipUp = spaceBelow < estHeight && spaceAbove > spaceBelow;
+      _availMaxHeight =
+          math.max(140.0, math.min(340.0, _flipUp ? spaceAbove : spaceBelow));
     }
+    _kbIndex = widget.items.indexWhere((x) => x.value == widget.value);
     setState(() => _open = true);
     _portalCtrl.show();
     _animCtrl.forward(from: 0.0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _open) {
+        _menuFocus.requestFocus();
+      }
+    });
   }
 
   Future<void> _closeMenu() async {
@@ -2124,6 +2467,33 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
     await _closeMenu();
   }
 
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final list = _filteredItems;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeMenu();
+      return KeyEventResult.handled;
+    }
+    if (list.isEmpty) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      setState(() => _kbIndex = (_kbIndex + 1) % list.length);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      setState(() {
+        _kbIndex = _kbIndex <= 0 ? list.length - 1 : _kbIndex - 1;
+      });
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        _kbIndex >= 0 &&
+        _kbIndex < list.length) {
+      _selectValue(list[_kbIndex].value);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
@@ -2133,24 +2503,21 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
         widget.items.first;
 
     final activeTint = widget.highlightActive;
-    final elevated = _hovered || _open;
-    final bg = _pressed
+    final bg = _pressed || _open
         ? c.paper3
-        : (_open
-            ? c.paper3
-            : (activeTint
-                ? c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10)
-                : (_hovered ? c.paper3 : c.paper2)));
+        : (activeTint
+            ? c.clay.withValues(alpha: c.isDark ? 0.16 : 0.09)
+            : (_hovered ? c.paper3 : c.paper2));
     final borderCol = _open
         ? c.clay
         : (activeTint
-            ? c.clay.withValues(alpha: 0.42)
+            ? c.clay.withValues(alpha: 0.38)
             : (_hovered ? c.ringHover : c.hairline));
     final fgCol = activeTint ? c.clay : (_open ? c.ink : c.inkSoft);
 
     final menuCurved = CurvedAnimation(
       parent: _animCtrl,
-      curve: ClaudeMotion.snappySpring,
+      curve: ClaudeMotion.editorialOut,
       reverseCurve: Curves.easeInCubic,
     );
 
@@ -2168,84 +2535,67 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
         onTapCancel: () => setState(() => _pressed = false),
         onTap: _toggleMenu,
         child: AnimatedScale(
-          scale: _pressed ? 0.96 : (_hovered && !_open ? 1.015 : 1.0),
+          scale: _pressed ? 0.975 : 1.0,
           duration: ClaudeMotion.duration(
             context,
-            _pressed
-                ? const Duration(milliseconds: 80)
-                : const Duration(milliseconds: 200),
+            const Duration(milliseconds: 90),
           ),
-          curve: _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
           child: AnimatedContainer(
             duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
             curve: ClaudeMotion.editorialOut,
-            height: 33,
-            padding: const EdgeInsets.symmetric(horizontal: 11),
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 9.5),
             decoration: ShapeDecoration(
               color: bg,
               shape: claudeSuperellipse(
-                10,
+                8.5,
                 side: BorderSide(color: borderCol),
               ),
-              shadows: elevated && !_pressed
-                  ? [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: c.isDark ? 0.32 : 0.09),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: c.isDark ? 0.16 : 0.04),
-                        blurRadius: 3,
-                        offset: const Offset(0, 1),
-                      ),
-                    ]
-                  : const [],
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  widget.expandTrigger ? MainAxisSize.max : MainAxisSize.min,
               children: [
                 if (selectedItem.icon != null || widget.leadingIcon != null) ...[
                   Icon(
                     selectedItem.icon ?? widget.leadingIcon,
-                    size: 14,
+                    size: 13.5,
                     color: _open || activeTint ? c.clay : c.muted,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5.5),
                 ],
                 if (widget.prefixLabel != null &&
                     widget.prefixLabel!.isNotEmpty) ...[
                   Text(
                     '${widget.prefixLabel}: ',
-                    style: sansStyle(c, size: 12, color: c.muted),
+                    style: sansStyle(c, size: 11.8, color: c.muted),
                   ),
                 ],
                 Flexible(
+                  fit: widget.expandTrigger ? FlexFit.tight : FlexFit.loose,
                   child: Text(
                     selectedItem.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: sansStyle(
                       c,
-                      size: 12.5,
+                      size: 12.2,
                       weight: activeTint ? FontWeight.w600 : FontWeight.w500,
                       color: fgCol,
                     ),
                   ),
                 ),
-                const SizedBox(width: 3),
+                const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _open ? 0.5 : 0.0,
                   duration: ClaudeMotion.duration(
                     context,
-                    const Duration(milliseconds: 180),
+                    const Duration(milliseconds: 160),
                   ),
                   curve: ClaudeMotion.editorialOut,
                   child: Icon(
                     Icons.keyboard_arrow_down_rounded,
-                    size: 15.5,
+                    size: 14.5,
                     color: _open || activeTint ? c.clay : c.meta,
                   ),
                 ),
@@ -2266,79 +2616,196 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
         controller: _portalCtrl,
         overlayChildBuilder: (overlayCtx) {
           final oc = ClaudePalette.of(overlayCtx);
-          final targetAnc =
-              _alignRight ? Alignment.bottomRight : Alignment.bottomLeft;
-          final followerAnc =
-              _alignRight ? Alignment.topRight : Alignment.topLeft;
-          final scaleAlign =
-              _alignRight ? Alignment.topRight : Alignment.topLeft;
+          final screenW = MediaQuery.sizeOf(overlayCtx).width;
+          final effMaxW = math.min(widget.maxMenuWidth, screenW - 24);
+          final effMinW = math.min(widget.minMenuWidth, effMaxW);
+          final showSearch =
+              widget.searchable ?? (widget.items.length >= 8);
+          final filtered = _filteredItems;
 
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _closeMenu,
+          final targetAnc = _flipUp
+              ? (_alignRight ? Alignment.topRight : Alignment.topLeft)
+              : (_alignRight ? Alignment.bottomRight : Alignment.bottomLeft);
+          final followerAnc = _flipUp
+              ? (_alignRight ? Alignment.bottomRight : Alignment.bottomLeft)
+              : (_alignRight ? Alignment.topRight : Alignment.topLeft);
+          final scaleAlign = followerAnc;
+          final offset = Offset(0, _flipUp ? -5 : 5);
+
+          return Focus(
+            focusNode: _menuFocus,
+            onKeyEvent: _handleKey,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _closeMenu,
+                  ),
                 ),
-              ),
-              CompositedTransformFollower(
-                link: _layerLink,
-                showWhenUnlinked: false,
-                targetAnchor: targetAnc,
-                followerAnchor: followerAnc,
-                offset: const Offset(0, 7),
-                child: FadeTransition(
-                  opacity: _animCtrl.drive(CurveTween(curve: Curves.easeOut)),
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.93, end: 1.0)
-                        .animate(menuCurved),
-                    alignment: scaleAlign,
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: widget.minMenuWidth,
-                          maxWidth: widget.maxMenuWidth,
-                          maxHeight: 310,
-                        ),
-                        child: ClaudeGlassBar(
-                          blurSigma: 22,
-                          borderRadius: 14,
-                          tintColor: oc.isDark
-                              ? const Color(0xF222211E)
-                              : const Color(0xF6FAF9F5),
-                          padding: const EdgeInsets.all(6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: oc.isDark ? 0.52 : 0.16),
-                              blurRadius: 26,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 10),
+                CompositedTransformFollower(
+                  link: _layerLink,
+                  showWhenUnlinked: false,
+                  targetAnchor: targetAnc,
+                  followerAnchor: followerAnc,
+                  offset: offset,
+                  child: FadeTransition(
+                    opacity: _animCtrl.drive(CurveTween(curve: Curves.easeOut)),
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.0)
+                          .animate(menuCurved),
+                      alignment: scaleAlign,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: effMinW,
+                            maxWidth: effMaxW,
+                            maxHeight: _availMaxHeight,
+                          ),
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: oc.paper2,
+                              shape: claudeSuperellipse(
+                                11,
+                                side: BorderSide(color: oc.hairline),
+                              ),
+                              shadows: oc.popoverShadow,
                             ),
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: oc.isDark ? 0.28 : 0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (var i = 0; i < widget.items.length; i++) ...[
-                                  if (i > 0) const SizedBox(height: 3),
-                                  _ClaudeDropMenuTile(
-                                    item: widget.items[i],
-                                    selected:
-                                        widget.items[i].value == widget.value,
-                                    onTap: () =>
-                                        _selectValue(widget.items[i].value),
+                            child: ClipRSuperellipse(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (showSearch) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        8,
+                                        7,
+                                        8,
+                                        5,
+                                      ),
+                                      child: SizedBox(
+                                        height: 29,
+                                        child: TextField(
+                                          controller: _searchCtrl,
+                                          onChanged: (_) =>
+                                              setState(() => _kbIndex = 0),
+                                          style: sansStyle(oc, size: 12),
+                                          decoration: InputDecoration(
+                                            hintText: '筛选选项...',
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            prefixIcon: Icon(
+                                              Icons.search_rounded,
+                                              size: 13.5,
+                                              color: oc.meta,
+                                            ),
+                                            prefixIconConstraints:
+                                                const BoxConstraints(
+                                              minWidth: 26,
+                                              minHeight: 24,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Divider(height: 1, color: oc.hairline),
+                                  ],
+                                  Flexible(
+                                    child: Scrollbar(
+                                      controller: _scrollCtrl,
+                                      child: SingleChildScrollView(
+                                        controller: _scrollCtrl,
+                                        padding: const EdgeInsets.all(4.5),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (filtered.isEmpty)
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 14,
+                                                  horizontal: 10,
+                                                ),
+                                                child: Text(
+                                                  '无匹配项',
+                                                  textAlign: TextAlign.center,
+                                                  style: sansStyle(
+                                                    oc,
+                                                    size: 12,
+                                                    color: oc.meta,
+                                                  ),
+                                                ),
+                                              ),
+                                            for (var i = 0;
+                                                i < filtered.length;
+                                                i++) ...[
+                                              if (filtered[i].dividerBefore &&
+                                                  i > 0)
+                                                Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    vertical: 4,
+                                                    horizontal: 4,
+                                                  ),
+                                                  child: Divider(
+                                                    height: 1,
+                                                    color: oc.hairline,
+                                                  ),
+                                                )
+                                              else if (i > 0)
+                                                const SizedBox(height: 1.5),
+                                              if (filtered[i].groupLabel !=
+                                                  null)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                    8,
+                                                    4,
+                                                    8,
+                                                    3,
+                                                  ),
+                                                  child: Text(
+                                                    filtered[i].groupLabel!,
+                                                    style: sansStyle(
+                                                      oc,
+                                                      size: 10.8,
+                                                      weight: FontWeight.w600,
+                                                      color: oc.meta,
+                                                    ),
+                                                  ),
+                                                ),
+                                              _ClaudeDropMenuTile<T>(
+                                                item: filtered[i],
+                                                selected: filtered[i].value ==
+                                                    widget.value,
+                                                kbHighlighted: i == _kbIndex,
+                                                onHover: () {
+                                                  if (_kbIndex != i) {
+                                                    setState(
+                                                      () => _kbIndex = i,
+                                                    );
+                                                  }
+                                                },
+                                                onTap: () => _selectValue(
+                                                  filtered[i].value,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -2346,8 +2813,8 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
         child: trigger,
@@ -2359,11 +2826,15 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
 class _ClaudeDropMenuTile<T> extends StatefulWidget {
   final ClaudeDropMenuItem<T> item;
   final bool selected;
+  final bool kbHighlighted;
+  final VoidCallback onHover;
   final VoidCallback onTap;
 
   const _ClaudeDropMenuTile({
     required this.item,
     required this.selected,
+    this.kbHighlighted = false,
+    required this.onHover,
     required this.onTap,
   });
 
@@ -2379,18 +2850,475 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final sel = widget.selected;
-    final bg = _pressed
-        ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.14)
-        : (sel
-            ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.09)
-            : (_hovered
-                ? c.paper3.withValues(alpha: 0.92)
-                : c.paper3.withValues(alpha: 0.0)));
-    final border = _pressed
-        ? c.clay.withValues(alpha: 0.42)
-        : (sel
-            ? c.clay.withValues(alpha: 0.26)
-            : (_hovered ? c.ringHover : c.hairline.withValues(alpha: 0.0)));
+    final activeHover = _hovered || widget.kbHighlighted;
+    final isDanger = widget.item.destructive;
+
+    final Color bg;
+    if (isDanger) {
+      bg = (_pressed || activeHover)
+          ? c.dangerBg
+          : c.dangerBg.withValues(alpha: 0.0);
+    } else if (_pressed) {
+      bg = c.clay.withValues(alpha: c.isDark ? 0.18 : 0.11);
+    } else if (activeHover) {
+      bg = c.paper3;
+    } else if (sel) {
+      bg = c.clay.withValues(alpha: c.isDark ? 0.12 : 0.07);
+    } else {
+      bg = c.paper3.withValues(alpha: 0.0);
+    }
+
+    final fgColor = isDanger
+        ? c.danger
+        : (sel ? c.ink : (activeHover ? c.ink : c.inkSoft));
+    final iconColor = isDanger
+        ? c.danger
+        : (sel ? c.clay : (activeHover ? c.inkSoft : c.muted));
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        setState(() => _hovered = true);
+        widget.onHover();
+      },
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 6.5),
+          decoration: ShapeDecoration(
+            color: bg,
+            shape: claudeSuperellipse(7.5),
+          ),
+          child: Row(
+            children: [
+              if (widget.item.icon != null) ...[
+                Icon(widget.item.icon, size: 14.5, color: iconColor),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: sansStyle(
+                        c,
+                        size: 12.4,
+                        weight: sel ? FontWeight.w600 : FontWeight.w500,
+                        color: fgColor,
+                      ),
+                    ),
+                    if (widget.item.subtitle != null &&
+                        widget.item.subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        widget.item.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: monoStyle(c, size: 10.8, color: c.meta),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (widget.item.badge != null &&
+                  widget.item.badge!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                ClaudePill(
+                  text: widget.item.badge!,
+                  bg: sel ? c.clay.withValues(alpha: 0.14) : c.recessed,
+                  fg: sel ? c.clay : c.muted,
+                ),
+              ],
+              if (widget.item.shortcut != null &&
+                  widget.item.shortcut!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  widget.item.shortcut!,
+                  style: monoStyle(c, size: 10.5, color: c.meta),
+                ),
+              ],
+              if (!isDanger) ...[
+                const SizedBox(width: 5),
+                SizedBox(
+                  width: 14,
+                  child: sel
+                      ? Icon(Icons.check_rounded, size: 14, color: c.clay)
+                      : null,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Action entry for [ClaudeActionMenuButton] (`⋯` row context menus) and [ClaudeSplitButton].
+class ClaudeMenuAction {
+  final String label;
+  final String? subtitle;
+  final String? badge;
+  final IconData? icon;
+  final VoidCallback? _onSelected;
+  final VoidCallback? _onTap;
+  final bool destructive;
+  final bool dividerBefore;
+  final bool highlight;
+
+  VoidCallback get onSelected => _onSelected ?? _onTap ?? _noop;
+  static void _noop() {}
+
+  const ClaudeMenuAction({
+    required this.label,
+    this.subtitle,
+    this.badge,
+    this.icon,
+    VoidCallback? onSelected,
+    VoidCallback? onTap,
+    this.destructive = false,
+    this.dividerBefore = false,
+    this.highlight = false,
+  })  : _onSelected = onSelected,
+        _onTap = onTap;
+}
+
+/// Compact `⋯` (or custom trigger) Popover Action Menu with 4-edge auto-flip & Esc support.
+class ClaudeActionMenuButton extends StatefulWidget {
+  final List<ClaudeMenuAction> actions;
+  final IconData icon;
+  final Widget? leading;
+  final String? label;
+  final String tooltip;
+  final double minMenuWidth;
+  final double maxMenuWidth;
+  final Widget? customTrigger;
+
+  const ClaudeActionMenuButton({
+    super.key,
+    required this.actions,
+    this.icon = Icons.more_horiz_rounded,
+    this.leading,
+    this.label,
+    this.tooltip = '更多操作',
+    this.minMenuWidth = 176,
+    this.maxMenuWidth = 320,
+    this.customTrigger,
+  });
+
+  @override
+  State<ClaudeActionMenuButton> createState() => _ClaudeActionMenuButtonState();
+}
+
+class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
+    with SingleTickerProviderStateMixin {
+  final LayerLink _layerLink = LayerLink();
+  final OverlayPortalController _portalCtrl = OverlayPortalController();
+  final FocusNode _focus = FocusNode(debugLabel: 'ClaudeActionMenuFocus');
+  late final AnimationController _animCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 170),
+    reverseDuration: const Duration(milliseconds: 115),
+  );
+
+  bool _open = false;
+  bool _hovered = false;
+  bool _alignRight = true;
+  bool _flipUp = false;
+  double _availMaxHeight = 320;
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _openMenu() {
+    if (_open || widget.actions.isEmpty) return;
+    final renderObj = context.findRenderObject();
+    final screen = MediaQuery.sizeOf(context);
+    if (renderObj is RenderBox && renderObj.hasSize) {
+      final pos = renderObj.localToGlobal(Offset.zero);
+      final sz = renderObj.size;
+      _alignRight = (pos.dx + widget.minMenuWidth) > (screen.width - 16) ||
+          pos.dx > screen.width * 0.45;
+      if (_alignRight && (pos.dx + sz.width) < widget.minMenuWidth + 12) {
+        _alignRight = false;
+      }
+      final spaceBelow = screen.height - (pos.dy + sz.height) - 16;
+      final spaceAbove = pos.dy - 16;
+      final estHeight = math.min(320.0, widget.actions.length * 38.0 + 16.0);
+      _flipUp = spaceBelow < estHeight && spaceAbove > spaceBelow;
+      _availMaxHeight =
+          math.max(140.0, math.min(340.0, _flipUp ? spaceAbove : spaceBelow));
+    }
+    setState(() => _open = true);
+    _portalCtrl.show();
+    _animCtrl.forward(from: 0.0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _open) _focus.requestFocus();
+    });
+  }
+
+  Future<void> _closeMenu() async {
+    if (!_open) return;
+    setState(() => _open = false);
+    await _animCtrl.reverse();
+    if (mounted && !_open && _portalCtrl.isShowing) {
+      _portalCtrl.hide();
+    }
+  }
+
+  Future<void> _runAction(ClaudeMenuAction action) async {
+    await _closeMenu();
+    action.onSelected();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final curved = CurvedAnimation(
+      parent: _animCtrl,
+      curve: ClaudeMotion.editorialOut,
+      reverseCurve: Curves.easeInCubic,
+    );
+
+    Widget trigger = widget.customTrigger ??
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: Container(
+            height: 30,
+            width: (widget.label == null || widget.label!.isEmpty) ? 30 : null,
+            padding: (widget.label == null || widget.label!.isEmpty)
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 9.5),
+            decoration: ShapeDecoration(
+              color: (widget.label != null && widget.label!.isNotEmpty)
+                  ? ((_open || _hovered) ? c.paper3 : c.paper2)
+                  : ((_open || _hovered)
+                      ? c.paper3
+                      : c.paper3.withValues(alpha: 0.0)),
+              shape: claudeSuperellipse(
+                8,
+                side: BorderSide(
+                  color: _open
+                      ? c.clay
+                      : ((widget.label != null && widget.label!.isNotEmpty)
+                          ? (_hovered ? c.ringHover : c.hairline)
+                          : (_hovered
+                              ? c.hairline
+                              : c.hairline.withValues(alpha: 0.0))),
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (widget.leading != null)
+                  widget.leading!
+                else
+                  Icon(
+                    widget.icon,
+                    size: 16,
+                    color: _open ? c.clay : (_hovered ? c.ink : c.muted),
+                  ),
+                if (widget.label != null && widget.label!.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.label!,
+                    style: sansStyle(
+                      c,
+                      size: 12.2,
+                      weight: FontWeight.w500,
+                      color: _open ? c.ink : c.inkSoft,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    _open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 14,
+                    color: c.muted,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+
+    trigger = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _open ? _closeMenu() : _openMenu(),
+      child: Tooltip(message: widget.tooltip, child: trigger),
+    );
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: OverlayPortal(
+        controller: _portalCtrl,
+        overlayChildBuilder: (overlayCtx) {
+          final oc = ClaudePalette.of(overlayCtx);
+          final screenW = MediaQuery.sizeOf(overlayCtx).width;
+          final effMaxW = math.min(widget.maxMenuWidth, screenW - 24);
+          final effMinW = math.min(widget.minMenuWidth, effMaxW);
+
+          final targetAnc = _flipUp
+              ? (_alignRight ? Alignment.topRight : Alignment.topLeft)
+              : (_alignRight ? Alignment.bottomRight : Alignment.bottomLeft);
+          final followerAnc = _flipUp
+              ? (_alignRight ? Alignment.bottomRight : Alignment.bottomLeft)
+              : (_alignRight ? Alignment.topRight : Alignment.topLeft);
+
+          return Focus(
+            focusNode: _focus,
+            onKeyEvent: (_, ev) {
+              if (ev is KeyDownEvent &&
+                  ev.logicalKey == LogicalKeyboardKey.escape) {
+                _closeMenu();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _closeMenu,
+                  ),
+                ),
+                CompositedTransformFollower(
+                  link: _layerLink,
+                  showWhenUnlinked: false,
+                  targetAnchor: targetAnc,
+                  followerAnchor: followerAnc,
+                  offset: Offset(0, _flipUp ? -5 : 5),
+                  child: FadeTransition(
+                    opacity: _animCtrl.drive(CurveTween(curve: Curves.easeOut)),
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.0)
+                          .animate(curved),
+                      alignment: followerAnc,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: effMinW,
+                            maxWidth: effMaxW,
+                            maxHeight: _availMaxHeight,
+                          ),
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: oc.paper2,
+                              shape: claudeSuperellipse(
+                                11,
+                                side: BorderSide(color: oc.hairline),
+                              ),
+                              shadows: oc.popoverShadow,
+                            ),
+                            child: ClipRSuperellipse(
+                              borderRadius: BorderRadius.circular(11),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(4.5),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    for (var i = 0;
+                                        i < widget.actions.length;
+                                        i++) ...[
+                                      if (widget.actions[i].dividerBefore &&
+                                          i > 0)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 4,
+                                            horizontal: 4,
+                                          ),
+                                          child: Divider(
+                                            height: 1,
+                                            color: oc.hairline,
+                                          ),
+                                        )
+                                      else if (i > 0)
+                                        const SizedBox(height: 1.5),
+                                      _ActionMenuTile(
+                                        action: widget.actions[i],
+                                        onTap: () =>
+                                            _runAction(widget.actions[i]),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        child: trigger,
+      ),
+    );
+  }
+}
+
+class _ActionMenuTile extends StatefulWidget {
+  final ClaudeMenuAction action;
+  final VoidCallback onTap;
+
+  const _ActionMenuTile({required this.action, required this.onTap});
+
+  @override
+  State<_ActionMenuTile> createState() => _ActionMenuTileState();
+}
+
+class _ActionMenuTileState extends State<_ActionMenuTile> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final a = widget.action;
+    final Color bg;
+    if (a.destructive) {
+      bg = (_hovered || _pressed) ? c.dangerBg : Colors.transparent;
+    } else if (_pressed) {
+      bg = c.clay.withValues(alpha: 0.14);
+    } else if (_hovered) {
+      bg = c.paper3;
+    } else if (a.highlight) {
+      bg = c.clay.withValues(alpha: c.isDark ? 0.10 : 0.05);
+    } else {
+      bg = Colors.transparent;
+    }
+
+    final fg = a.destructive
+        ? c.danger
+        : (a.highlight ? c.clay : (_hovered ? c.ink : c.inkSoft));
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -2405,79 +3333,196 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _pressed ? 0.975 : 1.0,
-          duration: ClaudeMotion.duration(
-            context,
-            _pressed
-                ? const Duration(milliseconds: 75)
-                : const Duration(milliseconds: 190),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          decoration: ShapeDecoration(
+            color: bg,
+            shape: claudeSuperellipse(7.5),
           ),
-          curve: _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
-          child: AnimatedContainer(
-            duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-            curve: ClaudeMotion.editorialOut,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: ShapeDecoration(
-              color: bg,
-              shape: claudeSuperellipse(
-                10,
-                side: BorderSide(color: border),
-              ),
-              shadows: (_hovered && !_pressed)
-                  ? [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: c.isDark ? 0.24 : 0.06),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+          child: Row(
+            children: [
+              if (a.icon != null) ...[
+                Icon(
+                  a.icon,
+                  size: 14.5,
+                  color: a.destructive
+                      ? c.danger
+                      : (a.highlight ? c.clay : c.muted),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        if (a.badge != null && a.badge!.isNotEmpty) ...[
+                          ClaudePill(
+                            text: a.badge!,
+                            mono: false,
+                            fg: a.highlight ? c.clay : c.inkSoft,
+                            bg: a.highlight
+                                ? c.clay.withValues(alpha: 0.14)
+                                : c.recessed,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: Text(
+                            a.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: sansStyle(
+                              c,
+                              size: 12.3,
+                              weight: a.highlight
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: fg,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (a.subtitle != null && a.subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        a.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: monoStyle(c, size: 11, color: c.muted),
                       ),
-                    ]
-                  : const [],
-            ),
-            child: Row(
-              children: [
-                if (widget.item.icon != null) ...[
-                  Icon(
-                    widget.item.icon,
-                    size: 14.5,
-                    color: sel || _hovered ? c.clay : c.muted,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    widget.item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: sansStyle(
-                      c,
-                      size: 12.5,
-                      weight: sel ? FontWeight.w600 : FontWeight.w500,
-                      color: sel ? c.ink : (_hovered ? c.ink : c.inkSoft),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// shadcn/ui Split Button (`[ Primary Action | ▾ ]`).
+/// Clicking the left body executes [onPrimaryPressed]; clicking the right chevron
+/// opens the 4-edge auto-flipping Popover of [menuActions].
+class ClaudeSplitButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final Widget? leading;
+  final VoidCallback? onPrimaryPressed;
+  final List<ClaudeMenuAction> menuActions;
+  final ClaudeBtnVariant variant;
+  final double minMenuWidth;
+  final double maxMenuWidth;
+  final String menuTooltip;
+
+  const ClaudeSplitButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.leading,
+    required this.onPrimaryPressed,
+    required this.menuActions,
+    this.variant = ClaudeBtnVariant.neutral,
+    this.minMenuWidth = 248,
+    this.maxMenuWidth = 360,
+    this.menuTooltip = '更多选项',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    if (menuActions.length <= 1) {
+      return ClaudeButton(
+        label: label,
+        compact: true,
+        variant: variant,
+        leading: leading ?? (icon != null ? Icon(icon) : null),
+        onPressed: onPrimaryPressed,
+      );
+    }
+
+    final isClay = variant == ClaudeBtnVariant.clay;
+    final bg = isClay ? c.clay : c.paper2;
+    final fg = isClay ? Colors.white : c.inkSoft;
+    final border = isClay ? c.clay : c.hairline;
+    final sepColor = isClay
+        ? Colors.white.withValues(alpha: 0.24)
+        : c.hairline;
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: bg,
+        shape: claudeSuperellipse(8.5, side: BorderSide(color: border)),
+      ),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(8.5),
+        child: SizedBox(
+          height: 30,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onPrimaryPressed,
+                  hoverColor: isClay
+                      ? Colors.black.withValues(alpha: 0.12)
+                      : c.paper3,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (leading != null) ...[
+                          IconTheme(
+                            data: IconThemeData(size: 13.5, color: fg),
+                            child: leading!,
+                          ),
+                          const SizedBox(width: 5.5),
+                        ] else if (icon != null) ...[
+                          Icon(icon, size: 13.5, color: fg),
+                          const SizedBox(width: 5.5),
+                        ],
+                        Text(
+                          label,
+                          style: sansStyle(
+                            c,
+                            size: 12.2,
+                            weight: FontWeight.w500,
+                            color: fg,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                if (widget.item.badge != null &&
-                    widget.item.badge!.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  ClaudePill(
-                    text: widget.item.badge!,
-                    bg: sel
-                        ? c.clay.withValues(alpha: 0.14)
-                        : c.recessed,
-                    fg: sel ? c.clay : c.muted,
+              ),
+              Container(width: 1, height: 30, color: sepColor),
+              ClaudeActionMenuButton(
+                actions: menuActions,
+                tooltip: menuTooltip,
+                minMenuWidth: minMenuWidth,
+                maxMenuWidth: maxMenuWidth,
+                customTrigger: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    width: 25,
+                    height: 30,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 15,
+                      color: fg,
+                    ),
                   ),
-                ],
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 15,
-                  child: sel
-                      ? Icon(Icons.check_rounded, size: 14.5, color: c.clay)
-                      : null,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2486,7 +3531,6 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
 }
 
 /// Precision single-line hairline list row with smooth hover-reveal secondary actions.
-/// Keeps desktop lists calm and uncluttered while preserving full tap access on narrow/touch screens.
 class ClaudeHoverRevealRow extends StatefulWidget {
   final Widget leading;
   final Widget? secondaryActions;
@@ -2502,7 +3546,7 @@ class ClaudeHoverRevealRow extends StatefulWidget {
     this.secondaryActions,
     this.primaryAction,
     this.onTap,
-    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     this.showDivider = true,
     this.highlighted = false,
   });
@@ -2522,7 +3566,9 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
 
     final rowBg = widget.highlighted
         ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.08)
-        : (_hovered ? c.paper3.withValues(alpha: c.isDark ? 0.55 : 0.65) : Colors.transparent);
+        : (_hovered
+            ? c.paper3.withValues(alpha: c.isDark ? 0.55 : 0.65)
+            : Colors.transparent);
 
     return MouseRegion(
       onEnter: (_) {
@@ -2534,24 +3580,25 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: widget.showDivider
-              ? Border(bottom: BorderSide(color: c.hairline.withValues(alpha: 0.72)))
+              ? Border(
+                  bottom: BorderSide(color: c.hairline.withValues(alpha: 0.85)),
+                )
               : null,
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(9),
             hoverColor: Colors.transparent,
             splashColor: c.clay.withValues(alpha: 0.08),
             child: AnimatedContainer(
-              duration: ClaudeMotion.duration(context, const Duration(milliseconds: 130)),
+              duration: ClaudeMotion.duration(
+                context,
+                const Duration(milliseconds: 120),
+              ),
               curve: Curves.easeOutCubic,
               padding: widget.padding,
-              decoration: BoxDecoration(
-                color: rowBg,
-                borderRadius: BorderRadius.circular(9),
-              ),
+              color: rowBg,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -2559,7 +3606,10 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
                   if (widget.secondaryActions != null) ...[
                     const SizedBox(width: 8),
                     AnimatedOpacity(
-                      duration: ClaudeMotion.duration(context, const Duration(milliseconds: 140)),
+                      duration: ClaudeMotion.duration(
+                        context,
+                        const Duration(milliseconds: 130),
+                      ),
                       opacity: reveal ? 1.0 : 0.0,
                       child: IgnorePointer(
                         ignoring: !reveal,
@@ -2581,9 +3631,7 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
   }
 }
 
-
-/// Industry-standard horizontal scroll container with edge-fade affordance & desktop chevron controls
-/// so users immediately recognize horizontally scrollable controls.
+/// Horizontal scroll container with edge-fade affordance & desktop chevron controls.
 class ClaudeScrollHintRow extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -2632,7 +3680,8 @@ class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
 
   void _nudge(double delta) {
     if (!_ctrl.hasClients) return;
-    final target = (_ctrl.offset + delta).clamp(0.0, _ctrl.position.maxScrollExtent);
+    final target =
+        (_ctrl.offset + delta).clamp(0.0, _ctrl.position.maxScrollExtent);
     _ctrl.animateTo(
       target,
       duration: const Duration(milliseconds: 220),
@@ -2662,26 +3711,25 @@ class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
               left: 0,
               top: 0,
               bottom: 0,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () => _nudge(-140),
-                    child: Container(
-                      width: 26,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            c.paper.withValues(alpha: 0.96),
-                            c.paper.withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      child: Icon(Icons.chevron_left_rounded, size: 16, color: c.muted),
+              child: GestureDetector(
+                onTap: () => _nudge(-140),
+                child: Container(
+                  width: 26,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        c.paper.withValues(alpha: 0.96),
+                        c.paper.withValues(alpha: 0.0),
+                      ],
                     ),
                   ),
-                ],
+                  alignment: Alignment.centerLeft,
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: 16,
+                    color: c.muted,
+                  ),
+                ),
               ),
             ),
           if (_canRight)
@@ -2692,7 +3740,7 @@ class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
               child: GestureDetector(
                 onTap: () => _nudge(140),
                 child: Container(
-                  width: 30,
+                  width: 28,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -2702,7 +3750,11 @@ class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
                     ),
                   ),
                   alignment: Alignment.centerRight,
-                  child: Icon(Icons.chevron_right_rounded, size: 16, color: c.clay),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: c.clay,
+                  ),
                 ),
               ),
             ),

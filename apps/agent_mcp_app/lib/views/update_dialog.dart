@@ -143,12 +143,13 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
 
     return Dialog(
       backgroundColor: c.paper,
-      shape: claudeSuperellipse(18, side: BorderSide(color: c.hairline)),
+      elevation: 0,
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 620),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

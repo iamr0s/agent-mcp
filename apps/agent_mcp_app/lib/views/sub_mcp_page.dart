@@ -41,7 +41,8 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
   Future<void> _testServer(String name) async {
     setState(() => _testingNames.add(name));
     try {
-      final res = await runWithMinDuration(() => widget.backend.testSubMcp(name));
+      final res =
+          await runWithMinDuration(() => widget.backend.testSubMcp(name));
       await widget.onRefresh();
       if (res['ok'] == true) {
         final cnt = (res['tools'] as List?)?.length ?? 0;
@@ -76,6 +77,9 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
+    final enabledCount =
+        widget.servers.where((s) => s['enabled'] != false).length;
+
     return CustomScrollView(
       controller: _scrollCtrl,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -91,16 +95,30 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 12,
-                  runSpacing: 10,
+                  runSpacing: 8,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('子 MCP 网关', style: serifTitleStyle(c, size: 24)),
-                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('子 MCP 网关', style: serifTitleStyle(c, size: 20)),
+                            if (widget.servers.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              ClaudePill(
+                                text: '$enabledCount / ${widget.servers.length} 已启用',
+                                mono: false,
+                                fg: enabledCount > 0 ? c.sage : c.muted,
+                                bg: enabledCount > 0 ? c.sageBg : c.recessed,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 3),
                         Text(
-                          '把常用 MCP 服务挂在这里按需取用 · 免去首轮冗长工具列表，改完立即生效',
-                          style: sansStyle(c, size: 12.5, color: c.muted),
+                          '挂载第三方 MCP 服务并由热驻留网关按需转发，避免客户端首轮工具表膨胀',
+                          style: sansStyle(c, size: 12.2, color: c.muted),
                         ),
                       ],
                     ),
@@ -134,43 +152,43 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
           SliverFillRemaining(
             hasScrollBody: false,
             child: ClaudeStaggeredReveal(
-              index: 2,
+              index: 1,
               child: Center(
                 key: const ValueKey('empty-submcp'),
                 child: ClaudeCard(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
-                    vertical: 42,
+                    vertical: 38,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 48,
-                        height: 48,
+                        width: 42,
+                        height: 42,
                         decoration: ShapeDecoration(
                           color: c.clay.withValues(alpha: 0.12),
-                          shape: claudeSuperellipse(15),
+                          shape: claudeSuperellipse(11),
                         ),
                         alignment: Alignment.center,
-                        child: const ClaudeSparkIcon(size: 22),
+                        child: Icon(Icons.layers_outlined, size: 20, color: c.clay),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       Text(
                         '尚未挂载嵌套子 MCP 服务',
-                        style: serifTitleStyle(c, size: 19),
+                        style: serifTitleStyle(c, size: 17),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 460),
+                        constraints: const BoxConstraints(maxWidth: 440),
                         child: Text(
-                          '支持直接粘贴 Claude Desktop、Cursor 或 Antigravity 的 mcpServers JSON 配置，由三元网关统一按需调度。',
+                          '支持直接粘贴 Claude Desktop、Cursor 或 Antigravity 的 mcpServers JSON 配置，热驻留进程池按需毫秒级响应。',
                           textAlign: TextAlign.center,
                           style: sansStyle(
                             c,
-                            size: 13.5,
+                            size: 12.8,
                             color: c.muted,
-                            height: 1.60,
+                            height: 1.54,
                           ),
                         ),
                       ),
@@ -181,312 +199,532 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
             ),
           )
         else
-          SliverPadding(
-            padding: EdgeInsets.only(
-              bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 36) + widget.extraBottomPadding,
-            ),
-            sliver: SliverList.separated(
-              key: const ValueKey('submcp-list'),
-              itemCount: widget.servers.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, idx) {
-                      final s = widget.servers[idx];
-                      final name = (s['name'] ?? '').toString();
-                      final enabled = s['enabled'] != false;
-                      final tr = (s['transport'] ?? 'stdio').toString();
-                      final isTesting = _testingNames.contains(name);
-                      final status = isTesting
-                          ? 'testing'
-                          : (s['status'] ?? 'idle').toString();
-                      final tools = ((s['tools'] as List?) ?? const [])
-                          .whereType<Map>()
-                          .map((e) => Map<String, dynamic>.from(e))
-                          .toList();
-                      final open = _openDrawers.contains(name);
-                      final endpoint = tr == 'stdio'
-                          ? '${s['command'] ?? ''} ${((s['args'] as List?) ?? const []).join(' ')}'
-                              .trim()
-                          : (s['url'] ?? '').toString();
-                      final lastErr = (s['last_error'] ?? '').toString();
-
-                      Color dotColor = c.meta.withValues(alpha: 0.6);
-                      if (status == 'ok') dotColor = c.sage;
-                      if (status == 'error') dotColor = c.danger;
-                      if (status == 'testing') dotColor = c.clay;
-
-                      return RepaintBoundary(
-                        child: AnimatedOpacity(
-                          key: ValueKey('sub-$name'),
-                          duration:
-                              ClaudeMotion.duration(context, ClaudeMotion.base),
-                          curve: ClaudeMotion.editorialOut,
-                          opacity: enabled ? 1.0 : 0.58,
-                          child: ClaudeCard(
-                            hoverable: true,
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 10,
-                                  runSpacing: 8,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ClaudeStatusDot(
-                                          color: dotColor,
-                                          pulsing: isTesting ||
-                                              (enabled && status == 'ok'),
-                                          size: 7.5,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Flexible(
-                                          child: Text(
-                                            name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: serifTitleStyle(c, size: 18),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 9),
-                                        ClaudePill(
-                                          text: tr.toUpperCase(),
-                                          fg: tr == 'stdio'
-                                              ? c.clay
-                                              : (tr == 'sse'
-                                                  ? c.purple
-                                                  : c.sage),
-                                          bg: tr == 'stdio'
-                                              ? c.clay.withValues(alpha: 0.12)
-                                              : (tr == 'sse'
-                                                  ? c.purpleBg
-                                                  : c.sageBg),
-                                          border: tr == 'stdio'
-                                              ? c.clay.withValues(alpha: 0.24)
-                                              : null,
-                                        ),
-                                      ],
-                                    ),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 6,
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      children: [
-                                        ClaudeSwitch(
-                                          value: enabled,
-                                          onChanged: (v) async {
-                                            await widget.backend
-                                                .toggleSubMcp(name, v);
-                                            await widget.onRefresh();
-                                          },
-                                        ),
-                                        ClaudeButton(
-                                          label:
-                                              isTesting ? '探测中...' : '探测工具',
-                                          compact: true,
-                                          loading: isTesting,
-                                          leading: const Icon(
-                                            Icons.radar_rounded,
-                                          ),
-                                          onPressed: isTesting
-                                              ? null
-                                              : () => _testServer(name),
-                                        ),
-                                        if (tools.isNotEmpty)
-                                          ClaudeButton(
-                                            label: open
-                                                ? '收起 (${tools.length})'
-                                                : '工具 (${tools.length})',
-                                            compact: true,
-                                            leading: AnimatedRotation(
-                                              turns: open ? 0.5 : 0.0,
-                                              duration: ClaudeMotion.duration(
-                                                context,
-                                                ClaudeMotion.base,
-                                              ),
-                                              curve: ClaudeMotion.editorialOut,
-                                              child: const Icon(
-                                                Icons.expand_more_rounded,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                if (open) {
-                                                  _openDrawers.remove(name);
-                                                } else {
-                                                  _openDrawers.add(name);
-                                                }
-                                              });
-                                            },
-                                          ),
-                                        ClaudeButton(
-                                          label: '编辑',
-                                          compact: true,
-                                          variant: ClaudeBtnVariant.ghost,
-                                          onPressed: () =>
-                                              _openEditModal(existing: s),
-                                        ),
-                                        ClaudeButton(
-                                          label: '删除',
-                                          compact: true,
-                                          variant: ClaudeBtnVariant.ghost,
-                                          onPressed: () async {
-                                            final ok =
-                                                await showClaudeConfirmDialog(
-                                              context,
-                                              title: '删除子 MCP',
-                                              message:
-                                                  '确定移除嵌套子 MCP「$name」吗？',
-                                              confirmText: '删除',
-                                              destructive: true,
-                                            );
-                                            if (ok) {
-                                              await widget.backend
-                                                  .deleteSubMcp(name);
-                                              await widget.onRefresh();
-                                              widget.onToast('已删除 $name');
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                if ((s['description'] ?? '')
-                                    .toString()
-                                    .trim()
-                                    .isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    s['description'].toString(),
-                                    style: sansStyle(
-                                      c,
-                                      size: 13,
-                                      color: c.muted,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: ShapeDecoration(
-                                    color: c.recessed,
-                                    shape: claudeSuperellipse(11),
-                                  ),
-                                  child: SelectableText(
-                                    endpoint,
-                                    maxLines: 1,
-                                    style: monoStyle(c, size: 12),
-                                  ),
-                                ),
-                                ClaudeCollapsible(
-                                  expanded: lastErr.isNotEmpty,
-                                  builder: (_) => Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: ShapeDecoration(
-                                        color: c.dangerBg,
-                                        shape: claudeSuperellipse(
-                                          10,
-                                          side: BorderSide(
-                                            color: c.danger
-                                                .withValues(alpha: 0.28),
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        lastErr,
-                                        style: monoStyle(
-                                          c,
-                                          size: 11.5,
-                                          color: c.danger,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                ClaudeCollapsible(
-                                  expanded: open && tools.isNotEmpty,
-                                  builder: (_) => Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 12),
-                                      Divider(color: c.hairline.withValues(alpha: 0.45), height: 1),
-                                      const SizedBox(height: 12),
-                                      LayoutBuilder(
-                                        builder: (ctx, tbox) {
-                                          final cols = tbox.maxWidth < 460
-                                              ? 1
-                                              : (tbox.maxWidth < 740 ? 2 : 3);
-                                          final gap = 9.0;
-                                          final itemW = (tbox.maxWidth -
-                                                  gap * (cols - 1)) /
-                                              cols;
-                                          return Wrap(
-                                            spacing: gap,
-                                            runSpacing: gap,
-                                            children: tools.map((t) {
-                                              final toolName =
-                                                  (t['name'] ?? '').toString();
-                                              final tKey = '$name::$toolName';
-                                              final isToolOpen = _expandedTools
-                                                  .contains(tKey);
-                                              return SizedBox(
-                                                width: itemW,
-                                                child: _SubMcpToolTile(
-                                                  tool: t,
-                                                  expanded: isToolOpen,
-                                                  onToggle: () {
-                                                    setState(() {
-                                                      if (isToolOpen) {
-                                                        _expandedTools
-                                                            .remove(tKey);
-                                                      } else {
-                                                        _expandedTools
-                                                            .add(tKey);
-                                                      }
-                                                    });
-                                                  },
-                                                  onCopyName: () {
-                                                    Clipboard.setData(
-                                                      ClipboardData(
-                                                        text: toolName,
-                                                      ),
-                                                    );
-                                                    widget.onToast(
-                                                      '已复制工具名: $toolName',
-                                                    );
-                                                  },
-                                                ),
-                                              );
-                                            }).toList(),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                );
-              },
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 32) +
+                    widget.extraBottomPadding,
+              ),
+              child: ClaudeListGroup(
+                dividerIndent: 58,
+                children: [
+                  for (var idx = 0; idx < widget.servers.length; idx++)
+                    _buildServerRow(context, c, widget.servers[idx]),
+                ],
+              ),
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildServerRow(
+    BuildContext context,
+    ClaudePalette c,
+    Map<String, dynamic> s,
+  ) {
+    final name = (s['name'] ?? '').toString();
+    final enabled = s['enabled'] != false;
+    final tr = (s['transport'] ?? 'stdio').toString();
+    final isTesting = _testingNames.contains(name);
+    final status =
+        isTesting ? 'testing' : (s['status'] ?? 'idle').toString();
+    final tools = ((s['tools'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final open = _openDrawers.contains(name);
+    final endpoint = tr == 'stdio'
+        ? '${s['command'] ?? ''} ${((s['args'] as List?) ?? const []).join(' ')}'
+            .trim()
+        : (s['url'] ?? '').toString();
+    final desc = (s['description'] ?? '').toString().trim();
+    final lastErr = (s['last_error'] ?? '').toString();
+
+    Color dotColor = c.meta;
+    if (status == 'ok') dotColor = c.sage;
+    if (status == 'error') dotColor = c.danger;
+    if (status == 'testing') dotColor = c.clay;
+
+    final trColor = tr == 'stdio'
+        ? c.clay
+        : (tr == 'sse' ? c.purple : c.sage);
+
+    return RepaintBoundary(
+      key: ValueKey('sub-$name'),
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.62,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: tools.isEmpty
+                  ? null
+                  : () {
+                      setState(() {
+                        if (open) {
+                          _openDrawers.remove(name);
+                        } else {
+                          _openDrawers.add(name);
+                        }
+                      });
+                    },
+              hoverColor: c.paper3.withValues(alpha: 0.45),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // OrbStack-style compact server icon + live status dot
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: ShapeDecoration(
+                            color: c.recessed,
+                            shape: claudeSuperellipse(
+                              8.5,
+                              side: BorderSide(color: c.hairline),
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            tr == 'stdio'
+                                ? Icons.terminal_rounded
+                                : Icons.public_rounded,
+                            size: 16,
+                            color: enabled ? trColor : c.muted,
+                          ),
+                        ),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(1.5),
+                            decoration: BoxDecoration(
+                              color: c.paper2,
+                              shape: BoxShape.circle,
+                            ),
+                            child: ClaudeStatusDot(
+                              color: dotColor,
+                              pulsing: isTesting || (enabled && status == 'ok'),
+                              size: 6.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 3,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: sansStyle(
+                                  c,
+                                  size: 13.5,
+                                  weight: FontWeight.w600,
+                                  color: c.ink,
+                                ),
+                              ),
+                              ClaudePill(
+                                text: tr.toUpperCase(),
+                                fg: trColor,
+                                bg: trColor.withValues(alpha: 0.10),
+                                border: trColor.withValues(alpha: 0.22),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2.5),
+                          Text(
+                            desc.isNotEmpty ? '$desc · $endpoint' : endpoint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: monoStyle(c, size: 11.2, color: c.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Right controls: Tool count / Probe + Switch + ⋯ Menu
+                    if (tools.isNotEmpty)
+                      ClaudeButton(
+                        label: MediaQuery.sizeOf(context).width < 430
+                            ? '${tools.length}'
+                            : '${tools.length} 工具',
+                        compact: true,
+                        variant: ClaudeBtnVariant.ghost,
+                        leading: AnimatedRotation(
+                          turns: open ? 0.5 : 0.0,
+                          duration: ClaudeMotion.duration(
+                            context,
+                            ClaudeMotion.fast,
+                          ),
+                          child: const Icon(Icons.expand_more_rounded),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            if (open) {
+                              _openDrawers.remove(name);
+                            } else {
+                              _openDrawers.add(name);
+                            }
+                          });
+                        },
+                      )
+                    else
+                      ClaudeButton(
+                        label: isTesting ? '探测中' : '探测',
+                        compact: true,
+                        loading: isTesting,
+                        variant: ClaudeBtnVariant.ghost,
+                        leading: const Icon(Icons.radar_rounded),
+                        onPressed: isTesting ? null : () => _testServer(name),
+                      ),
+                    const SizedBox(width: 8),
+                    ClaudeSwitch(
+                      value: enabled,
+                      onChanged: (v) async {
+                        await widget.backend.toggleSubMcp(name, v);
+                        await widget.onRefresh();
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    ClaudeActionMenuButton(
+                      tooltip: '更多操作',
+                      actions: [
+                        ClaudeMenuAction(
+                          label: isTesting ? '正在探测工具...' : '探测并刷新工具列表',
+                          icon: Icons.radar_rounded,
+                          onSelected: () {
+                            if (!isTesting) _testServer(name);
+                          },
+                        ),
+                        ClaudeMenuAction(
+                          label: '编辑服务配置',
+                          icon: Icons.edit_outlined,
+                          onSelected: () => _openEditModal(existing: s),
+                        ),
+                        ClaudeMenuAction(
+                          label: tr == 'stdio' ? '复制启动命令' : '复制服务地址',
+                          subtitle: endpoint,
+                          icon: Icons.copy_rounded,
+                          onSelected: () {
+                            Clipboard.setData(ClipboardData(text: endpoint));
+                            widget.onToast('已复制：$endpoint');
+                          },
+                        ),
+                        ClaudeMenuAction(
+                          label: '删除此子 MCP',
+                          icon: Icons.delete_outline_rounded,
+                          dividerBefore: true,
+                          destructive: true,
+                          onSelected: () async {
+                            final ok = await showClaudeConfirmDialog(
+                              context,
+                              title: '删除子 MCP',
+                              message: '确定移除嵌套子 MCP「$name」吗？',
+                              confirmText: '删除',
+                              destructive: true,
+                            );
+                            if (ok) {
+                              await widget.backend.deleteSubMcp(name);
+                              await widget.onRefresh();
+                              widget.onToast('已删除 $name');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            ClaudeCollapsible(
+              expanded: lastErr.isNotEmpty,
+              builder: (_) => Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(58, 0, 14, 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: ShapeDecoration(
+                  color: c.dangerBg,
+                  shape: claudeSuperellipse(
+                    8,
+                    side: BorderSide(color: c.danger.withValues(alpha: 0.28)),
+                  ),
+                ),
+                child: Text(
+                  lastErr,
+                  style: monoStyle(c, size: 11.2, color: c.danger),
+                ),
+              ),
+            ),
+            ClaudeCollapsible(
+              expanded: open && tools.isNotEmpty,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: c.isDark
+                      ? c.recessed.withValues(alpha: 0.65)
+                      : c.recessed.withValues(alpha: 0.55),
+                  border: Border(top: BorderSide(color: c.hairline)),
+                ),
+                padding: const EdgeInsets.fromLTRB(58, 8, 14, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var ti = 0; ti < tools.length; ti++) ...[
+                      if (ti > 0)
+                        Divider(
+                          height: 1,
+                          color: c.hairline.withValues(alpha: 0.65),
+                        ),
+                      _SubMcpToolRow(
+                        tool: tools[ti],
+                        expanded: _expandedTools.contains(
+                          '$name::${tools[ti]['name']}',
+                        ),
+                        onToggle: () {
+                          final tKey = '$name::${tools[ti]['name']}';
+                          setState(() {
+                            if (_expandedTools.contains(tKey)) {
+                              _expandedTools.remove(tKey);
+                            } else {
+                              _expandedTools.add(tKey);
+                            }
+                          });
+                        },
+                        onCopyName: () {
+                          final toolName =
+                              (tools[ti]['name'] ?? '').toString();
+                          Clipboard.setData(ClipboardData(text: toolName));
+                          widget.onToast('已复制工具名: $toolName');
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubMcpToolRow extends StatelessWidget {
+  final Map<String, dynamic> tool;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onCopyName;
+
+  const _SubMcpToolRow({
+    required this.tool,
+    required this.expanded,
+    required this.onToggle,
+    required this.onCopyName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final name = (tool['name'] ?? '').toString();
+    final desc = (tool['description'] ?? '').toString().trim();
+    final schema = tool['inputSchema'] is Map
+        ? Map<String, dynamic>.from(tool['inputSchema'] as Map)
+        : const <String, dynamic>{};
+    final props = schema['properties'] is Map
+        ? Map<String, dynamic>.from(schema['properties'] as Map)
+        : const <String, dynamic>{};
+    final requiredSet = ((schema['required'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toSet();
+
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.build_outlined, size: 12.5, color: c.clay),
+                const SizedBox(width: 7),
+                Text(
+                  name,
+                  style: monoStyle(
+                    c,
+                    size: 11.8,
+                    weight: FontWeight.w600,
+                    color: c.ink,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (desc.isNotEmpty && !expanded)
+                  Expanded(
+                    child: Text(
+                      desc,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: sansStyle(c, size: 11.5, color: c.muted),
+                    ),
+                  )
+                else
+                  const Spacer(),
+                if (props.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  ClaudePill(
+                    text: '${props.length} 参数',
+                    mono: false,
+                    bg: c.paper2,
+                  ),
+                ],
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: '复制工具名',
+                  child: InkWell(
+                    onTap: onCopyName,
+                    borderRadius: BorderRadius.circular(5),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.copy_rounded,
+                        size: 12.5,
+                        color: c.muted,
+                      ),
+                    ),
+                  ),
+                ),
+                Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 15,
+                  color: c.meta,
+                ),
+              ],
+            ),
+            ClaudeCollapsible(
+              expanded: expanded,
+              builder: (_) => Padding(
+                padding: const EdgeInsets.fromLTRB(19, 6, 4, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (desc.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: SelectableText(
+                          desc,
+                          style: sansStyle(
+                            c,
+                            size: 11.8,
+                            color: c.inkSoft,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    if (props.isNotEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(9),
+                        decoration: ShapeDecoration(
+                          color: c.paper2,
+                          shape: claudeSuperellipse(
+                            8,
+                            side: BorderSide(color: c.hairline),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final e in props.entries)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 5),
+                                child: Builder(
+                                  builder: (_) {
+                                    final pMap = e.value is Map
+                                        ? Map<String, dynamic>.from(
+                                            e.value as Map,
+                                          )
+                                        : const <String, dynamic>{};
+                                    final pType =
+                                        (pMap['type'] ?? 'any').toString();
+                                    final pDesc = (pMap['description'] ?? '')
+                                        .toString()
+                                        .trim();
+                                    final isReq = requiredSet.contains(e.key);
+                                    return Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          e.key,
+                                          style: monoStyle(
+                                            c,
+                                            size: 11.4,
+                                            weight: FontWeight.w600,
+                                            color: c.ink,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        ClaudePill(text: pType),
+                                        if (isReq) ...[
+                                          const SizedBox(width: 5),
+                                          ClaudePill(
+                                            text: '必填',
+                                            mono: false,
+                                            fg: c.clay,
+                                            bg: c.clay.withValues(alpha: 0.10),
+                                          ),
+                                        ],
+                                        if (pDesc.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              pDesc,
+                                              style: sansStyle(
+                                                c,
+                                                size: 11.2,
+                                                color: c.muted,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -661,527 +899,315 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
         vertical: 18,
       ),
       shape: claudeSuperellipse(
-        22,
+        16,
         side: BorderSide(color: c.hairline),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 590, maxHeight: 700),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 18 : 26,
-            20,
-            compact ? 18 : 26,
-            18,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
+        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 16 : 22,
+                16,
+                compact ? 14 : 18,
+                14,
+              ),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const ClaudeSparkIcon(size: 18),
-                      const SizedBox(width: 10),
-                      Text(
-                        widget.existing != null ? '编辑子 MCP' : '添加子 MCP',
-                        style: serifTitleStyle(c, size: 20),
-                      ),
-                    ],
+                  const ClaudeSparkIcon(size: 17),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      widget.existing != null ? '编辑子 MCP 服务' : '添加子 MCP 服务',
+                      style: serifTitleStyle(c, size: 17),
+                    ),
                   ),
-                  if (widget.existing == null)
+                  if (widget.existing == null) ...[
                     ClaudeSegmented<bool>(
                       value: _jsonMode,
                       items: const [(false, '表单配置'), (true, '粘贴 JSON')],
                       onChanged: (v) => setState(() => _jsonMode = v),
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  ClaudeButton(
+                    label: '',
+                    compact: true,
+                    variant: ClaudeBtnVariant.ghost,
+                    leading: const Icon(Icons.close_rounded, size: 17),
+                    onPressed: () => Navigator.of(context).pop(false),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: AnimatedSize(
-                    duration: ClaudeMotion.duration(context, ClaudeMotion.base),
-                    curve: ClaudeMotion.editorialOut,
-                    alignment: Alignment.topCenter,
-                    child: _jsonMode
-                        ? Column(
-                            key: const ValueKey('json-mode'),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '支持直接粘贴 Claude Desktop、Cursor 或 Antigravity 的 mcpServers JSON 配置：',
-                                style: sansStyle(
-                                  c,
-                                  size: 12.5,
-                                  color: c.muted,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: _jsonCtrl,
-                                maxLines: 12,
-                                style: monoStyle(c, size: 12.5, color: c.ink),
-                                decoration: const InputDecoration(
-                                  hintText:
-                                      '{\n  "mcpServers": {\n    "memory": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-memory"]\n    }\n  }\n}',
-                                ),
-                              ),
-                            ],
-                          )
-                        : Column(
-                            key: const ValueKey('form-mode'),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClaudeFormRow(
-                                label: '传输协议',
-                                labelWidth: 104,
-                                stackBreakpoint: 430,
-                                horizontalAlignment: CrossAxisAlignment.center,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: ClaudeSegmented<String>(
-                                    value: _proto,
-                                    items: const [
-                                      ('stdio', 'stdio 进程'),
-                                      ('http', 'Streamable HTTP'),
-                                      ('sse', 'SSE'),
-                                    ],
-                                    onChanged: (v) =>
-                                        setState(() => _proto = v),
-                                  ),
-                                ),
-                              ),
-                              ClaudeCollapsible(
-                                expanded: _proto == 'stdio',
-                                builder: (_) => Column(
-                                  children: [
-                                    ClaudeFormRow(
-                                      label: '启动命令',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _cmdCtrl,
-                                        style: monoStyle(
-                                          c,
-                                          size: 13,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: '如 npx、uvx、python',
-                                        ),
-                                      ),
-                                    ),
-                                    ClaudeFormRow(
-                                      label: '命令参数',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _argsCtrl,
-                                        maxLines: 3,
-                                        style: monoStyle(
-                                          c,
-                                          size: 12.5,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText:
-                                              '每行一个参数，例如：\n-y\n@modelcontextprotocol/server-memory',
-                                        ),
-                                      ),
-                                    ),
-                                    ClaudeFormRow(
-                                      label: '工作目录',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _cwdCtrl,
-                                        style: monoStyle(
-                                          c,
-                                          size: 12.5,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: '留空使用默认目录（选填）',
-                                        ),
-                                      ),
-                                    ),
-                                    ClaudeFormRow(
-                                      label: '环境变量',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _envCtrl,
-                                        maxLines: 2,
-                                        style: monoStyle(
-                                          c,
-                                          size: 12.5,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: '每行一个 KEY=VALUE（选填）',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ClaudeCollapsible(
-                                expanded: _proto != 'stdio',
-                                builder: (_) => Column(
-                                  children: [
-                                    ClaudeFormRow(
-                                      label: '服务地址 URL',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _urlCtrl,
-                                        style: monoStyle(
-                                          c,
-                                          size: 13,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: 'https://example.com/mcp',
-                                        ),
-                                      ),
-                                    ),
-                                    ClaudeFormRow(
-                                      label: '请求头 Headers',
-                                      labelWidth: 104,
-                                      stackBreakpoint: 430,
-                                      child: TextField(
-                                        controller: _headersCtrl,
-                                        maxLines: 2,
-                                        style: monoStyle(
-                                          c,
-                                          size: 12.5,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: '每行一个 Key: Value（选填）',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ClaudeFormRow(
-                                label: '子 MCP 名称',
-                                labelWidth: 104,
-                                stackBreakpoint: 430,
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _nameCtrl,
-                                        style: monoStyle(
-                                          c,
-                                          size: 13,
-                                          color: c.ink,
-                                        ),
-                                        decoration: const InputDecoration(
-                                          hintText: '可留空点右侧自动获取',
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    ClaudeButton(
-                                      label: _probing ? '探测中...' : '自动探测',
-                                      compact: true,
-                                      leading: const Icon(
-                                        Icons.auto_fix_high_rounded,
-                                      ),
-                                      onPressed: _probing ? null : _probe,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ClaudeFormRow(
-                                label: '功能简介',
-                                labelWidth: 104,
-                                stackBreakpoint: 430,
-                                child: TextField(
-                                  controller: _descCtrl,
-                                  style: sansStyle(c, size: 13, color: c.ink),
-                                  decoration: const InputDecoration(
-                                    hintText: '自动识别或手动填写（选填）',
-                                  ),
-                                ),
-                              ),
-                              ClaudeFormRow(
-                                label: '超时（秒）',
-                                labelWidth: 104,
-                                stackBreakpoint: 430,
-                                horizontalAlignment: CrossAxisAlignment.center,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: SizedBox(
-                                    width: 112,
-                                    child: TextField(
-                                      controller: _timeoutCtrl,
-                                      keyboardType: TextInputType.number,
-                                      style: monoStyle(
-                                        c,
-                                        size: 13,
-                                        color: c.ink,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
+            ),
+            Divider(height: 1, color: c.hairline),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 16 : 22,
+                  16,
+                  compact ? 16 : 22,
+                  14,
                 ),
+                child: _jsonMode
+                    ? Column(
+                        key: const ValueKey('json-mode'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '支持直接粘贴 Claude Desktop、Cursor 或 Antigravity 的 mcpServers JSON 配置：',
+                            style: sansStyle(
+                              c,
+                              size: 12.2,
+                              color: c.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _jsonCtrl,
+                            maxLines: 12,
+                            style: monoStyle(c, size: 12.2, color: c.ink),
+                            decoration: const InputDecoration(
+                              hintText:
+                                  '{\n  "mcpServers": {\n    "memory": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-memory"]\n    }\n  }\n}',
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        key: const ValueKey('form-mode'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClaudeFormRow(
+                            label: '传输协议',
+                            labelWidth: 100,
+                            stackBreakpoint: 430,
+                            horizontalAlignment: CrossAxisAlignment.center,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: ClaudeSegmented<String>(
+                                value: _proto,
+                                items: const [
+                                  ('stdio', 'stdio 进程'),
+                                  ('http', 'Streamable HTTP'),
+                                  ('sse', 'SSE'),
+                                ],
+                                onChanged: (v) => setState(() => _proto = v),
+                              ),
+                            ),
+                          ),
+                          ClaudeCollapsible(
+                            expanded: _proto == 'stdio',
+                            builder: (_) => Column(
+                              children: [
+                                ClaudeFormRow(
+                                  label: '启动命令',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _cmdCtrl,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.6,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '如 npx、uvx、python',
+                                    ),
+                                  ),
+                                ),
+                                ClaudeFormRow(
+                                  label: '命令参数',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _argsCtrl,
+                                    maxLines: 3,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.2,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText:
+                                          '每行一个参数，例如：\n-y\n@modelcontextprotocol/server-memory',
+                                    ),
+                                  ),
+                                ),
+                                ClaudeFormRow(
+                                  label: '工作目录',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _cwdCtrl,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.2,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '留空使用默认目录（选填）',
+                                    ),
+                                  ),
+                                ),
+                                ClaudeFormRow(
+                                  label: '环境变量',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _envCtrl,
+                                    maxLines: 2,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.2,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '每行一个 KEY=VALUE（选填）',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ClaudeCollapsible(
+                            expanded: _proto != 'stdio',
+                            builder: (_) => Column(
+                              children: [
+                                ClaudeFormRow(
+                                  label: '服务地址 URL',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _urlCtrl,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.6,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: 'https://example.com/mcp',
+                                    ),
+                                  ),
+                                ),
+                                ClaudeFormRow(
+                                  label: '请求头 Headers',
+                                  labelWidth: 100,
+                                  stackBreakpoint: 430,
+                                  child: TextField(
+                                    controller: _headersCtrl,
+                                    maxLines: 2,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.2,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '每行一个 Key: Value（选填）',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ClaudeFormRow(
+                            label: '子 MCP 名称',
+                            labelWidth: 100,
+                            stackBreakpoint: 430,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _nameCtrl,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.6,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '可留空点右侧自动获取',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ClaudeButton(
+                                  label: _probing ? '探测中...' : '自动探测',
+                                  compact: true,
+                                  loading: _probing,
+                                  leading: const Icon(
+                                    Icons.auto_fix_high_rounded,
+                                  ),
+                                  onPressed: _probing ? null : _probe,
+                                ),
+                              ],
+                            ),
+                          ),
+                          ClaudeFormRow(
+                            label: '功能简介',
+                            labelWidth: 100,
+                            stackBreakpoint: 430,
+                            child: TextField(
+                              controller: _descCtrl,
+                              style: sansStyle(c, size: 12.8, color: c.ink),
+                              decoration: const InputDecoration(
+                                hintText: '自动识别或手动填写（选填）',
+                              ),
+                            ),
+                          ),
+                          ClaudeFormRow(
+                            label: '超时（秒）',
+                            labelWidth: 100,
+                            stackBreakpoint: 430,
+                            horizontalAlignment: CrossAxisAlignment.center,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                width: 108,
+                                child: TextField(
+                                  controller: _timeoutCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: monoStyle(
+                                    c,
+                                    size: 12.6,
+                                    color: c.ink,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 10,
-                runSpacing: 8,
+            ),
+            Divider(height: 1, color: c.hairline),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 16 : 22,
+                vertical: 12,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   ClaudeButton(
                     label: '取消',
                     compact: true,
                     onPressed: () => Navigator.of(context).pop(false),
                   ),
+                  const SizedBox(width: 8),
                   ClaudeButton(
                     label: _saving ? '保存中...' : '保存配置',
                     compact: true,
+                    loading: _saving,
                     variant: ClaudeBtnVariant.clay,
                     onPressed: _saving ? null : _save,
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SubMcpToolTile extends StatelessWidget {
-  final Map<String, dynamic> tool;
-  final bool expanded;
-  final VoidCallback onToggle;
-  final VoidCallback onCopyName;
-
-  const _SubMcpToolTile({
-    required this.tool,
-    required this.expanded,
-    required this.onToggle,
-    required this.onCopyName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    final name = (tool['name'] ?? '').toString();
-    final desc = (tool['description'] ?? '').toString().trim();
-    final schema = tool['inputSchema'] is Map
-        ? Map<String, dynamic>.from(tool['inputSchema'] as Map)
-        : const <String, dynamic>{};
-    final props = schema['properties'] is Map
-        ? Map<String, dynamic>.from(schema['properties'] as Map)
-        : const <String, dynamic>{};
-    final requiredSet = ((schema['required'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .toSet();
-
-    return AnimatedContainer(
-      duration: ClaudeMotion.duration(context, ClaudeMotion.base),
-      curve: ClaudeMotion.editorialOut,
-      decoration: ShapeDecoration(
-        color: expanded ? c.paper2 : c.recessed,
-        shape: claudeSuperellipse(
-          11,
-          side: BorderSide(
-            color: expanded ? c.clay.withValues(alpha: 0.45) : c.hairline,
-          ),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(11),
-          onTap: onToggle,
-          child: Padding(
-            padding: const EdgeInsets.all(11),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: expanded ? 2 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: monoStyle(
-                          c,
-                          size: 12,
-                          color: c.ink,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (props.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      ClaudePill(
-                        text: '${props.length} 参数',
-                        mono: false,
-                        bg: c.paper3,
-                      ),
-                    ],
-                    const SizedBox(width: 4),
-                    AnimatedRotation(
-                      turns: expanded ? 0.5 : 0.0,
-                      duration: ClaudeMotion.duration(
-                        context,
-                        const Duration(milliseconds: 180),
-                      ),
-                      curve: ClaudeMotion.editorialOut,
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 16,
-                        color: c.muted,
-                      ),
-                    ),
-                  ],
-                ),
-                if (!expanded && desc.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    desc,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: sansStyle(
-                      c,
-                      size: 11.5,
-                      color: c.muted,
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-                ClaudeCollapsible(
-                  expanded: expanded,
-                  builder: (_) => Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (desc.isNotEmpty)
-                          SelectableText(
-                            desc,
-                            style: sansStyle(
-                              c,
-                              size: 12,
-                              color: c.inkSoft,
-                              height: 1.5,
-                            ),
-                          ),
-                        if (props.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(9),
-                            decoration: ShapeDecoration(
-                              color: c.recessed,
-                              shape: claudeSuperellipse(
-                                9,
-                                side: BorderSide(color: c.hairline),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: props.entries.map((e) {
-                                final pMap = e.value is Map
-                                    ? Map<String, dynamic>.from(e.value as Map)
-                                    : const <String, dynamic>{};
-                                final pType =
-                                    (pMap['type'] ?? 'any').toString();
-                                final pDesc =
-                                    (pMap['description'] ?? '').toString().trim();
-                                final isReq = requiredSet.contains(e.key);
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        crossAxisAlignment:
-                                            WrapCrossAlignment.center,
-                                        children: [
-                                          Text(
-                                            e.key,
-                                            style: monoStyle(
-                                              c,
-                                              size: 11.5,
-                                              color: c.ink,
-                                              weight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          ClaudePill(
-                                            text: pType,
-                                            bg: c.paper2,
-                                          ),
-                                          if (isReq)
-                                            ClaudePill(
-                                              text: '必填',
-                                              mono: false,
-                                              fg: c.clay,
-                                              bg: c.clay.withValues(alpha: 0.12),
-                                            ),
-                                        ],
-                                      ),
-                                      if (pDesc.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          pDesc,
-                                          style: sansStyle(
-                                            c,
-                                            size: 11,
-                                            color: c.muted,
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            ClaudeButton(
-                              label: '复制工具名',
-                              compact: true,
-                              leading: const Icon(Icons.copy_rounded),
-                              onPressed: onCopyName,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
+          ],
         ),
       ),
     );

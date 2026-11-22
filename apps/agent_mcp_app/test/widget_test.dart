@@ -509,7 +509,8 @@ void main() {
         await tester.tap(find.text('基础与外观'));
         await tester.pump(const Duration(milliseconds: 300));
       }
-      expect(find.textContaining('窗口云母与毛玻璃透光'), findsOneWidget);
+      expect(find.textContaining('窗口云母与毛玻璃透光'), findsNothing);
+      expect(find.text('基础服务与全局密码'), findsOneWidget);
     });
   }
 
@@ -1016,6 +1017,123 @@ void main() {
     expect(backend.launchedInstallerPath, contains('AgentMCP-v2.9.0-windows-x64-sfx.exe'));
     expect(backend.launchedInstallerAfter, equals('gui'));
     expect(backend.launchedInstallerSilent, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v2.6 Linear/OrbStack UI: SplitButton, 4-edge searchable DropMenu, ListGroup & floating unsaved bar',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 860);
+    tester.view.devicePixelRatio = 1.0;
+
+    var primaryCount = 0;
+    var selectedMenuAction = '';
+    var selectedTool = 'ALL';
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (ctx, setState) {
+          return MaterialApp(
+            theme: buildClaudeTheme(ClaudePalette.dark),
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  Align(
+                    alignment: Alignment.topLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: ClaudeListGroup(
+                        headerLabel: '控件测试组',
+                        children: [
+                          ClaudeSettingsRow(
+                            title: '分体复制按钮',
+                            subtitle: '左段直击复制，右段打开多通道菜单',
+                            trailing: ClaudeSplitButton(
+                              label: '复制主链接',
+                              leading: const Icon(Icons.copy_rounded),
+                              onPrimaryPressed: () =>
+                                  setState(() => primaryCount++),
+                              menuActions: [
+                                ClaudeMenuAction(
+                                  label: 'Tailscale 直连',
+                                  badge: '100.x',
+                                  onTap: () => setState(
+                                    () => selectedMenuAction = 'ts',
+                                  ),
+                                ),
+                                ClaudeMenuAction(
+                                  label: '局域网地址',
+                                  badge: 'LAN',
+                                  onTap: () => setState(
+                                    () => selectedMenuAction = 'lan',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: ClaudeDropMenu<String>(
+                        value: selectedTool,
+                        searchable: true,
+                        items: [
+                          const ClaudeDropMenuItem(
+                            value: 'ALL',
+                            label: '全部工具',
+                          ),
+                          for (var i = 1; i <= 10; i++)
+                            ClaudeDropMenuItem(
+                              value: 'tool_$i',
+                              label: 'mcp_tool_$i',
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => selectedTool = v),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // 1. Primary SplitButton click triggers primary action directly
+    await tester.tap(find.text('复制主链接'));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(primaryCount, equals(1));
+
+    // 2. Right chevron of SplitButton opens Popover menu
+    await tester.tap(find.byTooltip('更多选项'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Tailscale 直连'), findsOneWidget);
+    await tester.tap(find.text('Tailscale 直连'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(selectedMenuAction, equals('ts'));
+
+    // 3. Bottom-right searchable DropMenu flips upward & aligns right inside viewport
+    await tester.tap(find.text('全部工具'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('筛选选项...'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, 'tool_9');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('mcp_tool_9'), findsOneWidget);
+    expect(find.text('mcp_tool_2'), findsNothing);
+    await tester.tap(find.text('mcp_tool_9'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(selectedTool, equals('tool_9'));
     expect(tester.takeException(), isNull);
   });
 }

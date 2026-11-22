@@ -181,15 +181,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       !cli_show && (cli_silent || cfg_flags.silent_start);
 
   flutter::DartProject project(L"data");
-  // Flutter 3.47+/3.50 enabled Impeller by default on Windows, whose swapchain
-  // forces an opaque surface and turns transparent DWM Acrylic/Mica areas solid grey.
-  // Disabling Impeller on Windows restores Skia/ANGLE premultiplied alpha transparency!
-  project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
   window.SetStartHidden(start_hidden);
-  window.SetBackdropEffect(cfg_flags.window_effect);
+  window.SetBackdropEffect(false);
 
   Win32Window::Point origin(80, 60);
   Win32Window::Size size(1180, 780);

@@ -275,368 +275,102 @@ class EndpointCopyOption {
   });
 }
 
-class EndpointCopyDropButton extends StatefulWidget {
+class EndpointCopyDropButton extends StatelessWidget {
   final String label;
   final List<EndpointCopyOption> options;
   final void Function(EndpointCopyOption option) onSelect;
+  final bool useSplitPrimary;
+  final String? primaryUrl;
+  final VoidCallback? onPrimaryTap;
 
   const EndpointCopyDropButton({
     super.key,
     this.label = '复制',
     required this.options,
     required this.onSelect,
+    this.useSplitPrimary = false,
+    this.primaryUrl,
+    this.onPrimaryTap,
   });
-
-  @override
-  State<EndpointCopyDropButton> createState() => _EndpointCopyDropButtonState();
-}
-
-class _EndpointCopyDropButtonState extends State<EndpointCopyDropButton>
-    with SingleTickerProviderStateMixin {
-  final LayerLink _layerLink = LayerLink();
-  final OverlayPortalController _portalCtrl = OverlayPortalController();
-  late final AnimationController _animCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 220),
-    reverseDuration: const Duration(milliseconds: 140),
-  );
-
-  bool _open = false;
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  void dispose() {
-    _animCtrl.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    if (widget.options.isEmpty) return;
-    if (widget.options.length == 1) {
-      widget.onSelect(widget.options.first);
-      return;
-    }
-    if (_open) {
-      _closeMenu();
-    } else {
-      _openMenu();
-    }
-  }
-
-  void _openMenu() {
-    if (_open) return;
-    setState(() => _open = true);
-    _portalCtrl.show();
-    _animCtrl.forward(from: 0.0);
-  }
-
-  Future<void> _closeMenu() async {
-    if (!_open) return;
-    setState(() => _open = false);
-    await _animCtrl.reverse();
-    if (mounted && !_open && _portalCtrl.isShowing) {
-      _portalCtrl.hide();
-    }
-  }
-
-  Future<void> _pick(EndpointCopyOption opt) async {
-    widget.onSelect(opt);
-    await _closeMenu();
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
-    final singleDirect = widget.options.length == 1;
-    final triggerElevated = _hovered || _open;
-    final triggerBg = _pressed
-        ? c.paper3
-        : (_open ? c.paper3 : (_hovered ? c.paper3 : c.paper2));
-    final triggerBorder =
-        _open ? c.clay : (_hovered ? c.ringHover : c.hairline);
+    if (options.isEmpty) {
+      return ClaudeButton(
+        label: label,
+        compact: true,
+        variant: useSplitPrimary ? ClaudeBtnVariant.clay : ClaudeBtnVariant.neutral,
+        leading: const Icon(Icons.copy_rounded),
+        onPressed: onPrimaryTap,
+      );
+    }
+    if (options.length == 1) {
+      return ClaudeButton(
+        label: label,
+        compact: true,
+        variant: useSplitPrimary ? ClaudeBtnVariant.clay : ClaudeBtnVariant.neutral,
+        tooltip: '复制地址',
+        leading: const Icon(Icons.copy_rounded),
+        onPressed: onPrimaryTap ?? () => onSelect(options.first),
+      );
+    }
 
-    final menuCurved = CurvedAnimation(
-      parent: _animCtrl,
-      curve: ClaudeMotion.snappySpring,
-      reverseCurve: Curves.easeInCubic,
-    );
-
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: OverlayPortal(
-        controller: _portalCtrl,
-        overlayChildBuilder: (overlayCtx) {
-          final oc = ClaudePalette.of(overlayCtx);
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _closeMenu,
-                ),
-              ),
-              CompositedTransformFollower(
-                link: _layerLink,
-                showWhenUnlinked: false,
-                targetAnchor: Alignment.bottomRight,
-                followerAnchor: Alignment.topRight,
-                offset: const Offset(0, 7),
-                child: FadeTransition(
-                  opacity: _animCtrl.drive(CurveTween(curve: Curves.easeOut)),
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.92, end: 1.0)
-                        .animate(menuCurved),
-                    alignment: Alignment.topRight,
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minWidth: 256,
-                          maxWidth: 360,
-                          maxHeight: 320,
-                        ),
-                        child: ClaudeGlassBar(
-                          blurSigma: 22,
-                          borderRadius: 14,
-                          tintColor: oc.isDark
-                              ? const Color(0xF022211E)
-                              : const Color(0xF5FAF9F5),
-                          padding: const EdgeInsets.all(6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: oc.isDark ? 0.50 : 0.16),
-                              blurRadius: 26,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 10),
-                            ),
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: oc.isDark ? 0.28 : 0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (var i = 0;
-                                    i < widget.options.length;
-                                    i++) ...[
-                                  if (i > 0) const SizedBox(height: 4),
-                                  _EndpointMenuTile(
-                                    option: widget.options[i],
-                                    onSelect: () => _pick(widget.options[i]),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-        child: Tooltip(
-          message: singleDirect ? '复制入口地址' : '选择地址并复制',
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() {
-              _hovered = false;
-              _pressed = false;
-            }),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (_) => setState(() => _pressed = true),
-              onTapUp: (_) => setState(() => _pressed = false),
-              onTapCancel: () => setState(() => _pressed = false),
-              onTap: widget.options.isEmpty ? null : _toggleMenu,
-              child: AnimatedScale(
-                scale: _pressed ? 0.955 : (_hovered && !_open ? 1.015 : 1.0),
-                duration: ClaudeMotion.duration(
-                  context,
-                  _pressed
-                      ? const Duration(milliseconds: 80)
-                      : const Duration(milliseconds: 200),
-                ),
-                curve: _pressed
-                    ? ClaudeMotion.standard
-                    : ClaudeMotion.snappySpring,
-                child: AnimatedContainer(
-                  duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-                  curve: ClaudeMotion.editorialOut,
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
-                  decoration: ShapeDecoration(
-                    color: triggerBg,
-                    shape: claudeSuperellipse(
-                      10,
-                      side: BorderSide(color: triggerBorder),
-                    ),
-                    shadows: triggerElevated && !_pressed
-                        ? [
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: c.isDark ? 0.34 : 0.10),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : const [],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.copy_rounded,
-                        size: 13.5,
-                        color: _open ? c.clay : c.inkSoft,
-                      ),
-                      const SizedBox(width: 5.5),
-                      Text(
-                        widget.label,
-                        style: sansStyle(
-                          c,
-                          size: 12.5,
-                          weight: FontWeight.w500,
-                          color: _open ? c.ink : c.inkSoft,
-                        ),
-                      ),
-                      if (!singleDirect) ...[
-                        const SizedBox(width: 3),
-                        AnimatedRotation(
-                          turns: _open ? 0.5 : 0.0,
-                          duration: ClaudeMotion.duration(
-                            context,
-                            const Duration(milliseconds: 180),
-                          ),
-                          curve: ClaudeMotion.editorialOut,
-                          child: Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            size: 15.5,
-                            color: _open ? c.clay : c.muted,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+    final actions = <ClaudeMenuAction>[
+      for (final opt in options)
+        ClaudeMenuAction(
+          badge: opt.badge,
+          label: opt.displayLabel ?? opt.url,
+          icon: opt.isCopyAll
+              ? Icons.library_add_check_outlined
+              : Icons.content_copy_rounded,
+          highlight: opt.isHighlight,
+          dividerBefore: opt.isCopyAll,
+          onSelected: () => onSelect(opt),
         ),
-      ),
-    );
-  }
-}
+    ];
 
-class _EndpointMenuTile extends StatefulWidget {
-  final EndpointCopyOption option;
-  final VoidCallback onSelect;
+    if (useSplitPrimary) {
+      return ClaudeSplitButton(
+        label: label,
+        icon: Icons.copy_rounded,
+        variant: ClaudeBtnVariant.clay,
+        onPrimaryPressed: onPrimaryTap ?? () => onSelect(options.first),
+        menuActions: actions,
+        minMenuWidth: 268,
+        maxMenuWidth: 380,
+      );
+    }
 
-  const _EndpointMenuTile({
-    required this.option,
-    required this.onSelect,
-  });
-
-  @override
-  State<_EndpointMenuTile> createState() => _EndpointMenuTileState();
-}
-
-class _EndpointMenuTileState extends State<_EndpointMenuTile> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    final opt = widget.option;
-    final bg = _pressed
-        ? c.clay.withValues(alpha: c.isDark ? 0.18 : 0.12)
-        : (_hovered
-            ? c.paper3.withValues(alpha: 0.92)
-            : c.paper3.withValues(alpha: 0.0));
-    final border = _pressed
-        ? c.clay.withValues(alpha: 0.40)
-        : (_hovered ? c.ringHover : c.hairline.withValues(alpha: 0.0));
-
-    final badgeFg = opt.isCopyAll
-        ? c.inkSoft
-        : (opt.isHighlight ? c.sage : c.clay);
-    final badgeBg = opt.isCopyAll
-        ? c.recessed
-        : (opt.isHighlight ? c.sageBg : c.clay.withValues(alpha: 0.12));
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onSelect,
-        child: AnimatedContainer(
-          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-          curve: ClaudeMotion.editorialOut,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8.5),
-          decoration: ShapeDecoration(
-            color: bg,
-            shape: claudeSuperellipse(
-              10,
-              side: BorderSide(color: border),
+    return ClaudeActionMenuButton(
+      actions: actions,
+      tooltip: '选择地址并复制',
+      minMenuWidth: 268,
+      maxMenuWidth: 380,
+      customTrigger: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: ShapeDecoration(
+          color: c.paper2,
+          shape: claudeSuperellipse(8.5, side: BorderSide(color: c.hairline)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.copy_rounded, size: 13.5, color: c.inkSoft),
+            const SizedBox(width: 5.5),
+            Text(
+              label,
+              style: sansStyle(
+                c,
+                size: 12.2,
+                weight: FontWeight.w500,
+                color: c.inkSoft,
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              ClaudePill(
-                text: opt.badge,
-                mono: !opt.isCopyAll,
-                fg: badgeFg,
-                bg: badgeBg,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  opt.displayLabel ?? opt.url,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: opt.isCopyAll
-                      ? sansStyle(
-                          c,
-                          size: 12,
-                          weight: FontWeight.w500,
-                          color: _hovered ? c.ink : c.inkSoft,
-                        )
-                      : monoStyle(
-                          c,
-                          size: 11.4,
-                          color: _hovered ? c.ink : c.inkSoft,
-                        ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                opt.isCopyAll
-                    ? Icons.library_add_check_outlined
-                    : Icons.content_copy_rounded,
-                size: 13.5,
-                color: _hovered ? c.clay : c.meta,
-              ),
-            ],
-          ),
+            const SizedBox(width: 3),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 14.5, color: c.meta),
+          ],
         ),
       ),
     );

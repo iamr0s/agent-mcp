@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
 import 'console_backend_interface.dart';
-import 'update_service.dart';
 
 class UnauthorizedConsoleException implements Exception {
   const UnauthorizedConsoleException();

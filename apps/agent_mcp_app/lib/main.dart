@@ -128,14 +128,8 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const _ConsoleScrollBehavior(),
         themeAnimationDuration: Duration.zero,
-        theme: buildClaudeTheme(
-          ClaudePalette.activeLight,
-          transparentScaffold: widget.backend.hasCustomTitleBar,
-        ),
-        darkTheme: buildClaudeTheme(
-          ClaudePalette.activeDark,
-          transparentScaffold: widget.backend.hasCustomTitleBar,
-        ),
+        theme: buildClaudeTheme(ClaudePalette.activeLight),
+        darkTheme: buildClaudeTheme(ClaudePalette.activeDark),
         themeMode: _themeMode,
         builder: (ctx, navChild) {
           return Stack(
@@ -253,7 +247,7 @@ class _TopLevelToastLayer extends StatelessWidget {
                                     style: sansStyle(
                                       c,
                                       size: 13,
-                                      color: const Color(0xFFFAF9F5),
+                                      color: Colors.white,
                                       height: 1.25,
                                     ),
                                   ),
@@ -301,7 +295,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.5.3';
+  String _version = '2.6.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -484,7 +478,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.5.3').toString();
+      _version = (auth['version'] ?? '2.6.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1077,215 +1071,244 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     final nodes = widget.backend.savedNodes;
     final activeNode = widget.backend.activeNode;
 
-    String modeBadgeText = 'Desktop Native';
+    final isMobileHeader = viewW < 700;
+    String modeBadgeText = 'Local Node';
     if (widget.backend.isWebMode) {
-      modeBadgeText = 'Web Dashboard';
+      modeBadgeText = 'Web Console';
     } else if (widget.backend.isRemoteNodeActive) {
-      modeBadgeText = 'Remote · ${activeNode.hostLabel}';
+      modeBadgeText = activeNode.hostLabel;
     } else if (widget.backend.isAndroidPlatform) {
-      modeBadgeText = 'Android · Dual-Mode';
-    } else if (micaActive) {
-      modeBadgeText = 'Desktop · Mica';
+      modeBadgeText = 'Android';
+    }
+
+    final Widget headerContent = Padding(
+      padding: EdgeInsets.only(top: topSafe),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (hasCustomBar)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => widget.backend.startWindowDrag(),
+                onDoubleTap: widget.backend.toggleMaximizeWindow,
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.only(
+              left: 14 + safePad.left,
+              right: (hasCustomBar ? 0.0 : 12.0) + safePad.right,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: IgnorePointer(
+                    ignoring: hasCustomBar,
+                    child: Row(
+                      children: [
+                        const ClaudeSparkIcon(size: 16.5),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _serverName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: sansStyle(
+                              c,
+                              size: 13.5,
+                              weight: FontWeight.w600,
+                              color: c.ink,
+                            ),
+                          ),
+                        ),
+                        if (showModeBadge) ...[
+                          const SizedBox(width: 8),
+                          ClaudePill(
+                            text: modeBadgeText,
+                            mono: false,
+                            bg: c.paper2,
+                            fg: widget.backend.isRemoteNodeActive
+                                ? c.clay
+                                : c.muted,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                if (showAuthControls && viewW >= 960) ...[
+                  InkWell(
+                    onTap: _openCommandPalette,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 28,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: ShapeDecoration(
+                        color: c.paper2,
+                        shape: claudeSuperellipse(
+                          8,
+                          side: BorderSide(color: c.hairline),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.search_rounded, size: 13.5, color: c.meta),
+                          const SizedBox(width: 6),
+                          Text(
+                            '指令、切节点或贴路径秒享…',
+                            style: sansStyle(c, size: 11.8, color: c.muted),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: ShapeDecoration(
+                              color: c.recessed,
+                              shape: claudeSuperellipse(
+                                4.5,
+                                side: BorderSide(color: c.hairline),
+                              ),
+                            ),
+                            child: Text(
+                              'Ctrl K',
+                              style: monoStyle(c, size: 10, color: c.meta),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showAuthControls &&
+                        widget.backend.supportsNodeSwitching &&
+                        (isMobileHeader ||
+                            _sidebarManualCollapsed ||
+                            viewW < 960)) ...[
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: (hasCustomBar && viewW < 460)
+                              ? 92
+                              : (viewW < 430 ? 126 : 196),
+                        ),
+                        child: ClaudeDropMenu<String>(
+                          value: activeNode.id,
+                          tooltip: '切换本机或远程节点',
+                          leadingIcon: activeNode.isLocal
+                              ? (widget.backend.isAndroidPlatform
+                                  ? Icons.smartphone_rounded
+                                  : Icons.dns_rounded)
+                              : Icons.cloud_done_rounded,
+                          highlightActive: !activeNode.isLocal,
+                          minMenuWidth: 236,
+                          items: [
+                            for (final n in nodes)
+                              ClaudeDropMenuItem<String>(
+                                value: n.id,
+                                label: (hasCustomBar && viewW < 460 && n.isLocal)
+                                    ? '本机'
+                                    : (viewW < 430 && n.isLocal
+                                        ? '本机服务'
+                                        : n.name),
+                                icon: n.isLocal
+                                    ? (widget.backend.isAndroidPlatform
+                                        ? Icons.smartphone_rounded
+                                        : Icons.dns_rounded)
+                                    : Icons.computer_rounded,
+                                badge: n.isLocal ? 'LOCAL' : n.hostLabel,
+                              ),
+                            const ClaudeDropMenuItem<String>(
+                              value: '__manage_nodes__',
+                              label: '管理远程节点...',
+                              icon: Icons.add_link_rounded,
+                              dividerBefore: true,
+                            ),
+                          ],
+                          onChanged: _switchActiveNode,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    ClaudeButton(
+                      key: _themeBtnKey,
+                      label: '',
+                      compact: true,
+                      variant: ClaudeBtnVariant.ghost,
+                      tooltip: c.isDark ? '切换至冷瓷浅色' : '切换至曜石暗色',
+                      leading: ClaudeFadeBox(
+                        alignment: Alignment.center,
+                        child: Icon(
+                          c.isDark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                          key: ValueKey(c.isDark),
+                          size: 15.5,
+                        ),
+                      ),
+                      onPressed: () => _cycleTheme(c),
+                    ),
+                    if (showAuthControls && _dashboardMode) ...[
+                      const SizedBox(width: 6),
+                      ClaudeButton(
+                        label: viewW >= 480 ? '退出登录' : '',
+                        compact: true,
+                        tooltip: '退出登录',
+                        leading: const Icon(Icons.logout_rounded),
+                        onPressed: () async {
+                          await widget.backend.logout();
+                          _handleUnauthorized();
+                        },
+                      ),
+                    ],
+                    if (hasCustomBar) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 1,
+                        height: 15,
+                        color: c.hairline,
+                      ),
+                      const SizedBox(width: 2),
+                      ClaudeWindowCaptionActions(
+                        isMaximized: winState.isMaximized,
+                        isPinned: winState.isPinned,
+                        onTogglePin: widget.backend.togglePinWindow,
+                        onMinimize: widget.backend.minimizeWindow,
+                        onToggleMaximize: widget.backend.toggleMaximizeWindow,
+                        onCloseToTray: widget.backend.hideWindowToTray,
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (hasCustomBar && !isMobileHeader) {
+      return Container(
+        height: 44 + topSafe,
+        color: c.sidebar,
+        child: headerContent,
+      );
     }
 
     return SizedBox(
       height: 46 + topSafe,
       child: ClaudeGlassBar(
         blurSigma: 18,
-        tintColor: micaActive ? c.micaSidebarTint : c.glassBarTint,
-        border: Border(bottom: BorderSide(color: c.hairline.withValues(alpha: 0.45))),
-        child: Padding(
-          padding: EdgeInsets.only(top: topSafe),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              if (hasCustomBar)
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onPanStart: (_) => widget.backend.startWindowDrag(),
-                    onDoubleTap: widget.backend.toggleMaximizeWindow,
-                  ),
-                ),
-              Padding(
-                padding: EdgeInsets.only(
-                  left: 14 + safePad.left,
-                  right: (hasCustomBar ? 0.0 : 12.0) + safePad.right,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: IgnorePointer(
-                        ignoring: hasCustomBar,
-                        child: Row(
-                          children: [
-                            const ClaudeSparkIcon(size: 17),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                viewW < 420 ? _serverName : '$_serverName Console',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: serifTitleStyle(c, size: 15.2),
-                              ),
-                            ),
-                            if (showModeBadge) ...[
-                              const SizedBox(width: 10),
-                              ClaudePill(
-                                text: modeBadgeText,
-                                mono: false,
-                                bg: c.paper2.withValues(alpha: 0.85),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (showAuthControls && viewW >= 860) ...[
-                      InkWell(
-                        onTap: _openCommandPalette,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          height: 28,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: c.paper2.withValues(alpha: c.isDark ? 0.72 : 0.88),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: c.hairline.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.search_rounded, size: 13.5, color: c.meta),
-                              const SizedBox(width: 6),
-                              Text(
-                                '指令、切节点或贴路径秒享…',
-                                style: sansStyle(c, size: 11.8, color: c.muted),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: c.recessed,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: c.hairline),
-                                ),
-                                child: Text(
-                                  'Ctrl K',
-                                  style: monoStyle(c, size: 10, color: c.meta),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (showAuthControls &&
-                            widget.backend.supportsNodeSwitching) ...[
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: (hasCustomBar && viewW < 460) ? 90 : (viewW < 430 ? 124 : 210),
-                            ),
-                            child: ClaudeDropMenu<String>(
-                              value: activeNode.id,
-                              tooltip: '切换本机服务或远程电脑节点',
-                              leadingIcon: activeNode.isLocal
-                                  ? (widget.backend.isAndroidPlatform
-                                      ? Icons.smartphone_rounded
-                                      : Icons.dns_rounded)
-                                  : Icons.cloud_done_rounded,
-                              highlightActive: !activeNode.isLocal,
-                              minMenuWidth: 230,
-                              items: [
-                                for (final n in nodes)
-                                  ClaudeDropMenuItem<String>(
-                                    value: n.id,
-                                    label: (hasCustomBar && viewW < 460 && n.isLocal)
-                                        ? '本机'
-                                        : (viewW < 430 && n.isLocal ? '本机服务' : n.name),
-                                    icon: n.isLocal
-                                        ? (widget.backend.isAndroidPlatform
-                                            ? Icons.smartphone_rounded
-                                            : Icons.dns_rounded)
-                                        : Icons.computer_rounded,
-                                    badge: n.isLocal ? 'LOCAL' : n.hostLabel,
-                                  ),
-                                const ClaudeDropMenuItem<String>(
-                                  value: '__manage_nodes__',
-                                  label: '管理远程节点...',
-                                  icon: Icons.add_link_rounded,
-                                ),
-                              ],
-                              onChanged: _switchActiveNode,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        ClaudeButton(
-                        key: _themeBtnKey,
-                        label: '',
-                        compact: true,
-                        variant: ClaudeBtnVariant.ghost,
-                        tooltip: c.isDark ? '切换至暖纸浅色' : '切换至深岩暗色',
-                        leading: ClaudeFadeBox(
-                          alignment: Alignment.center,
-                          child: Icon(
-                            c.isDark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            key: ValueKey(c.isDark),
-                            size: 15.5,
-                          ),
-                        ),
-                        onPressed: () => _cycleTheme(c),
-                      ),
-                      if (showAuthControls && _dashboardMode) ...[
-                        const SizedBox(width: 6),
-                        ClaudeButton(
-                          label: viewW >= 480 ? '退出登录' : '',
-                          compact: true,
-                          tooltip: '退出登录',
-                          leading: const Icon(Icons.logout_rounded),
-                          onPressed: () async {
-                            await widget.backend.logout();
-                            _handleUnauthorized();
-                          },
-                        ),
-                      ],
-                      if (hasCustomBar) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 1,
-                          height: 16,
-                          color: c.hairline,
-                        ),
-                        const SizedBox(width: 2),
-                        ClaudeWindowCaptionActions(
-                          isMaximized: winState.isMaximized,
-                          isPinned: winState.isPinned,
-                          onTogglePin: widget.backend.togglePinWindow,
-                          onMinimize: widget.backend.minimizeWindow,
-                          onToggleMaximize: widget.backend.toggleMaximizeWindow,
-                          onCloseToTray: widget.backend.hideWindowToTray,
-                        ),
-                      ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        tintColor: c.glassBarTint,
+        border: Border(
+          bottom: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
         ),
+        child: headerContent,
       ),
     );
   }
@@ -1423,8 +1446,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       },
       child: Scaffold(
       key: const ValueKey('shell'),
-      backgroundColor:
-          (widget.backend.hasCustomTitleBar && micaActive) ? Colors.transparent : c.paper,
+      backgroundColor: isMobile ? c.paper : c.sidebar,
       body: Stack(
         children: [
           if (micaActive && !widget.backend.hasCustomTitleBar)
@@ -1436,24 +1458,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                       center: const Alignment(-0.85, -0.82),
                       radius: 1.15,
                       colors: [
-                        c.clay.withValues(alpha: c.isDark ? 0.30 : 0.22),
-                        c.paper.withValues(alpha: 0.0),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (micaActive && !widget.backend.hasCustomTitleBar)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: const Alignment(0.88, 0.85),
-                      radius: 1.10,
-                      colors: [
-                        const Color(0xFF0EA5E9).withValues(alpha: c.isDark ? 0.22 : 0.16),
+                        c.clay.withValues(alpha: c.isDark ? 0.22 : 0.14),
                         c.paper.withValues(alpha: 0.0),
                       ],
                     ),
@@ -1467,9 +1472,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 AnimatedContainer(
                   duration: chromeDur,
                   curve: ClaudeMotion.editorialOut,
-                  height: showTopChrome ? 46.0 : 0.0,
+                  height: showTopChrome ? 44.0 : 0.0,
                   clipBehavior: Clip.hardEdge,
-                  decoration: const BoxDecoration(color: Colors.transparent),
+                  decoration: BoxDecoration(color: c.sidebar),
                   child: SingleChildScrollView(
                     physics: const NeverScrollableScrollPhysics(),
                     child: _buildEditorialHeaderBar(
@@ -1487,14 +1492,16 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         animation: _sidebarCtrl,
                         builder: (ctx, _) {
                           final t = _sidebarCtrl.value.clamp(0.0, 1.0);
-                          final w = lerpDouble(68, 234, t)!;
-                          final showLabels = t > 0.18;
+                          final w = lerpDouble(62, 224, t)!;
+                          final showLabels = t > 0.48;
                           final labelOpacity =
-                              ((t - 0.25) / 0.75).clamp(0.0, 1.0);
-                          final hPad = lerpDouble(10, 13, t)!;
+                              ((t - 0.48) / 0.52).clamp(0.0, 1.0);
+                          final hPad = lerpDouble(9, 12, t)!;
                           final sidebarTopOffset = useFloatingTopBar
                               ? (showTopChrome ? 46.0 + safeTop : safeTop)
                               : 0.0;
+                          final nodes = widget.backend.savedNodes;
+                          final activeNode = widget.backend.activeNode;
 
                           return AnimatedContainer(
                             duration: chromeDur,
@@ -1502,20 +1509,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             width: w + safeLeft,
                             padding: EdgeInsets.fromLTRB(
                               hPad + safeLeft,
-                              sidebarTopOffset + 14.0,
+                              sidebarTopOffset + 8.0,
                               hPad,
-                              14.0,
+                              10.0,
                             ),
-                            decoration: BoxDecoration(
-                              color: (micaActive && widget.backend.hasCustomTitleBar)
-                                  ? Colors.transparent
-                                  : (micaActive ? c.glassBarTint : c.sidebar),
-                              border: (micaActive && widget.backend.hasCustomTitleBar)
-                                  ? null
-                                  : Border(
-                                      right: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
-                                    ),
-                            ),
+                            decoration: BoxDecoration(color: c.sidebar),
                             child: LayoutBuilder(
                               builder: (sbCtx, sbBox) => SingleChildScrollView(
                                 physics: const ClampingScrollPhysics(),
@@ -1528,93 +1526,72 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                SizedBox(
-                                  height: 34,
-                                  child: Row(
-                                    children: [
-                                      ClaudeButton(
-                                        label: '',
-                                        compact: true,
-                                        variant: ClaudeBtnVariant.ghost,
-                                        tooltip: shouldCollapse
-                                            ? '展开侧边栏'
-                                            : '收起侧边栏',
-                                        leading: AnimatedRotation(
-                                          turns: shouldCollapse ? 0.5 : 0.0,
-                                          duration: ClaudeMotion.duration(
-                                            context,
-                                            ClaudeMotion.base,
-                                          ),
-                                          curve: ClaudeMotion.editorialOut,
-                                          child: const Icon(
-                                            Icons.chevron_left_rounded,
-                                            size: 18,
-                                          ),
-                                        ),
-                                        onPressed: width < 960
-                                            ? null
-                                            : () {
-                                                setState(() {
-                                                  _sidebarManualCollapsed =
-                                                      !_sidebarManualCollapsed;
-                                                });
-                                                final next =
-                                                    _sidebarManualCollapsed
-                                                        ? 0.0
-                                                        : 1.0;
-                                                unawaited(
-                                                  _sidebarCtrl.animateTo(
-                                                    next,
-                                                    duration:
-                                                        ClaudeMotion.duration(
-                                                      context,
-                                                      const Duration(
-                                                        milliseconds: 240,
-                                                      ),
-                                                    ),
-                                                    curve: ClaudeMotion
-                                                        .editorialOut,
+                                        SizedBox(
+                                          height: 32,
+                                          child: Row(
+                                            children: [
+                                              ClaudeButton(
+                                                label: '',
+                                                compact: true,
+                                                variant: ClaudeBtnVariant.ghost,
+                                                tooltip: shouldCollapse
+                                                    ? '展开侧边栏'
+                                                    : '收起侧边栏',
+                                                leading: AnimatedRotation(
+                                                  turns:
+                                                      shouldCollapse ? 0.5 : 0.0,
+                                                  duration:
+                                                      ClaudeMotion.duration(
+                                                    context,
+                                                    ClaudeMotion.base,
                                                   ),
-                                                );
-                                              },
-                                      ),
-                                      if (showLabels)
-                                        Expanded(
-                                          child: Opacity(
-                                            opacity: labelOpacity,
-                                            child: ClipRect(
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                    left: 6,
+                                                  curve:
+                                                      ClaudeMotion.editorialOut,
+                                                  child: const Icon(
+                                                    Icons.chevron_left_rounded,
+                                                    size: 17,
                                                   ),
-                                                  child: DecoratedBox(
-                                                    decoration: ShapeDecoration(
-                                                      color: _isRunning
-                                                          ? c.sageBg
-                                                          : c.paper3,
-                                                      shape: StadiumBorder(
-                                                        side: BorderSide(
-                                                          color: _isRunning
-                                                              ? c.sage
-                                                                  .withValues(
-                                                                  alpha: 0.30,
-                                                                )
-                                                              : c.hairline,
-                                                        ),
-                                                      ),
-                                                    ),
+                                                ),
+                                                onPressed: width < 960
+                                                    ? null
+                                                    : () {
+                                                        setState(() {
+                                                          _sidebarManualCollapsed =
+                                                              !_sidebarManualCollapsed;
+                                                        });
+                                                        final next =
+                                                            _sidebarManualCollapsed
+                                                                ? 0.0
+                                                                : 1.0;
+                                                        unawaited(
+                                                          _sidebarCtrl
+                                                              .animateTo(
+                                                            next,
+                                                            duration:
+                                                                ClaudeMotion
+                                                                    .duration(
+                                                              context,
+                                                              const Duration(
+                                                                milliseconds:
+                                                                    220,
+                                                              ),
+                                                            ),
+                                                            curve: ClaudeMotion
+                                                                .editorialOut,
+                                                          ),
+                                                        );
+                                                      },
+                                              ),
+                                              if (showLabels)
+                                                Expanded(
+                                                  child: Opacity(
+                                                    opacity: labelOpacity,
                                                     child: Padding(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 9,
-                                                        vertical: 3.5,
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        left: 6,
                                                       ),
                                                       child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
                                                         children: [
                                                           ClaudeStatusDot(
                                                             color: _isRunning
@@ -1624,28 +1601,26 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                             size: 6.5,
                                                           ),
                                                           const SizedBox(
-                                                            width: 4,
+                                                            width: 5,
                                                           ),
                                                           Flexible(
                                                             child: Text(
                                                               _isRunning
-                                                                  ? '运行中'
+                                                                  ? '运行中 · :${_config['port'] ?? 8000}'
                                                                   : '已停止',
                                                               maxLines: 1,
                                                               overflow:
                                                                   TextOverflow
                                                                       .ellipsis,
-                                                              style: sansStyle(
+                                                              style: monoStyle(
                                                                 c,
-                                                                size: 12,
+                                                                size: 11.2,
                                                                 weight:
                                                                     FontWeight
                                                                         .w600,
-                                                                color:
-                                                                    _isRunning
-                                                                        ? c.sage
-                                                                        : c.muted,
-                                                                height: 1.1,
+                                                                color: _isRunning
+                                                                    ? c.sage
+                                                                    : c.muted,
                                                               ),
                                                             ),
                                                           ),
@@ -1654,67 +1629,175 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                            ),
+                                            ],
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                _SidebarNavGroup(
-                                  selectedIndex: _tabIndex,
-                                  expandProgress: t,
-                                  enabledSubCount: enabledSubCount,
-                                  activeExposeCount: activeExposeCount,
-                                  onSelect: _selectTab,
-                                ),
-                                const Spacer(),
-                                Divider(color: c.hairline.withValues(alpha: 0.45), height: 22),
-                                ClaudeButton(
-                                  label: t > 0.55
-                                      ? (_togglingService
-                                          ? (_isRunning ? '停止中...' : '启动中...')
-                                          : (_isRunning ? '停止服务' : '启动服务'))
-                                      : '',
-                                  leading: Icon(
-                                    _isRunning
-                                        ? Icons.stop_rounded
-                                        : Icons.play_arrow_rounded,
-                                  ),
-                                  expand: true,
-                                  loading: _togglingService,
-                                  variant: _isRunning
-                                      ? ClaudeBtnVariant.neutral
-                                      : ClaudeBtnVariant.clay,
-                                  tooltip: _isRunning ? '停止服务' : '启动服务',
-                                  onPressed: _restartingService ? null : _toggleService,
-                                ),
-                                const SizedBox(height: 8),
-                                ClaudeButton(
-                                  label: t > 0.55
-                                      ? (_restartingService ? '重启中...' : '重启服务')
-                                      : '',
-                                  leading: const Icon(Icons.refresh_rounded),
-                                  expand: true,
-                                  loading: _restartingService,
-                                  tooltip: '重启服务',
-                                  onPressed: _togglingService ? null : _restartService,
-                                ),
-                                if (!widget.backend.isWebMode) ...[
-                                  const SizedBox(height: 8),
-                                  ClaudeButton(
-                                    label: t > 0.55 ? '完全退出' : '',
-                                    leading: const Icon(
-                                      Icons.power_settings_new_rounded,
-                                    ),
-                                    expand: true,
-                                    variant: ClaudeBtnVariant.ghost,
-                                    tooltip: '完全退出应用',
-                                    onPressed: widget.backend.quitDesktopApp,
-                                  ),
-                                ],
-                              ],
+                                        if (showLabels &&
+                                            widget
+                                                .backend.supportsNodeSwitching &&
+                                            width >= 960) ...[
+                                          const SizedBox(height: 8),
+                                          Opacity(
+                                            opacity: labelOpacity,
+                                            child: ClaudeDropMenu<String>(
+                                              value: activeNode.id,
+                                              expandTrigger: true,
+                                              tooltip: '切换工作节点（本机或远程设备）',
+                                              leadingIcon: activeNode.isLocal
+                                                  ? (widget.backend
+                                                          .isAndroidPlatform
+                                                      ? Icons.smartphone_rounded
+                                                      : Icons.dns_rounded)
+                                                  : Icons.cloud_done_rounded,
+                                              highlightActive:
+                                                  !activeNode.isLocal,
+                                              minMenuWidth: 224,
+                                              items: [
+                                                for (final n in nodes)
+                                                  ClaudeDropMenuItem<String>(
+                                                    value: n.id,
+                                                    label: n.name,
+                                                    subtitle: n.isLocal
+                                                        ? null
+                                                        : n.baseUrl,
+                                                    icon: n.isLocal
+                                                        ? (widget.backend
+                                                                .isAndroidPlatform
+                                                            ? Icons
+                                                                .smartphone_rounded
+                                                            : Icons.dns_rounded)
+                                                        : Icons
+                                                            .computer_rounded,
+                                                    badge: n.isLocal
+                                                        ? 'LOCAL'
+                                                        : n.hostLabel,
+                                                  ),
+                                                const ClaudeDropMenuItem<
+                                                    String>(
+                                                  value: '__manage_nodes__',
+                                                  label: '管理远程节点...',
+                                                  icon: Icons.add_link_rounded,
+                                                  dividerBefore: true,
+                                                ),
+                                              ],
+                                              onChanged: _switchActiveNode,
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 12),
+                                        _SidebarNavGroup(
+                                          selectedIndex: _tabIndex,
+                                          expandProgress: t,
+                                          enabledSubCount: enabledSubCount,
+                                          activeExposeCount: activeExposeCount,
+                                          onSelect: _selectTab,
+                                        ),
+                                        const Spacer(),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                          child: Divider(
+                                            color: c.hairline,
+                                            height: 1,
+                                          ),
+                                        ),
+                                        if (t > 0.78)
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ClaudeButton(
+                                                  label: _togglingService
+                                                      ? (_isRunning
+                                                          ? '停止中...'
+                                                          : '启动中...')
+                                                      : (_isRunning
+                                                          ? '停止服务'
+                                                          : '启动服务'),
+                                                  compact: true,
+                                                  leading: Icon(
+                                                    _isRunning
+                                                        ? Icons.stop_rounded
+                                                        : Icons
+                                                            .play_arrow_rounded,
+                                                  ),
+                                                  loading: _togglingService,
+                                                  variant: _isRunning
+                                                      ? ClaudeBtnVariant.neutral
+                                                      : ClaudeBtnVariant.clay,
+                                                  onPressed: _restartingService
+                                                      ? null
+                                                      : _toggleService,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              ClaudeButton(
+                                                label: '',
+                                                compact: true,
+                                                loading: _restartingService,
+                                                tooltip: '平滑重启服务',
+                                                leading: const Icon(
+                                                  Icons.refresh_rounded,
+                                                ),
+                                                onPressed: _togglingService
+                                                    ? null
+                                                    : _restartService,
+                                              ),
+                                              if (!widget.backend.isWebMode) ...[
+                                                const SizedBox(width: 4),
+                                                ClaudeButton(
+                                                  label: '',
+                                                  compact: true,
+                                                  variant:
+                                                      ClaudeBtnVariant.ghost,
+                                                  tooltip: '完全退出应用',
+                                                  leading: const Icon(
+                                                    Icons
+                                                        .power_settings_new_rounded,
+                                                  ),
+                                                  onPressed: widget
+                                                      .backend.quitDesktopApp,
+                                                ),
+                                              ],
+                                            ],
+                                          )
+                                        else ...[
+                                          ClaudeButton(
+                                            label: '',
+                                            compact: true,
+                                            expand: true,
+                                            loading: _togglingService,
+                                            variant: _isRunning
+                                                ? ClaudeBtnVariant.neutral
+                                                : ClaudeBtnVariant.clay,
+                                            tooltip: _isRunning
+                                                ? '停止服务'
+                                                : '启动服务',
+                                            leading: Icon(
+                                              _isRunning
+                                                  ? Icons.stop_rounded
+                                                  : Icons.play_arrow_rounded,
+                                            ),
+                                            onPressed: _restartingService
+                                                ? null
+                                                : _toggleService,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          ClaudeButton(
+                                            label: '',
+                                            compact: true,
+                                            expand: true,
+                                            loading: _restartingService,
+                                            tooltip: '重启服务',
+                                            leading: const Icon(
+                                              Icons.refresh_rounded,
+                                            ),
+                                            onPressed: _togglingService
+                                                ? null
+                                                : _restartService,
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -1725,49 +1808,35 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                       ),
                     Expanded(
                       child: Container(
-                        margin: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                            ? EdgeInsets.fromLTRB(0, showTopChrome ? 0 : 8, 8, 8)
+                        margin: !isMobile
+                            ? EdgeInsets.fromLTRB(
+                                0,
+                                (!useFloatingTopBar && !showTopChrome) ? 8 : 0,
+                                8,
+                                4,
+                              )
                             : EdgeInsets.zero,
-                        clipBehavior: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                            ? Clip.antiAlias
-                            : Clip.none,
-                        decoration: BoxDecoration(
-                          color: !micaActive
-                              ? c.paper
-                              : (widget.backend.hasCustomTitleBar
-                                  ? c.micaCanvasTint
-                                  : Colors.transparent),
-                          borderRadius: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                              ? BorderRadius.circular(14)
-                              : null,
-                          border: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                              ? Border.all(
-                                  color: c.isDark
-                                      ? Colors.white.withValues(alpha: 0.085)
-                                      : Colors.black.withValues(alpha: 0.065),
-                                  width: 1,
-                                )
-                              : null,
-                          boxShadow: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.06),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ]
-                              : null,
-                        ),
+                        clipBehavior: !isMobile ? Clip.antiAlias : Clip.none,
+                        decoration: !isMobile
+                            ? ShapeDecoration(
+                                color: c.paper,
+                                shape: claudeSuperellipse(
+                                  12,
+                                  side: BorderSide(color: c.hairline),
+                                ),
+                                shadows: c.whisperShadow,
+                              )
+                            : BoxDecoration(color: c.paper),
                         child: Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1280),
+                            constraints: const BoxConstraints(maxWidth: 1320),
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
-                                isMobile ? 14.0 + safeLeft : 28.0,
+                                isMobile ? 14.0 + safeLeft : 24.0,
                                 useFloatingTopBar
                                     ? 0.0
-                                    : (isMobile ? 14.0 : 22.0),
-                                (isMobile ? 14.0 : 28.0) + safeRight,
+                                    : (isMobile ? 14.0 : 18.0),
+                                (isMobile ? 14.0 : 24.0) + safeRight,
                                 0.0,
                               ),
                               child: Listener(
@@ -1794,97 +1863,86 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 ),
               ),
               if (!isMobile)
-                SizedBox(
-                  height: 31 + safeBottom,
-                  child: ClaudeGlassBar(
-                    blurSigma: (micaActive && widget.backend.hasCustomTitleBar) ? 0 : 16,
-                    tintColor: (micaActive && widget.backend.hasCustomTitleBar)
-                        ? Colors.transparent
-                        : c.glassBarTint,
-                    border: Border(top: BorderSide(color: c.hairline)),
-                    padding: EdgeInsets.only(
-                      left: 18 + safeLeft,
-                      right: 18 + safeRight,
-                      bottom: safeBottom,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                flex: 2,
-                                child: Text(
-                                  _serverName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: sansStyle(
-                                    c,
-                                    size: 12,
-                                    weight: FontWeight.w500,
-                                    color: c.inkSoft,
-                                    height: 1.0,
-                                  ),
+                Container(
+                  height: 26 + safeBottom,
+                  color: c.sidebar,
+                  padding: EdgeInsets.only(
+                    left: 16 + safeLeft,
+                    right: 16 + safeRight,
+                    bottom: safeBottom,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              flex: 2,
+                              child: Text(
+                                _serverName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: sansStyle(
+                                  c,
+                                  size: 11.2,
+                                  weight: FontWeight.w500,
+                                  color: c.muted,
+                                  height: 1.0,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Container(
-                                width: 3,
-                                height: 3,
-                                decoration: BoxDecoration(
+                            ),
+                            const SizedBox(width: 8),
+                            Text('·', style: sansStyle(c, size: 11, color: c.meta)),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              flex: 3,
+                              child: Text(
+                                endpointStr,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: monoStyle(
+                                  c,
+                                  size: 11.0,
                                   color: c.meta,
-                                  shape: BoxShape.circle,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Flexible(
-                                flex: 3,
-                                child: Text(
-                                  endpointStr,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: monoStyle(
-                                    c,
-                                    size: 11.5,
-                                    color: c.muted,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_latestUpdate != null &&
+                          compareSemVer(
+                                _latestUpdate!.version,
+                                widget.backend.currentAppVersion,
+                              ) >
+                              0) ...[
+                        const SizedBox(width: 10),
+                        InkWell(
+                          onTap: () => _showUpdateAvailableDialog(
+                            _latestUpdate!,
+                            currentVersion: widget.backend.currentAppVersion,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                          child: ClaudePill(
+                            text: '新版本 v${_latestUpdate!.version}',
+                            fg: c.clay,
+                            bg: c.clay.withValues(alpha: 0.12),
                           ),
                         ),
-                        if (_latestUpdate != null &&
-                            compareSemVer(_latestUpdate!.version, widget.backend.currentAppVersion) > 0) ...[
-                          const SizedBox(width: 10),
-                          InkWell(
-                            onTap: () => _showUpdateAvailableDialog(
-                              _latestUpdate!,
-                              currentVersion: widget.backend.currentAppVersion,
-                            ),
-                            borderRadius: BorderRadius.circular(999),
-                            child: ClaudePill(
-                              text: '新版本 v${_latestUpdate!.version}',
-                              fg: c.clay,
-                              bg: c.clay.withValues(alpha: 0.12),
-                            ),
-                          ),
-                        ],
-                        if (width >= 760) ...[
-                          const SizedBox(width: 12),
-                          Text(
-                            'Anthropic Editorial · Dart/Flutter v$_version',
-                            maxLines: 1,
-                            style: sansStyle(
-                              c,
-                              size: 11.5,
-                              color: c.meta,
-                              height: 1.0,
-                              tabular: true,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
+                      if (width >= 760) ...[
+                        const SizedBox(width: 12),
+                        Text(
+                          'Agent MCP · v$_version',
+                          maxLines: 1,
+                          style: monoStyle(
+                            c,
+                            size: 10.8,
+                            color: c.meta,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
             ],
@@ -2118,7 +2176,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                     style: sansStyle(
                                       c,
                                       size: 13,
-                                      color: const Color(0xFFFAF9F5),
+                                      color: Colors.white,
                                       height: 1.25,
                                     ),
                                   ),
@@ -2732,21 +2790,21 @@ class _SidebarNavGroup extends StatelessWidget {
     required this.onSelect,
   });
 
-  static const double _itemH = 40.0;
-  static const double _gap = 5.0;
+  static const double _itemH = 35.0;
+  static const double _gap = 3.0;
 
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final items = <(IconData, String, String?)>[
-      (Icons.notes_rounded, '活动与调用流', null),
+      (Icons.bolt_rounded, '活动与调用流', null),
       (
-        Icons.hub_outlined,
+        Icons.layers_outlined,
         '子 MCP 网关',
         enabledSubCount > 0 ? '$enabledSubCount' : null,
       ),
       (
-        Icons.public_rounded,
+        Icons.link_rounded,
         '外网与分享',
         activeExposeCount > 0 ? '$activeExposeCount' : null,
       ),
@@ -2756,7 +2814,7 @@ class _SidebarNavGroup extends StatelessWidget {
     final activeTop = selectedIndex * (_itemH + _gap);
     final slideDur = ClaudeMotion.duration(
       context,
-      const Duration(milliseconds: 260),
+      const Duration(milliseconds: 220),
     );
 
     return SizedBox(
@@ -2772,30 +2830,10 @@ class _SidebarNavGroup extends StatelessWidget {
             height: _itemH,
             child: DecoratedBox(
               decoration: ShapeDecoration(
-                color: c.paper2,
+                color: c.isDark ? c.paper3 : c.paper2,
                 shape: claudeSuperellipse(
-                  12,
+                  8.5,
                   side: BorderSide(color: c.hairline),
-                ),
-                shadows: [
-                  BoxShadow(
-                    color: Colors.black
-                        .withValues(alpha: c.isDark ? 0.24 : 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 1.5),
-                  ),
-                ],
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 3.5),
-                  width: 3,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: c.clay,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
                 ),
               ),
             ),
@@ -2916,7 +2954,7 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
                       style: monoStyle(
                         c,
                         size: 11,
-                        color: widget.active ? const Color(0xFFFAF9F5) : c.clay,
+                        color: widget.active ? Colors.white : c.clay,
                         weight: FontWeight.w600,
                       ),
                     ),
@@ -3232,7 +3270,7 @@ class _GlobalCommandPaletteDialogState
         payload: {'action': 'restart'},
       ),
       (
-        title: widget.isDark ? '切换至暖纸浅色主题' : '切换至深岩暗色主题',
+        title: widget.isDark ? '切换至冷瓷浅色主题' : '切换至曜石暗色主题',
         hint: '外观',
         icon: widget.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
         payload: {'action': 'toggle_theme'},

@@ -13,8 +13,9 @@ String inferShareModeFromPath(String rawPath) {
   final lower = cleaned.toLowerCase();
   if (int.tryParse(lower.replaceAll(':', '')) != null) return 'port';
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'site';
-  final base = cleaned.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).lastOrNull ?? '';
-  // Heuristic when stat isn't needed on UI side: paths without file extension default to folder
+  final base =
+      cleaned.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).lastOrNull ??
+          '';
   if (base.isNotEmpty && !base.contains('.')) return 'folder';
   return 'file';
 }
@@ -50,8 +51,6 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   bool _closingAll = false;
   String? _closingId;
   bool _togglingMaster = false;
-  bool _showChannelDetails = false;
-  bool _showGuide = false;
   bool _dialogOpen = false;
 
   @override
@@ -115,10 +114,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   List<int> get _activePorts {
     final raw = widget.exposureSummary['active_local_ports'];
     if (raw is List) {
-      return raw
-          .map((e) => int.tryParse('$e'))
-          .whereType<int>()
-          .toList();
+      return raw.map((e) => int.tryParse('$e')).whereType<int>().toList();
     }
     return const <int>[];
   }
@@ -150,7 +146,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     try {
       await widget.backend.saveConfig({'expose_enabled': true});
       await widget.onRefresh();
-      widget.onToast('已开启随手分享功能');
+      widget.onToast('已开启外链分享功能');
     } finally {
       if (mounted) setState(() => _togglingMaster = false);
     }
@@ -162,7 +158,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     try {
       await runWithMinDuration(() => widget.backend.closeExposure(id));
       await widget.onRefresh();
-      widget.onToast('已收起分享：$label');
+      widget.onToast('已关闭分享：$label');
     } finally {
       if (mounted) setState(() => _closingId = null);
     }
@@ -175,7 +171,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       final res = await runWithMinDuration(widget.backend.closeAllExposures);
       await widget.onRefresh();
       final cnt = res['closed_count'] ?? 0;
-      widget.onToast('已一键收起全部 $cnt 条分享链接');
+      widget.onToast('已关闭全部 $cnt 条分享链接');
     } finally {
       if (mounted) setState(() => _closingAll = false);
     }
@@ -242,23 +238,30 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
 
     String tsSummary;
     if (!_tsEnabled) {
-      tsSummary = '已在设置中暂停（需要时可在服务配置里一键打开）';
+      tsSummary = '已在服务配置中关闭';
     } else if (tsDns.isNotEmpty) {
       tsSummary =
           '$tsDns · ${_tsMode == "funnel" ? "优先 Funnel 公网直达" : "组网内设备直连"}';
     } else if (tsIps.isNotEmpty) {
-      tsSummary = '组网地址 ${tsIps.join(", ")} 已就绪，同账号手机可直接点开';
+      tsSummary = '组网地址 ${tsIps.join(", ")} 已就绪';
     } else {
-      tsSummary = '打开 Tailscale 后会自动识别组网地址';
+      tsSummary = '启动 Tailscale 后自动识别组网地址';
     }
 
     final gwSummary = _pubBases.isNotEmpty
-        ? '已就绪公网域名 ${_pubBases.first}，秒出外网链接'
-        : '本机与局域网直享已就绪；配置隧道域名后可免端口公网直达';
+        ? '固定公网网关 ${_pubBases.first}'
+        : '局域网直享已就绪（配置隧道域名后可免端口公网直达）';
 
     final cfSummary = _cfInstalled
-        ? '已就绪：无固定域名时自动拉起临时 HTTPS 链接'
-        : '按需可选：在服务配置下载 cloudflared 后可分配临时公网域名';
+        ? 'cloudflared 已安装，按需生成临时 HTTPS 隧道'
+        : '未安装 cloudflared（可在服务配置一键下载）';
+
+    final channelReady = _enabled && (tsReachable || _pubBases.isNotEmpty);
+    final channelPillLabel = !_enabled
+        ? '通道已暂停'
+        : (tsReachable && _tsEnabled
+            ? 'Tailscale 已通${_pubBases.isNotEmpty ? " · 公网直享" : ""}'
+            : (_pubBases.isNotEmpty ? '公网网关就绪' : '局域网直享就绪'));
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(
@@ -274,28 +277,75 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             spacing: 12,
             runSpacing: 10,
             children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 660),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('外网映射与链接分享', style: serifTitleStyle(c, size: 24)),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.backend.isAndroidPlatform ? '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态，轻点下方卡片快速创建分享。' : '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态（桌面端可直接拖入文件或文件夹秒建分享）。',
-                      style: sansStyle(
-                        c,
-                        size: 13,
-                        color: c.muted,
-                        height: 1.45,
-                      ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('外网映射与链接分享', style: serifTitleStyle(c, size: 20)),
+                  const SizedBox(width: 8),
+                  ClaudeActionMenuButton(
+                    label: channelPillLabel,
+                    tooltip: '查看网络通道就绪状态',
+                    minMenuWidth: 310,
+                    leading: ClaudeStatusDot(
+                      color: channelReady
+                          ? c.sage
+                          : (_enabled ? c.clay : c.meta),
+                      pulsing: channelReady,
+                      size: 6.5,
                     ),
-                  ],
-                ),
+                    actions: [
+                      ClaudeMenuAction(
+                        label: 'Tailscale 组网 / Funnel',
+                        subtitle: tsSummary,
+                        icon: Icons.hub_rounded,
+                        badge: !_tsEnabled
+                            ? '已关'
+                            : (tsReachable ? '在线' : '待连'),
+                        onTap: () {
+                          if (tsIps.isNotEmpty) {
+                            _copyText(
+                              tsIps.first,
+                              '已复制本机 Tailscale IP：${tsIps.first}',
+                            );
+                          } else {
+                            _doRefresh();
+                          }
+                        },
+                      ),
+                      ClaudeMenuAction(
+                        label: '网关直享通道 (/share)',
+                        subtitle: gwSummary,
+                        icon: Icons.bolt_rounded,
+                        badge: _pubBases.isNotEmpty ? '公网' : '局域网',
+                        onTap: () {
+                          if (_pubBases.isNotEmpty) {
+                            _copyText(
+                              _pubBases.first,
+                              '已复制公网网关域名：${_pubBases.first}',
+                            );
+                          }
+                        },
+                      ),
+                      ClaudeMenuAction(
+                        label: 'Cloudflared 临时隧道',
+                        subtitle: cfSummary,
+                        icon: Icons.cloud_outlined,
+                        badge: _cfInstalled ? '就绪' : '可选',
+                        onTap: _doRefresh,
+                      ),
+                      ClaudeMenuAction(
+                        label: '重新检测通道状态',
+                        icon: Icons.refresh_rounded,
+                        dividerBefore: true,
+                        onTap: _doRefresh,
+                      ),
+                    ],
+                  ),
+                ],
               ),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   ClaudeButton(
                     label: _refreshing ? '刷新中...' : '刷新',
@@ -307,7 +357,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                   ),
                   if (items.isNotEmpty)
                     ClaudeButton(
-                      label: _closingAll ? '收起中...' : '全部关闭 (${items.length})',
+                      label: _closingAll ? '关闭中...' : '全部关闭 (${items.length})',
                       compact: true,
                       loading: _closingAll,
                       leading: const Icon(Icons.link_off_rounded),
@@ -318,415 +368,164 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     compact: true,
                     variant: ClaudeBtnVariant.clay,
                     leading: const Icon(Icons.add_link_rounded),
-                    onPressed:
-                        _enabled ? () => _openCreateDialog(initialMode: 'wizard') : null,
+                    onPressed: _enabled
+                        ? () => _openCreateDialog(initialMode: 'wizard')
+                        : null,
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           if (!_enabled) ...[
-            ClaudeCard(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Icon(Icons.pause_circle_outline_rounded, color: c.clay, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '外链分享目前已暂停',
-                          style: sansStyle(
-                            c,
-                            size: 14,
-                            weight: FontWeight.w600,
-                            color: c.ink,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '暂停期间外部无法访问任何分享链接，点右侧按钮即可随时恢复。',
-                          style: sansStyle(c, size: 12.5, color: c.muted),
-                        ),
-                      ],
-                    ),
+            ClaudeListGroup(
+              children: [
+                ClaudeSettingsRow(
+                  leading: Icon(
+                    Icons.pause_circle_outline_rounded,
+                    color: c.clay,
+                    size: 20,
                   ),
-                  const SizedBox(width: 10),
-                  ClaudeButton(
+                  title: '外链分享目前已暂停',
+                  subtitle: '暂停期间外部无法访问任何分享链接，点击右侧按钮可随时恢复。',
+                  trailing: ClaudeButton(
                     label: _togglingMaster ? '开启中...' : '立即开启',
                     compact: true,
                     loading: _togglingMaster,
                     variant: ClaudeBtnVariant.clay,
                     onPressed: _enableMasterNow,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Adaptive Share Dropzone: high-visibility dashed dropbar when active shares exist; hero dashed dropzone + 4-mode cards when empty
-          if (_enabled && items.isNotEmpty) ...[
-            _DashedDropZone(
-              borderColor: c.clay.withValues(alpha: c.isDark ? 0.55 : 0.45),
-              fillColor: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.045),
-              radius: 14,
-              onTap: () => _openCreateDialog(initialMode: 'file'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: c.clay.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Icon(Icons.file_upload_rounded, size: 17, color: c.clay),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '拖拽文件、文件夹或 HTML 到此处一键分享',
-                                  style: sansStyle(c, size: 13, weight: FontWeight.w600, color: c.ink),
-                                ),
-                                const SizedBox(width: 7),
-                                ClaudePill(
-                                  text: '支持拖拽',
-                                  fg: c.clay,
-                                  bg: c.clay.withValues(alpha: 0.12),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              '松手自动识别形态，也可点击右侧按钮手动新建',
-                              style: sansStyle(c, size: 11.5, color: c.muted),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        ClaudeButton(
-                          label: '单文件',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          onPressed: () => _openCreateDialog(initialMode: 'file'),
-                        ),
-                        ClaudeButton(
-                          label: '文件夹',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          onPressed: () => _openCreateDialog(initialMode: 'folder'),
-                        ),
-                        ClaudeButton(
-                          label: '静态网站',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          onPressed: () => _openCreateDialog(initialMode: 'site'),
-                        ),
-                        ClaudeButton(
-                          label: '端口转发',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          onPressed: () => _openCreateDialog(initialMode: 'port'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (_enabled) ...[
-            if (!widget.backend.isAndroidPlatform) ...[
-            _DashedDropZone(
-              borderColor: c.clay.withValues(alpha: c.isDark ? 0.58 : 0.48),
-              fillColor: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.045),
-              radius: 16,
-              onTap: () => _openCreateDialog(initialMode: 'file'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: c.clay.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.drive_folder_upload_rounded, size: 23, color: c.clay),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                '拖拽任意文件、文件夹或静态网站目录到此处',
-                                style: sansStyle(c, size: 14.5, weight: FontWeight.w600, color: c.ink),
-                              ),
-                              ClaudePill(
-                                text: '拖拽即享',
-                                fg: c.clay,
-                                bg: c.clay.withValues(alpha: 0.14),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '松手自动识别单文件预览 / 文件夹浏览 / 静态 HTML 站点；也可以点击此处或下方卡片手动选择。',
-                            style: sansStyle(c, size: 12.2, color: c.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ],
-            if (widget.backend.isAndroidPlatform)
-              ClaudeCard(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: ShapeDecoration(
-                        color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
-                        shape: claudeSuperellipse(15),
-                      ),
-                      child: Icon(Icons.share_rounded, size: 25, color: c.clay),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '一键生成外网分享链接',
-                      style: sansStyle(c, size: 16, weight: FontWeight.w600, color: c.ink),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '支持单文件预览、文件夹目录、静态网页与本地端口，按向导 2 步完成创建。',
-                      textAlign: TextAlign.center,
-                      style: sansStyle(c, size: 12.5, color: c.muted),
-                    ),
-                    const SizedBox(height: 16),
-                    ClaudeButton(
-                      label: '开始新建分享',
-                      variant: ClaudeBtnVariant.clay,
-                      leading: const Icon(Icons.add_link_rounded),
-                      onPressed: () => _openCreateDialog(initialMode: 'wizard'),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(
-                  '提示：拖入文件或文件夹可自动识别；也可以点击上方「新建外网分享」按向导选择文件、文件夹或本地端口。',
-                  style: sansStyle(c, size: 12.2, color: c.muted),
-                ),
-              ),
-          ],
-
-          // Quiet 1-line network readiness strip (borderless tonal surface)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: ShapeDecoration(
-              color: c.recessed,
-              shape: claudeSuperellipse(15),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClaudeStatusDot(
-                              color: (_tsEnabled && tsReachable)
-                                  ? c.sage
-                                  : c.meta,
-                              pulsing: _tsEnabled && tsReachable,
-                              size: 6.5,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Tailscale · ${!_tsEnabled ? '未启用' : (tsReachable ? '已就绪' : '待连接')}',
-                              style: sansStyle(
-                                c,
-                                size: 12.5,
-                                weight: FontWeight.w600,
-                                color: (_tsEnabled && tsReachable)
-                                    ? c.sage
-                                    : c.muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClaudeStatusDot(
-                              color: _enabled ? c.sage : c.meta,
-                              size: 6.5,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '直享通道 · ${_pubBases.isNotEmpty ? '公网秒开' : '局域网就绪'}',
-                              style: sansStyle(c, size: 12.5, color: c.inkSoft),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClaudeStatusDot(
-                              color: _cfInstalled ? c.sage : c.meta,
-                              size: 6.5,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '临时隧道 · ${_cfInstalled ? '按需可用' : '可选'}',
-                              style: sansStyle(c, size: 12.5, color: c.muted),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 6,
-                      children: [
-                        ClaudeButton(
-                          label: _showChannelDetails ? '收起通道详情' : '通道详情',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          onPressed: () => setState(
-                            () => _showChannelDetails = !_showChannelDetails,
-                          ),
-                        ),
-                        if (items.isNotEmpty)
-                          ClaudeButton(
-                            label: _showGuide ? '收起说明' : '用法说明',
-                            compact: true,
-                            variant: ClaudeBtnVariant.ghost,
-                            onPressed: () =>
-                                setState(() => _showGuide = !_showGuide),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-                ClaudeCollapsible(
-                  expanded: _showChannelDetails,
-                  builder: (_) => Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: LayoutBuilder(
-                      builder: (ctx, box) {
-                        final cols = box.maxWidth < 760 ? 1 : 3;
-                        const gap = 10.0;
-                        final tileW = (box.maxWidth - gap * (cols - 1)) / cols;
-                        return Wrap(
-                          spacing: gap,
-                          runSpacing: gap,
-                          children: [
-                            SizedBox(
-                              width: tileW,
-                              child: _ChannelStatusTile(
-                                icon: Icons.hub_rounded,
-                                title: 'Tailscale 组网 / Funnel',
-                                badge: !_tsEnabled
-                                    ? '已关闭'
-                                    : (tsReachable ? '已连通' : '待启动'),
-                                active: _tsEnabled && tsReachable,
-                                subtitle: tsSummary,
-                              ),
-                            ),
-                            SizedBox(
-                              width: tileW,
-                              child: _ChannelStatusTile(
-                                icon: Icons.bolt_rounded,
-                                title: '网关直享通道 (/share)',
-                                badge: _pubBases.isNotEmpty ? '公网秒出' : '局域网就绪',
-                                active: _enabled,
-                                subtitle: gwSummary,
-                              ),
-                            ),
-                            SizedBox(
-                              width: tileW,
-                              child: _ChannelStatusTile(
-                                icon: Icons.cloud_outlined,
-                                title: '临时公网隧道兜底',
-                                badge: _cfInstalled ? '按需可用' : '未安装',
-                                active: _cfInstalled,
-                                subtitle: cfSummary,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
                 ),
               ],
             ),
-          ),
-          ClaudeCollapsible(
-            expanded: items.isNotEmpty && _showGuide,
-            builder: (_) => Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _buildEmptyGuideCard(c, hasActiveItems: true),
-            ),
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 12),
+          ],
+
+          if (_enabled) ...[
+            if (!widget.backend.isAndroidPlatform)
+              _DashedDropZone(
+                borderColor: c.clay.withValues(alpha: c.isDark ? 0.50 : 0.38),
+                fillColor: c.clay.withValues(alpha: c.isDark ? 0.07 : 0.035),
+                radius: 12,
+                onTap: () => _openCreateDialog(initialMode: 'file'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: ShapeDecoration(
+                              color: c.clay.withValues(alpha: 0.13),
+                              shape: claudeSuperellipse(9),
+                            ),
+                            child: Icon(
+                              Icons.file_upload_outlined,
+                              size: 17,
+                              color: c.clay,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '拖拽文件、文件夹或 HTML 到此处一键生成外网链接',
+                                    style: sansStyle(
+                                      c,
+                                      size: 13,
+                                      weight: FontWeight.w600,
+                                      color: c.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 7),
+                                  ClaudePill(
+                                    text: '松手即享',
+                                    mono: false,
+                                    fg: c.clay,
+                                    bg: c.clay.withValues(alpha: 0.12),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '自动识别视频流放 / 目录树浏览 / 静态站点；也可直接点击右侧快捷模式创建',
+                                style: sansStyle(c, size: 11.5, color: c.muted),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          ClaudeButton(
+                            label: '单文件',
+                            compact: true,
+                            leading: const Icon(
+                              Icons.insert_drive_file_outlined,
+                            ),
+                            onPressed: () =>
+                                _openCreateDialog(initialMode: 'file'),
+                          ),
+                          ClaudeButton(
+                            label: '文件夹',
+                            compact: true,
+                            leading: const Icon(Icons.folder_open_rounded),
+                            onPressed: () =>
+                                _openCreateDialog(initialMode: 'folder'),
+                          ),
+                          ClaudeButton(
+                            label: '静态网站',
+                            compact: true,
+                            leading: const Icon(Icons.web_rounded),
+                            onPressed: () =>
+                                _openCreateDialog(initialMode: 'site'),
+                          ),
+                          ClaudeButton(
+                            label: '端口转发',
+                            compact: true,
+                            leading: const Icon(Icons.podcasts_rounded),
+                            onPressed: () =>
+                                _openCreateDialog(initialMode: 'port'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              _MobileQuickShareGrid(
+                onOpenMode: (m) => _openCreateDialog(initialMode: m),
+              ),
+            const SizedBox(height: 14),
+          ],
+
           if (items.isEmpty)
-            _buildEmptyGuideCard(c)
+            _buildEmptyState(c)
           else
-            Column(
+            ClaudeListGroup(
+              headerLabel: '活跃分享 (${items.length})',
+              dividerIndent: 54,
               children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 12),
-                  _ActiveExposureCard(
+                for (var i = 0; i < items.length; i++)
+                  _ActiveExposureRow(
                     item: items[i],
                     closing: _closingId == items[i]['id']?.toString(),
                     onCopy: _copyText,
@@ -742,7 +541,6 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                       (items[i]['label'] ?? '').toString(),
                     ),
                   ),
-                ],
               ],
             ),
         ],
@@ -750,170 +548,152 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     );
   }
 
-  Widget _buildEmptyGuideCard(ClaudePalette c, {bool hasActiveItems = false}) {
-    return ClaudeCard(
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.send_rounded, size: 19, color: c.clay),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  hasActiveItems
-                      ? '外链分享小贴士 · 一句话或点选卡片都能发'
-                      : '还没有正在分享的内容 · 点上方任意卡片或让 AI 帮你发',
-                  style: serifTitleStyle(c, size: 17),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _HowToUseStepRow(
-            step: '超省心用法',
-            title: '直接对 AI 说一句话就行',
-            desc:
-                '比如：“把这个课件文件夹做成目录链接发我”、“把这个 html 当静态网页发我预览”或“把 5173 端口映射给手机看”，AI 会自动选好对应形态并返回可点开的链接。',
-          ),
-          const SizedBox(height: 10),
-          _HowToUseStepRow(
-            step: '手动点选',
-            title: '点上方 4 张模式卡片直接选文件或文件夹',
-            desc:
-                '选「文件夹目录」时对方可层层点进子目录，点任意文件即进入单文件在线预览；选「静态网站 / HTML」时无论是单页 .html 还是前端目录都会直接作为正式网页全屏打开。',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChannelStatusTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String badge;
-  final bool active;
-  final String subtitle;
-
-  const _ChannelStatusTile({
-    required this.icon,
-    required this.title,
-    required this.badge,
-    required this.active,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    return ClaudeCard(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 17, color: active ? c.sage : c.muted),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: sansStyle(
-                    c,
-                    size: 13.5,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
-                ),
-              ),
-              ClaudePill(
-                leading: ClaudeStatusDot(
-                  color: active ? c.sage : c.meta,
-                  pulsing: active,
-                  size: 6,
-                ),
-                text: badge,
-                mono: false,
-                fg: active ? c.sage : c.muted,
-                bg: active ? c.sageBg : c.paper3,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: sansStyle(c, size: 12, color: c.muted, height: 1.44),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HowToUseStepRow extends StatelessWidget {
-  final String step;
-  final String title;
-  final String desc;
-
-  const _HowToUseStepRow({
-    required this.step,
-    required this.title,
-    required this.desc,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+  Widget _buildEmptyState(ClaudePalette c) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: ShapeDecoration(
-        color: c.recessed,
-        shape: claudeSuperellipse(15),
+        color: c.paper2,
+        shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              ClaudePill(
-                text: step,
-                mono: false,
-                fg: c.clay,
-                bg: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.11),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: sansStyle(
-                    c,
-                    size: 13.5,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            width: 40,
+            height: 40,
+            decoration: ShapeDecoration(
+              color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10),
+              shape: claudeSuperellipse(11),
+            ),
+            child: Icon(Icons.link_rounded, size: 20, color: c.clay),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
-            desc,
-            style: sansStyle(c, size: 12.5, color: c.muted, height: 1.52),
+            '暂无活跃分享链接',
+            style: sansStyle(
+              c,
+              size: 14,
+              weight: FontWeight.w600,
+              color: c.ink,
+            ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            '可直接对 AI 说“把这个文件夹做成目录链接发我”，或点击上方快捷模式手动创建。',
+            textAlign: TextAlign.center,
+            style: sansStyle(c, size: 12.2, color: c.muted),
+          ),
+          if (widget.backend.isAndroidPlatform) ...[
+            const SizedBox(height: 14),
+            ClaudeButton(
+              label: '开始新建分享',
+              compact: true,
+              variant: ClaudeBtnVariant.clay,
+              leading: const Icon(Icons.add_link_rounded),
+              onPressed: () => _openCreateDialog(initialMode: 'wizard'),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _ActiveExposureCard extends StatefulWidget {
+class _MobileQuickShareGrid extends StatelessWidget {
+  final ValueChanged<String> onOpenMode;
+
+  const _MobileQuickShareGrid({required this.onOpenMode});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    const modes = <(String, IconData, String, String)>[
+      ('file', Icons.insert_drive_file_outlined, '单文件', '流式播放 / 直下'),
+      ('folder', Icons.folder_open_rounded, '文件夹', '目录树在线浏览'),
+      ('site', Icons.web_rounded, '静态网站', 'HTML 全屏运行'),
+      ('port', Icons.podcasts_rounded, '端口转发', '本地 Web 服务'),
+    ];
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        const gap = 8.0;
+        final w = (box.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final m in modes)
+              SizedBox(
+                width: w,
+                child: Material(
+                  color: c.paper2,
+                  shape: claudeSuperellipse(
+                    11,
+                    side: BorderSide(color: c.hairline),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => onOpenMode(m.$1),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: ShapeDecoration(
+                              color: c.clay.withValues(
+                                alpha: c.isDark ? 0.16 : 0.10,
+                              ),
+                              shape: claudeSuperellipse(8),
+                            ),
+                            child: Icon(m.$2, size: 16, color: c.clay),
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  m.$3,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: sansStyle(
+                                    c,
+                                    size: 13,
+                                    weight: FontWeight.w600,
+                                    color: c.ink,
+                                  ),
+                                ),
+                                Text(
+                                  m.$4,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: sansStyle(
+                                    c,
+                                    size: 11,
+                                    color: c.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ActiveExposureRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final bool closing;
   final Future<void> Function(String text, String tip) onCopy;
@@ -921,7 +701,7 @@ class _ActiveExposureCard extends StatefulWidget {
   final ValueChanged<String> onOpenBrowser;
   final VoidCallback onClose;
 
-  const _ActiveExposureCard({
+  const _ActiveExposureRow({
     required this.item,
     required this.closing,
     required this.onCopy,
@@ -931,23 +711,16 @@ class _ActiveExposureCard extends StatefulWidget {
   });
 
   @override
-  State<_ActiveExposureCard> createState() => _ActiveExposureCardState();
+  State<_ActiveExposureRow> createState() => _ActiveExposureRowState();
 }
 
-class _ActiveExposureCardState extends State<_ActiveExposureCard> {
+class _ActiveExposureRowState extends State<_ActiveExposureRow> {
   bool _hovered = false;
-
-  Map<String, dynamic> get item => widget.item;
-  bool get closing => widget.closing;
-  Future<void> Function(String text, String tip) get onCopy => widget.onCopy;
-  void Function(String title, String url) get onShowQr => widget.onShowQr;
-  ValueChanged<String> get onOpenBrowser => widget.onOpenBrowser;
-  VoidCallback get onClose => widget.onClose;
 
   @override
   Widget build(BuildContext context) {
-    final revealSecondary = _hovered || MediaQuery.sizeOf(context).width < 760;
     final c = ClaudePalette.of(context);
+    final item = widget.item;
     final kind = (item['kind'] ?? 'file').toString();
     final label = (item['label'] ?? '未命名分享').toString();
     final target = (item['target'] ?? '').toString();
@@ -983,18 +756,18 @@ class _ActiveExposureCardState extends State<_ActiveExposureCard> {
     };
 
     final scopeText = switch (scope) {
-      'tailscale' => '仅组网设备',
+      'tailscale' => '仅组网',
       'public' => '公网直达',
-      'lan' => '仅局域网',
+      'lan' => '局域网',
       _ => '自动优选',
     };
 
-    String ttlText = '手动收起前有效';
+    String ttlText = '常驻';
     if (remSec != null) {
       final mins = (remSec / 60).ceil();
       ttlText = mins >= 60
-          ? '${(mins / 60).toStringAsFixed(1)} 小时后收起'
-          : '$mins 分钟后收起';
+          ? '${(mins / 60).toStringAsFixed(1)}h 后关闭'
+          : '${mins}m 后关闭';
     }
 
     final copyOptions = <EndpointCopyOption>[];
@@ -1018,167 +791,196 @@ class _ActiveExposureCardState extends State<_ActiveExposureCard> {
       );
     }
 
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isNarrow = screenW < 780;
+
+    final actionBar = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        EndpointCopyDropButton(
+          label: '复制链接',
+          useSplitPrimary: true,
+          primaryUrl: primaryUrl,
+          onPrimaryTap: () =>
+              widget.onCopy(primaryUrl, '已复制分享链接：$primaryUrl'),
+          options: copyOptions,
+          onSelect: (opt) => widget.onCopy(
+            opt.url,
+            '已复制 ${opt.badge} 地址：${opt.url}',
+          ),
+        ),
+        ClaudeButton(
+          label: '',
+          compact: true,
+          variant: ClaudeBtnVariant.ghost,
+          tooltip: '查看二维码',
+          leading: const Icon(Icons.qr_code_rounded, size: 16),
+          onPressed: () => widget.onShowQr(label, primaryUrl),
+        ),
+        ClaudeButton(
+          label: '',
+          compact: true,
+          variant: ClaudeBtnVariant.ghost,
+          tooltip: '浏览器打开预览',
+          leading: const Icon(Icons.open_in_new_rounded, size: 16),
+          onPressed: () => widget.onOpenBrowser(primaryUrl),
+        ),
+        ClaudeButton(
+          label: '',
+          compact: true,
+          loading: widget.closing,
+          variant: ClaudeBtnVariant.ghost,
+          tooltip: '关闭分享',
+          leading: Icon(
+            Icons.link_off_rounded,
+            size: 16,
+            color: _hovered ? c.danger : c.muted,
+          ),
+          onPressed: widget.onClose,
+        ),
+      ],
+    );
+
     return MouseRegion(
-      onEnter: (_) {
-        if (!_hovered) setState(() => _hovered = true);
-      },
-      onExit: (_) {
-        if (_hovered) setState(() => _hovered = false);
-      },
-      child: ClaudeCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(kindIcon, size: 19, color: c.clay),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: sansStyle(
-                        c,
-                        size: 15,
-                        weight: FontWeight.w600,
-                        color: c.ink,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 110),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        color: _hovered
+            ? (c.isDark
+                ? Colors.white.withValues(alpha: 0.024)
+                : Colors.black.withValues(alpha: 0.016))
+            : Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: ShapeDecoration(
+                        color: c.clay.withValues(
+                          alpha: c.isDark ? 0.16 : 0.10,
+                        ),
+                        shape: claudeSuperellipse(9),
                       ),
+                      alignment: Alignment.center,
+                      child: Icon(kindIcon, size: 17, color: c.clay),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ClaudePill(
-                    leading: ClaudeStatusDot(
-                      color: c.sage,
-                      pulsing: true,
-                      size: 6.5,
-                    ),
-                    text: kindLabel,
-                    mono: false,
-                    fg: c.sage,
-                    bg: c.sageBg,
-                  ),
-                  if (hasPin) ...[
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: pinCode.isNotEmpty
-                          ? () => onCopy(pinCode, '已复制提取码：$pinCode')
-                          : null,
-                      child: ClaudePill(
-                        text: pinCode.isNotEmpty ? '提取码 $pinCode' : '口令保护',
-                        mono: false,
-                        fg: c.clay,
-                        bg: c.clay.withValues(alpha: 0.13),
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: c.sage,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.paper2, width: 1.8),
+                        ),
                       ),
                     ),
                   ],
-                ],
-              ),
-              Text(
-                '$scopeText · $ttlText${remDl != null ? " · 剩余下载 $remDl 次" : ""} · 访问 $hitCount 次 ($bytesHuman)',
-                style: sansStyle(c, size: 12, color: c.muted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '本地目标：$target',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: monoStyle(c, size: 11.8, color: c.meta),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: ShapeDecoration(
-              color: c.recessed,
-              shape: claudeSuperellipse(14),
-            ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                SelectableText(
-                  primaryUrl,
-                  style: monoStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
                 ),
-                Wrap(
-                  spacing: 7,
-                  runSpacing: 7,
-                  children: [
-                    ClaudeButton(
-                      label: '复制链接',
-                      compact: true,
-                      variant: ClaudeBtnVariant.clay,
-                      leading: const Icon(Icons.copy_rounded),
-                      onPressed: () =>
-                          onCopy(primaryUrl, '已复制分享链接：$primaryUrl'),
-                    ),
-                    AnimatedOpacity(
-                      duration: ClaudeMotion.duration(
-                        context,
-                        const Duration(milliseconds: 140),
-                      ),
-                      opacity: revealSecondary ? 1.0 : 0.30,
-                      child: Wrap(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
                         spacing: 7,
-                        runSpacing: 7,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          ClaudeButton(
-                            label: '二维码',
-                            compact: true,
-                            variant: ClaudeBtnVariant.ghost,
-                            leading: const Icon(Icons.qr_code_rounded),
-                            onPressed: () => onShowQr(label, primaryUrl),
+                          Text(
+                            label,
+                            style: sansStyle(
+                              c,
+                              size: 13.8,
+                              weight: FontWeight.w600,
+                              color: c.ink,
+                            ),
                           ),
-                          ClaudeButton(
-                            label: '打开预览',
-                            compact: true,
-                            variant: ClaudeBtnVariant.ghost,
-                            leading: const Icon(Icons.open_in_new_rounded),
-                            onPressed: () => onOpenBrowser(primaryUrl),
+                          ClaudePill(
+                            text: kindLabel,
+                            mono: false,
+                            fg: c.sage,
+                            bg: c.sageBg,
                           ),
-                          if (copyOptions.length > 1)
-                            EndpointCopyDropButton(
-                              label: '更多通道 (${copyOptions.length})',
-                              options: copyOptions,
-                              onSelect: (opt) => onCopy(
-                                opt.url,
-                                '已复制 ${opt.badge} 地址：${opt.url}',
+                          if (hasPin)
+                            GestureDetector(
+                              onTap: pinCode.isNotEmpty
+                                  ? () => widget.onCopy(
+                                        pinCode,
+                                        '已复制提取码：$pinCode',
+                                      )
+                                  : null,
+                              child: ClaudePill(
+                                text: pinCode.isNotEmpty
+                                    ? '提取码 $pinCode'
+                                    : '口令保护',
+                                mono: false,
+                                fg: c.clay,
+                                bg: c.clay.withValues(alpha: 0.12),
                               ),
                             ),
-                          ClaudeButton(
-                            label: closing ? '关闭中...' : '关闭分享',
-                            compact: true,
-                            loading: closing,
-                            variant: ClaudeBtnVariant.ghost,
-                            leading: const Icon(Icons.close_rounded),
-                            onPressed: onClose,
+                          Text(
+                            '$scopeText · $ttlText${remDl != null ? " · 剩余 $remDl 次" : ""} · $hitCount 次访问 ($bytesHuman)',
+                            style: sansStyle(
+                              c,
+                              size: 11.5,
+                              color: c.muted,
+                              tabular: true,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        primaryUrl,
+                        maxLines: 1,
+                        style: monoStyle(
+                          c,
+                          size: 12.2,
+                          weight: FontWeight.w500,
+                          color: c.clay,
+                        ),
+                      ),
+                      if (target.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          target,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: monoStyle(c, size: 11, color: c.meta),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
+                if (!isNarrow) ...[
+                  const SizedBox(width: 12),
+                  actionBar,
+                ],
               ],
             ),
-          ),
-        ],
-      ),
+            if (isNarrow) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.only(left: 46),
+                child: actionBar,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1204,12 +1006,14 @@ class _CreateExposureDialog extends StatefulWidget {
 }
 
 class _CreateExposureDialogState extends State<_CreateExposureDialog> {
-  late String _mode = widget.initialMode == 'wizard' ? 'folder' : widget.initialMode;
+  late String _mode =
+      widget.initialMode == 'wizard' ? 'folder' : widget.initialMode;
   late bool _inStep1 = widget.initialMode == 'wizard' &&
       (widget.initialTarget == null || widget.initialTarget!.trim().isEmpty);
   bool _folderStep = false;
   late final TextEditingController _targetCtrl = TextEditingController(
-    text: (widget.initialTarget != null && widget.initialTarget!.trim().isNotEmpty)
+    text: (widget.initialTarget != null &&
+            widget.initialTarget!.trim().isNotEmpty)
         ? widget.initialTarget!.trim()
         : (widget.initialMode == 'port'
             ? (widget.activeLocalPorts.isNotEmpty
@@ -1221,7 +1025,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   final TextEditingController _pinCtrl = TextEditingController();
   String _scope = 'auto';
   late int _ttlMinutes = widget.defaultTtlMinutes;
-  int _maxDownloads = 0; // 0 = unlimited
+  int _maxDownloads = 0;
   bool _spa = false;
   bool _picking = false;
   bool _submitting = false;
@@ -1358,386 +1162,458 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
     ];
 
     return Dialog(
-      backgroundColor: c.paper2,
+      backgroundColor: c.paper,
       elevation: 0,
       insetPadding: EdgeInsets.symmetric(
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(24),
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 18 : 26,
-            22,
-            compact ? 18 : 26,
-            20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const ClaudeSparkIcon(size: 18),
-                    const SizedBox(width: 9),
-                    Text('新建外网映射与分享', style: serifTitleStyle(c, size: 19)),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if (_inStep1) ...[
-                  Text(
-                    '第 1 步 · 选择要分享的内容类型',
-                    style: sansStyle(c, size: 13.5, weight: FontWeight.w600, color: c.ink),
-                  ),
-                  const SizedBox(height: 12),
-                  _WizardChoiceCard(
-                    icon: Icons.insert_drive_file_outlined,
-                    title: '单个文件',
-                    subtitle: '视频流式播放、PDF / 图片直接预览、APK 或安装包高速直下',
-                    onTap: () => setState(() {
-                      _mode = 'file';
-                      _folderStep = false;
-                      _inStep1 = false;
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  _WizardChoiceCard(
-                    icon: Icons.folder_open_rounded,
-                    title: '文件夹 / 静态网站',
-                    subtitle: '下一步选择作为「文件夹目录共享」或「静态网站目录」发布',
-                    onTap: () => setState(() {
-                      _mode = 'folder';
-                      _folderStep = true;
-                      _inStep1 = false;
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  _WizardChoiceCard(
-                    icon: Icons.podcasts_rounded,
-                    title: '本地端口转发',
-                    subtitle: '把本机 :3000 / :5173 等 Web 服务与 WebSocket 实时映射出去',
-                    onTap: () => setState(() {
-                      _mode = 'port';
-                      _folderStep = false;
-                      _inStep1 = false;
-                      if (_targetCtrl.text.trim().isEmpty) {
-                        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
-                            ? '${widget.activeLocalPorts.first}'
-                            : '3000';
-                      }
-                    }),
-                  ),
-                ] else ...[
-                  if (_folderStep) ...[
-                    Row(
-                      children: [
-                        ClaudeButton(
-                          label: '更换类型',
-                          compact: true,
-                          variant: ClaudeBtnVariant.ghost,
-                          leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
-                          onPressed: () => setState(() => _inStep1 = true),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '第 2 步 · 选择文件夹分享方式',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: sansStyle(c, size: 13, weight: FontWeight.w600, color: c.ink),
-                          ),
-                        ),
-                      ],
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 740),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 18 : 22,
+                16,
+                compact ? 14 : 18,
+                14,
+              ),
+              child: Row(
+                children: [
+                  const ClaudeSparkIcon(size: 18),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      '新建外网映射与分享',
+                      style: serifTitleStyle(c, size: 17.5),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FolderKindChip(
-                            icon: Icons.folder_shared_outlined,
-                            title: '文件夹目录共享',
-                            subtitle: '列表浏览与文件下载',
-                            active: _mode == 'folder',
-                            onTap: () => setState(() => _mode = 'folder'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _FolderKindChip(
-                            icon: Icons.web_rounded,
-                            title: '静态网站目录',
-                            subtitle: '直接作为网页运行',
-                            active: _mode == 'site',
-                            onTap: () => setState(() => _mode = 'site'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ] else if (widget.initialMode == 'wizard') ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ClaudeButton(
-                        label: '更换分享类型',
-                        compact: true,
-                        variant: ClaudeBtnVariant.ghost,
-                        leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
-                        onPressed: () => setState(() => _inStep1 = true),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                Text(
-                  '选择打开形态',
-                  style: sansStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
                   ),
-                ),
-                const SizedBox(height: 7),
-                ClaudeSegmented<String>(
-                  value: _mode,
-                  items: const [
-                    ('port', '本地网站端口'),
-                    ('file', '单个视频 / 文件'),
-                    ('folder', '文件夹目录'),
-                    ('site', '静态网站 / HTML'),
-                  ],
-                  onChanged: (v) {
-                    setState(() {
-                      _mode = v;
-                      _error = '';
-                      if (v == 'port' &&
-                          int.tryParse(_targetCtrl.text.trim()) == null) {
-                        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
-                            ? '${widget.activeLocalPorts.first}'
-                            : '3000';
-                      } else if (v != 'port' &&
-                          int.tryParse(_targetCtrl.text.trim()) != null) {
-                        _targetCtrl.clear();
-                      }
-                    });
-                  },
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        modeHelp,
-                        style: sansStyle(c, size: 12.5, color: c.muted),
-                      ),
-                    ),
-                    if (_mode != 'port' && !widget.backend.isAndroidPlatform) ...[
-                      const SizedBox(width: 8),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          if (_mode == 'file' || _mode == 'site')
-                            ClaudeButton(
-                              label: _picking ? '选择中...' : (_mode == 'site' ? '选 HTML 文件' : '选文件...'),
-                              compact: true,
-                              leading:
-                                  const Icon(Icons.insert_drive_file_outlined),
-                              onPressed: _picking
-                                  ? null
-                                  : () => _pickPath(directory: false),
-                            ),
-                          if (_mode == 'folder' || _mode == 'site')
-                            ClaudeButton(
-                              label: _picking ? '选择中...' : (_mode == 'site' ? '选网站文件夹' : '选文件夹...'),
-                              compact: true,
-                              leading: const Icon(Icons.folder_open_rounded),
-                              onPressed: _picking
-                                  ? null
-                                  : () => _pickPath(directory: true),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _targetCtrl,
-                  onChanged: _onTargetChanged,
-                  style: monoStyle(c, size: 13, color: c.ink),
-                  decoration: InputDecoration(hintText: hintText),
-                ),
-                if (isHtmlTarget && (_mode == 'file' || _mode == 'site')) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.tips_and_updates_outlined,
-                          size: 14, color: c.clay),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _mode == 'site'
-                              ? '当前将该 .html 直接作为网页运行；若只想让人查看源码或下载，可点上方「单个视频 / 文件」。'
-                              : '检测到 .html 文件：若希望对方点开直接运行网页，可点上方切到「静态网站 / HTML」。',
-                          style: sansStyle(c, size: 11.8, color: c.clay),
-                        ),
-                      ),
-                    ],
+                  ClaudeButton(
+                    label: '',
+                    compact: true,
+                    variant: ClaudeBtnVariant.ghost,
+                    leading: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.of(context).pop(),
                   ),
                 ],
-                if (_mode == 'port') ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final p in defaultPorts)
-                        ClaudeButton(
-                          label: widget.activeLocalPorts.contains(p)
-                              ? ':$p · 运行中'
-                              : ':$p',
-                          compact: true,
-                          variant: widget.activeLocalPorts.contains(p)
-                              ? ClaudeBtnVariant.clay
-                              : ClaudeBtnVariant.neutral,
-                          onPressed: () =>
-                              setState(() => _targetCtrl.text = '$p'),
-                        ),
-                    ],
-                  ),
-                ],
-                if (_mode == 'site') ...[
-                  const SizedBox(height: 8),
-                  ClaudeCheckToggle(
-                    value: _spa,
-                    label: '前端单页应用路由模式（未知子路径自动回退到 index.html）',
-                    onChanged: (v) => setState(() => _spa = v),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Text(
-                  '访问范围与自动收起时间',
-                  style: sansStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    ClaudeSegmented<String>(
-                      value: _scope,
-                      items: const [
-                        ('auto', '智能优选'),
-                        ('tailscale', '仅 Tailscale'),
-                        ('public', '公网直达'),
-                        ('lan', '仅局域网'),
-                      ],
-                      onChanged: (v) => setState(() => _scope = v),
-                    ),
-                    ClaudeSegmented<int>(
-                      value: const [30, 120, 1440, 0].contains(_ttlMinutes)
-                          ? _ttlMinutes
-                          : 120,
-                      items: const [
-                        (30, '30 分钟'),
-                        (120, '2 小时'),
-                        (1440, '24 小时'),
-                        (0, '一直开着'),
-                      ],
-                      onChanged: (v) => setState(() => _ttlMinutes = v),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '安全提取码与限次保护（可选）',
-                  style: sansStyle(
-                    c,
-                    size: 12.6,
-                    weight: FontWeight.w600,
-                    color: c.ink,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 190,
-                      child: TextField(
-                        controller: _pinCtrl,
-                        style: monoStyle(c, size: 13, color: c.ink),
-                        decoration: const InputDecoration(
-                          hintText: '免口令（或填4-8位提取码）',
-                        ),
-                      ),
-                    ),
-                    if (_mode == 'file' || _mode == 'folder')
-                      ClaudeSegmented<int>(
-                        value: _maxDownloads,
-                        items: const [
-                          (0, '不限次数'),
-                          (1, '1次即焚'),
-                          (5, '限5次'),
-                          (20, '限20次'),
-                        ],
-                        onChanged: (v) => setState(() => _maxDownloads = v),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _labelCtrl,
-                  style: sansStyle(c, size: 13, color: c.ink),
-                  decoration: const InputDecoration(
-                    hintText: '可选备注名（留空会自动按文件名或端口号生成）',
-                  ),
-                ),
-                if (_error.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _error,
-                    style: sansStyle(c, size: 12.2, color: c.clay),
-                  ),
-                ],
-                ],
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ClaudeButton(
-                      label: '取消',
-                      compact: true,
-                      variant: ClaudeBtnVariant.ghost,
-                      onPressed:
-                          _submitting ? null : () => Navigator.of(context).pop(),
-                    ),
-                    if (!_inStep1) ...[
-                      const SizedBox(width: 8),
-                      ClaudeButton(
-                        label: _submitting ? '正在生成链接...' : '生成分享链接',
-                        compact: true,
-                        loading: _submitting,
-                        variant: ClaudeBtnVariant.clay,
-                        leading: const Icon(Icons.link_rounded),
-                        onPressed: _submit,
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
+            Divider(color: c.hairline, height: 1),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 18 : 22,
+                  16,
+                  compact ? 18 : 22,
+                  16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_inStep1) ...[
+                      Text(
+                        '第 1 步 · 选择要分享的内容类型',
+                        style: sansStyle(
+                          c,
+                          size: 13,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _WizardChoiceCard(
+                        icon: Icons.insert_drive_file_outlined,
+                        title: '单个文件',
+                        subtitle: '视频流式播放、PDF / 图片直接预览、APK 或安装包高速直下',
+                        onTap: () => setState(() {
+                          _mode = 'file';
+                          _folderStep = false;
+                          _inStep1 = false;
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      _WizardChoiceCard(
+                        icon: Icons.folder_open_rounded,
+                        title: '文件夹 / 静态网站',
+                        subtitle: '下一步选择作为「文件夹目录共享」或「静态网站目录」发布',
+                        onTap: () => setState(() {
+                          _mode = 'folder';
+                          _folderStep = true;
+                          _inStep1 = false;
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      _WizardChoiceCard(
+                        icon: Icons.podcasts_rounded,
+                        title: '本地端口转发',
+                        subtitle: '把本机 :3000 / :5173 等 Web 服务与 WebSocket 实时映射出去',
+                        onTap: () => setState(() {
+                          _mode = 'port';
+                          _folderStep = false;
+                          _inStep1 = false;
+                          if (_targetCtrl.text.trim().isEmpty) {
+                            _targetCtrl.text =
+                                widget.activeLocalPorts.isNotEmpty
+                                    ? '${widget.activeLocalPorts.first}'
+                                    : '3000';
+                          }
+                        }),
+                      ),
+                    ] else ...[
+                      if (_folderStep) ...[
+                        Row(
+                          children: [
+                            ClaudeButton(
+                              label: '更换类型',
+                              compact: true,
+                              variant: ClaudeBtnVariant.ghost,
+                              leading: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 13,
+                              ),
+                              onPressed: () => setState(() => _inStep1 = true),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '第 2 步 · 选择文件夹分享方式',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: sansStyle(
+                                  c,
+                                  size: 13,
+                                  weight: FontWeight.w600,
+                                  color: c.ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _FolderKindChip(
+                                icon: Icons.folder_shared_outlined,
+                                title: '文件夹目录共享',
+                                subtitle: '列表浏览与文件下载',
+                                active: _mode == 'folder',
+                                onTap: () => setState(() => _mode = 'folder'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _FolderKindChip(
+                                icon: Icons.web_rounded,
+                                title: '静态网站目录',
+                                subtitle: '直接作为网页运行',
+                                active: _mode == 'site',
+                                onTap: () => setState(() => _mode = 'site'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ] else if (widget.initialMode == 'wizard') ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ClaudeButton(
+                            label: '更换分享类型',
+                            compact: true,
+                            variant: ClaudeBtnVariant.ghost,
+                            leading: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 13,
+                            ),
+                            onPressed: () => setState(() => _inStep1 = true),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Text(
+                        '选择打开形态',
+                        style: sansStyle(
+                          c,
+                          size: 12.5,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      ClaudeSegmented<String>(
+                        value: _mode,
+                        items: const [
+                          ('port', '本地网站端口'),
+                          ('file', '单个视频 / 文件'),
+                          ('folder', '文件夹目录'),
+                          ('site', '静态网站 / HTML'),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            _mode = v;
+                            _error = '';
+                            if (v == 'port' &&
+                                int.tryParse(_targetCtrl.text.trim()) == null) {
+                              _targetCtrl.text =
+                                  widget.activeLocalPorts.isNotEmpty
+                                      ? '${widget.activeLocalPorts.first}'
+                                      : '3000';
+                            } else if (v != 'port' &&
+                                int.tryParse(_targetCtrl.text.trim()) != null) {
+                              _targetCtrl.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              modeHelp,
+                              style: sansStyle(c, size: 12.2, color: c.muted),
+                            ),
+                          ),
+                          if (_mode != 'port' &&
+                              !widget.backend.isAndroidPlatform) ...[
+                            const SizedBox(width: 8),
+                            Wrap(
+                              spacing: 6,
+                              children: [
+                                if (_mode == 'file' || _mode == 'site')
+                                  ClaudeButton(
+                                    label: _picking
+                                        ? '选择中...'
+                                        : (_mode == 'site'
+                                            ? '选 HTML 文件'
+                                            : '选文件...'),
+                                    compact: true,
+                                    leading: const Icon(
+                                      Icons.insert_drive_file_outlined,
+                                    ),
+                                    onPressed: _picking
+                                        ? null
+                                        : () => _pickPath(directory: false),
+                                  ),
+                                if (_mode == 'folder' || _mode == 'site')
+                                  ClaudeButton(
+                                    label: _picking
+                                        ? '选择中...'
+                                        : (_mode == 'site'
+                                            ? '选网站文件夹'
+                                            : '选文件夹...'),
+                                    compact: true,
+                                    leading:
+                                        const Icon(Icons.folder_open_rounded),
+                                    onPressed: _picking
+                                        ? null
+                                        : () => _pickPath(directory: true),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _targetCtrl,
+                        onChanged: _onTargetChanged,
+                        style: monoStyle(c, size: 13, color: c.ink),
+                        decoration: InputDecoration(hintText: hintText),
+                      ),
+                      if (isHtmlTarget &&
+                          (_mode == 'file' || _mode == 'site')) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.tips_and_updates_outlined,
+                              size: 14,
+                              color: c.clay,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _mode == 'site'
+                                    ? '当前将该 .html 直接作为网页运行；若只想让人查看源码或下载，可点上方「单个视频 / 文件」。'
+                                    : '检测到 .html 文件：若希望对方点开直接运行网页，可点上方切到「静态网站 / HTML」。',
+                                style: sansStyle(c, size: 11.8, color: c.clay),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (_mode == 'port') ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final p in defaultPorts)
+                              ClaudeButton(
+                                label: widget.activeLocalPorts.contains(p)
+                                    ? ':$p · 运行中'
+                                    : ':$p',
+                                compact: true,
+                                variant: widget.activeLocalPorts.contains(p)
+                                    ? ClaudeBtnVariant.clay
+                                    : ClaudeBtnVariant.neutral,
+                                onPressed: () =>
+                                    setState(() => _targetCtrl.text = '$p'),
+                              ),
+                          ],
+                        ),
+                      ],
+                      if (_mode == 'site') ...[
+                        const SizedBox(height: 8),
+                        ClaudeCheckToggle(
+                          value: _spa,
+                          label: '前端单页应用路由模式（未知子路径自动回退到 index.html）',
+                          onChanged: (v) => setState(() => _spa = v),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Text(
+                        '访问范围与自动收起时间',
+                        style: sansStyle(
+                          c,
+                          size: 12.5,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          ClaudeSegmented<String>(
+                            value: _scope,
+                            items: const [
+                              ('auto', '智能优选'),
+                              ('tailscale', '仅 Tailscale'),
+                              ('public', '公网直达'),
+                              ('lan', '仅局域网'),
+                            ],
+                            onChanged: (v) => setState(() => _scope = v),
+                          ),
+                          ClaudeSegmented<int>(
+                            value: const [30, 120, 1440, 0]
+                                    .contains(_ttlMinutes)
+                                ? _ttlMinutes
+                                : 120,
+                            items: const [
+                              (30, '30 分钟'),
+                              (120, '2 小时'),
+                              (1440, '24 小时'),
+                              (0, '一直开着'),
+                            ],
+                            onChanged: (v) => setState(() => _ttlMinutes = v),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '安全提取码与限次保护（可选）',
+                        style: sansStyle(
+                          c,
+                          size: 12.5,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 190,
+                            child: TextField(
+                              controller: _pinCtrl,
+                              style: monoStyle(c, size: 13, color: c.ink),
+                              decoration: const InputDecoration(
+                                hintText: '免口令（或填4-8位提取码）',
+                              ),
+                            ),
+                          ),
+                          if (_mode == 'file' || _mode == 'folder')
+                            ClaudeSegmented<int>(
+                              value: _maxDownloads,
+                              items: const [
+                                (0, '不限次数'),
+                                (1, '1次即焚'),
+                                (5, '限5次'),
+                                (20, '限20次'),
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _maxDownloads = v),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _labelCtrl,
+                        style: sansStyle(c, size: 13, color: c.ink),
+                        decoration: const InputDecoration(
+                          hintText: '可选备注名（留空会自动按文件名或端口号生成）',
+                        ),
+                      ),
+                      if (_error.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _error,
+                          style: sansStyle(c, size: 12, color: c.danger),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Divider(color: c.hairline, height: 1),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 18 : 22,
+                12,
+                compact ? 18 : 22,
+                14,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ClaudeButton(
+                    label: '取消',
+                    compact: true,
+                    variant: ClaudeBtnVariant.ghost,
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                  ),
+                  if (!_inStep1) ...[
+                    const SizedBox(width: 8),
+                    ClaudeButton(
+                      label: _submitting ? '正在生成链接...' : '生成分享链接',
+                      compact: true,
+                      loading: _submitting,
+                      variant: ClaudeBtnVariant.clay,
+                      leading: const Icon(Icons.link_rounded),
+                      onPressed: _submit,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1762,13 +1638,13 @@ class _ShareQrDialog extends StatelessWidget {
         'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${Uri.encodeComponent(url)}';
 
     return Dialog(
-      backgroundColor: c.paper2,
+      backgroundColor: c.paper,
       elevation: 0,
-      shape: claudeSuperellipse(24),
+      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1776,12 +1652,12 @@ class _ShareQrDialog extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: serifTitleStyle(c, size: 18),
+                style: serifTitleStyle(c, size: 17),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               Text(
                 '手机相机扫一扫，或直接复制链接发给好友',
-                style: sansStyle(c, size: 12.5, color: c.muted),
+                style: sansStyle(c, size: 12, color: c.muted),
               ),
               const SizedBox(height: 16),
               Container(
@@ -1790,13 +1666,19 @@ class _ShareQrDialog extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: ShapeDecoration(
                   color: Colors.white,
-                  shape: claudeSuperellipse(18),
+                  shape: claudeSuperellipse(
+                    14,
+                    side: BorderSide(color: c.hairline),
+                  ),
                 ),
                 child: Image.network(
                   qrImgUrl,
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => CustomPaint(
-                    painter: _OfflineMatrixBadgePainter(url.hashCode, c.ink),
+                    painter: _OfflineMatrixBadgePainter(
+                      url.hashCode,
+                      const Color(0xFF0F172A),
+                    ),
                   ),
                 ),
               ),
@@ -1807,12 +1689,15 @@ class _ShareQrDialog extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: ShapeDecoration(
                   color: c.recessed,
-                  shape: claudeSuperellipse(12),
+                  shape: claudeSuperellipse(
+                    10,
+                    side: BorderSide(color: c.hairline),
+                  ),
                 ),
                 child: SelectableText(
                   url,
                   textAlign: TextAlign.center,
-                  style: monoStyle(c, size: 11.8, color: c.inkSoft),
+                  style: monoStyle(c, size: 11.6, color: c.inkSoft),
                 ),
               ),
               const SizedBox(height: 16),
@@ -1853,7 +1738,7 @@ class _OfflineMatrixBadgePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = const Color(0xFF1F1E1B);
+    final p = Paint()..color = color;
     const n = 15;
     final cell = math.min(size.width, size.height) / n;
     void finder(int ox, int oy) {
@@ -1862,10 +1747,17 @@ class _OfflineMatrixBadgePainter extends CustomPainter {
           Rect.fromLTWH(ox * cell, oy * cell, 4 * cell, 4 * cell),
           const Radius.circular(4),
         ),
-        p..style = PaintingStyle.stroke..strokeWidth = cell * 0.8,
+        p
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.8,
       );
       canvas.drawRect(
-        Rect.fromLTWH((ox + 1.2) * cell, (oy + 1.2) * cell, 1.6 * cell, 1.6 * cell),
+        Rect.fromLTWH(
+          (ox + 1.2) * cell,
+          (oy + 1.2) * cell,
+          1.6 * cell,
+          1.6 * cell,
+        ),
         p..style = PaintingStyle.fill,
       );
     }
@@ -1895,7 +1787,7 @@ class _OfflineMatrixBadgePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _OfflineMatrixBadgePainter oldDelegate) =>
-      oldDelegate.seed != seed;
+      oldDelegate.seed != seed || oldDelegate.color != color;
 }
 
 class TailscaleExposureSettingsCard extends StatefulWidget {
@@ -1982,257 +1874,155 @@ class _TailscaleExposureSettingsCardState
             : '基础直享就绪');
     final pillActive = _exposeEnabled && reachable;
 
-    return ClaudeCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return ClaudeListGroup(
+      headerLabel: 'Tailscale 与外网分享设置',
+      headerTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              Text('Tailscale 与外网分享设置', style: serifTitleStyle(c, size: 18)),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  ClaudePill(
-                    leading: ClaudeStatusDot(
-                      color: pillActive
-                          ? c.sage
-                          : (_exposeEnabled ? c.clay : c.meta),
-                      pulsing: pillActive,
-                      size: 6.5,
-                    ),
-                    text: pillText,
-                    mono: false,
-                    fg: pillActive
-                        ? c.sage
-                        : (_exposeEnabled ? c.inkSoft : c.muted),
-                    bg: pillActive ? c.sageBg : c.paper2,
-                  ),
-                  ClaudeButton(
-                    label: _probing ? '检测中...' : '检测 Tailscale',
-                    compact: true,
-                    loading: _probing,
-                    leading: const Icon(Icons.refresh_rounded),
-                    onPressed: _probeTailscale,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '控制 AI 能否把做好的文件、文件夹、网页或本地端口生成分享链接，以及是否联动你的 Tailscale 组网。',
-            style: sansStyle(c, size: 13, color: c.muted, height: 1.52),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: ShapeDecoration(
-              color: c.recessed,
-              shape: claudeSuperellipse(16),
+          ClaudePill(
+            leading: ClaudeStatusDot(
+              color: pillActive
+                  ? c.sage
+                  : (_exposeEnabled ? c.clay : c.meta),
+              pulsing: pillActive,
+              size: 6.5,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '允许外网分享与 AI 自动映射 (manage_expose)',
-                            style: sansStyle(
-                              c,
-                              size: 13.5,
-                              weight: FontWeight.w600,
-                              color: c.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '开启后，对 AI 说一句话即可拿到文件、目录或网站的预览链接；关闭后立即阻断所有外部访问。',
-                            style: sansStyle(c, size: 12, color: c.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ClaudeSwitch(
-                      value: _exposeEnabled,
-                      onChanged: (v) => _patch(
-                        {'expose_enabled': v},
-                        v ? '已开启外网分享与 AI 映射' : '已关闭外网分享与 AI 映射',
-                      ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: c.hairline, height: 1),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '启用 Tailscale 组网与 Funnel 联动',
-                            style: sansStyle(
-                              c,
-                              size: 13.5,
-                              weight: FontWeight.w600,
-                              color: c.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            dns.isNotEmpty
-                                ? '已识别节点域名 $dns，开启后自动生成 Tailscale 专属访问链接'
-                                : (ips.isNotEmpty
-                                    ? '已识别组网地址 ${ips.join(", ")}，同账号手机与设备可直接打开'
-                                    : '开启后自动识别本机 Tailscale 100.x 地址及 Serve / Funnel 域名'),
-                            style: sansStyle(c, size: 12, color: c.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ClaudeSwitch(
-                      value: _tsEnabled,
-                      onChanged: !_exposeEnabled
-                          ? null
-                          : (v) => _patch(
-                                {'expose_tailscale_enabled': v},
-                                v ? '已启用 Tailscale 分享联动' : '已关闭 Tailscale 分享联动',
-                              ),
-                    ),
-                  ],
-                ),
-                ClaudeCollapsible(
-                  expanded: _exposeEnabled && _tsEnabled,
-                  builder: (_) => Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: [
-                        Text(
-                          'Tailscale 默认映射方式',
-                          style: sansStyle(c, size: 12.5, color: c.inkSoft),
+            text: pillText,
+            mono: false,
+            fg: pillActive ? c.sage : (_exposeEnabled ? c.inkSoft : c.muted),
+            bg: pillActive ? c.sageBg : c.paper2,
+          ),
+          const SizedBox(width: 8),
+          ClaudeButton(
+            label: _probing ? '检测中...' : '检测 Tailscale',
+            compact: true,
+            loading: _probing,
+            leading: const Icon(Icons.refresh_rounded),
+            onPressed: _probeTailscale,
+          ),
+        ],
+      ),
+      children: [
+        ClaudeSettingsRow(
+          title: '允许外网分享与 AI 自动映射 (manage_expose)',
+          subtitle: '开启后对 AI 说一句话即可拿到文件、目录或网站的预览链接；关闭后立即阻断所有外部访问。',
+          trailing: ClaudeSwitch(
+            value: _exposeEnabled,
+            onChanged: (v) => _patch(
+              {'expose_enabled': v},
+              v ? '已开启外网分享与 AI 映射' : '已关闭外网分享与 AI 映射',
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClaudeSettingsRow(
+              title: '启用 Tailscale 组网与 Funnel 联动',
+              subtitle: dns.isNotEmpty
+                  ? '已识别节点域名 $dns，自动生成 Tailscale 专属访问链接'
+                  : (ips.isNotEmpty
+                      ? '已识别组网地址 ${ips.join(", ")}，同账号设备可直接打开'
+                      : '开启后自动识别本机 Tailscale 100.x 地址及 Serve / Funnel 域名'),
+              trailing: ClaudeSwitch(
+                value: _tsEnabled,
+                onChanged: !_exposeEnabled
+                    ? null
+                    : (v) => _patch(
+                          {'expose_tailscale_enabled': v},
+                          v ? '已启用 Tailscale 分享联动' : '已关闭 Tailscale 分享联动',
                         ),
-                        ClaudeSegmented<String>(
-                          value: _tsMode,
-                          items: const [
-                            ('funnel', 'Funnel 公网优先'),
-                            ('tailnet', '仅组网内私享'),
-                          ],
-                          onChanged: (v) => _patch(
-                            {'expose_tailscale_mode': v},
-                            v == 'funnel'
-                                ? 'Tailscale 已设为优先尝试 Funnel 公网直连'
-                                : 'Tailscale 已设为仅限组网内设备访问',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: c.hairline, height: 1),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '无固定公网域名时自动拉起临时公网隧道',
-                            style: sansStyle(
-                              c,
-                              size: 13.5,
-                              weight: FontWeight.w600,
-                              color: c.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '分享本地网站端口（如 :3000）或未配置固定域名时，自动用 cloudflared 生成临时 HTTPS 链接。',
-                            style: sansStyle(c, size: 12, color: c.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ClaudeSwitch(
-                      value: _cfFallback,
-                      onChanged: !_exposeEnabled
-                          ? null
-                          : (v) => _patch(
-                                {'expose_cloudflared_fallback': v},
-                                v ? '已开启临时公网隧道自动兜底' : '已关闭临时公网隧道兜底',
-                              ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: c.hairline, height: 1),
-                ),
-                Wrap(
+              ),
+            ),
+            ClaudeCollapsible(
+              expanded: _exposeEnabled && _tsEnabled,
+              builder: (_) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 10,
                   runSpacing: 8,
                   children: [
                     Text(
-                      '新分享默认自动关闭时长',
-                      style: sansStyle(
-                        c,
-                        size: 13,
-                        weight: FontWeight.w600,
-                        color: c.ink,
-                      ),
+                      'Tailscale 默认映射方式',
+                      style: sansStyle(c, size: 12.2, color: c.muted),
                     ),
-                    ClaudeSegmented<int>(
-                      value: const [30, 120, 1440, 0].contains(_ttlMinutes)
-                          ? _ttlMinutes
-                          : 120,
+                    ClaudeSegmented<String>(
+                      value: _tsMode,
                       items: const [
-                        (30, '30 分钟'),
-                        (120, '2 小时'),
-                        (1440, '24 小时'),
-                        (0, '一直开着'),
+                        ('funnel', 'Funnel 公网优先'),
+                        ('tailnet', '仅组网内私享'),
                       ],
-                      onChanged: !_exposeEnabled
-                          ? (_) {}
-                          : (v) => _patch(
-                                {'expose_default_ttl_minutes': v},
-                                v == 0
-                                    ? '默认设为一直开着（手动收起）'
-                                    : '默认有效期已设为 $v 分钟',
-                              ),
+                      onChanged: (v) => _patch(
+                        {'expose_tailscale_mode': v},
+                        v == 'funnel'
+                            ? 'Tailscale 已设为优先尝试 Funnel 公网直连'
+                            : 'Tailscale 已设为仅限组网内设备访问',
+                      ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
+          ],
+        ),
+        ClaudeSettingsRow(
+          title: '无固定公网域名时自动拉起临时公网隧道',
+          subtitle: '分享本地网站端口（如 :3000）或未配置固定域名时，自动用 cloudflared 生成临时 HTTPS 链接。',
+          trailing: ClaudeSwitch(
+            value: _cfFallback,
+            onChanged: !_exposeEnabled
+                ? null
+                : (v) => _patch(
+                      {'expose_cloudflared_fallback': v},
+                      v ? '已开启临时公网隧道自动兜底' : '已关闭临时公网隧道兜底',
+                    ),
           ),
-        ],
-      ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              Text(
+                '新分享默认自动关闭时长',
+                style: sansStyle(
+                  c,
+                  size: 13,
+                  weight: FontWeight.w500,
+                  color: c.ink,
+                ),
+              ),
+              ClaudeSegmented<int>(
+                value: const [30, 120, 1440, 0].contains(_ttlMinutes)
+                    ? _ttlMinutes
+                    : 120,
+                items: const [
+                  (30, '30 分钟'),
+                  (120, '2 小时'),
+                  (1440, '24 小时'),
+                  (0, '一直开着'),
+                ],
+                onChanged: !_exposeEnabled
+                    ? (_) {}
+                    : (v) => _patch(
+                          {'expose_default_ttl_minutes': v},
+                          v == 0
+                              ? '默认设为一直开着（手动收起）'
+                              : '默认有效期已设为 $v 分钟',
+                        ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
-
 
 class _DashedDropZone extends StatelessWidget {
   final Color borderColor;
@@ -2245,7 +2035,7 @@ class _DashedDropZone extends StatelessWidget {
     required this.borderColor,
     required this.fillColor,
     required this.child,
-    this.radius = 14,
+    this.radius = 12,
     this.onTap,
   });
 
@@ -2255,9 +2045,9 @@ class _DashedDropZone extends StatelessWidget {
       foregroundPainter: _DashedRRectPainter(
         color: borderColor,
         radius: radius,
-        strokeWidth: 1.5,
-        dashWidth: 6.5,
-        dashGap: 4.5,
+        strokeWidth: 1.4,
+        dashWidth: 6.0,
+        dashGap: 4.0,
       ),
       child: Material(
         color: fillColor,
@@ -2282,9 +2072,9 @@ class _DashedRRectPainter extends CustomPainter {
   const _DashedRRectPainter({
     required this.color,
     required this.radius,
-    this.strokeWidth = 1.5,
-    this.dashWidth = 6.5,
-    this.dashGap = 4.5,
+    this.strokeWidth = 1.4,
+    this.dashWidth = 6.0,
+    this.dashGap = 4.0,
   });
 
   @override
@@ -2317,7 +2107,6 @@ class _DashedRRectPainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth;
 }
 
-
 class _WizardChoiceCard extends StatefulWidget {
   final IconData icon;
   final String title;
@@ -2348,14 +2137,14 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
           decoration: ShapeDecoration(
             color: _hovered
                 ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.06)
-                : c.recessed,
+                : c.paper2,
             shape: claudeSuperellipse(
-              14,
+              11,
               side: BorderSide(
                 color: _hovered ? c.clay.withValues(alpha: 0.45) : c.hairline,
               ),
@@ -2364,13 +2153,13 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 decoration: ShapeDecoration(
-                  color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.11),
-                  shape: claudeSuperellipse(11),
+                  color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
+                  shape: claudeSuperellipse(9),
                 ),
-                child: Icon(widget.icon, size: 20, color: c.clay),
+                child: Icon(widget.icon, size: 18, color: c.clay),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2379,17 +2168,22 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
                   children: [
                     Text(
                       widget.title,
-                      style: sansStyle(c, size: 14.2, weight: FontWeight.w600, color: c.ink),
+                      style: sansStyle(
+                        c,
+                        size: 13.8,
+                        weight: FontWeight.w600,
+                        color: c.ink,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       widget.subtitle,
-                      style: sansStyle(c, size: 12, color: c.muted),
+                      style: sansStyle(c, size: 11.8, color: c.muted),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, size: 20, color: c.meta),
+              Icon(Icons.chevron_right_rounded, size: 18, color: c.meta),
             ],
           ),
         ),
@@ -2419,17 +2213,17 @@ class _FolderKindChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+        duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: ShapeDecoration(
           color: active
-              ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.10)
-              : c.recessed,
+              ? c.clay.withValues(alpha: c.isDark ? 0.18 : 0.09)
+              : c.paper2,
           shape: claudeSuperellipse(
-            12,
+            10,
             side: BorderSide(
               color: active ? c.clay : c.hairline,
-              width: active ? 1.4 : 1.0,
+              width: active ? 1.3 : 1.0,
             ),
           ),
         ),
@@ -2438,7 +2232,7 @@ class _FolderKindChip extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: active ? c.clay : c.muted),
+                Icon(icon, size: 15.5, color: active ? c.clay : c.muted),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -2447,7 +2241,7 @@ class _FolderKindChip extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: sansStyle(
                       c,
-                      size: 13,
+                      size: 12.8,
                       weight: FontWeight.w600,
                       color: active ? c.clay : c.ink,
                     ),

@@ -695,17 +695,17 @@ class LocalOAuthProvider {
     final page = '''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#F5F4ED;--card:#FAF9F5;--border:#E6E4DA;--ink:#141413;--muted:#5E5D59;--in-bg:#F2F0E8;--clay:#C96442;--clay-h:#B55535}
-@media (prefers-color-scheme: dark){:root{--bg:#141413;--card:#1E1E1B;--border:#2E2D2A;--ink:#FAF9F5;--muted:#B0AEA5;--in-bg:#171614;--clay:#D97757;--clay-h:#E3886B}}
+:root{--bg:#EEF1F7;--card:#FFFFFF;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B;--in-bg:#F8FAFC;--clay:#4F46E5;--clay-h:#4338CA}
+@media (prefers-color-scheme: dark){:root{--bg:#080A0F;--card:#141821;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8;--in-bg:#0E1117;--clay:#6366F1;--clay-h:#818CF8}}
 *{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,"Microsoft YaHei UI",sans-serif;background:var(--bg);color:var(--ink);max-width:430px;margin:70px auto;padding:20px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px;box-shadow:0 8px 28px rgba(0,0,0,.08)}
+body{font-family:system-ui,-apple-system,"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei UI",sans-serif;background:var(--bg);color:var(--ink);max-width:420px;margin:70px auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;box-shadow:0 12px 32px rgba(15,23,42,.08)}
 .pw-box{position:relative;margin:12px 0 16px}
-input{width:100%;padding:11px 40px 11px 13px;background:var(--in-bg);color:var(--ink);border:1px solid var(--border);border-radius:11px;font-size:14px;outline:none}
-input:focus{border-color:#3898EC}
+input{width:100%;padding:10px 40px 10px 12px;background:var(--in-bg);color:var(--ink);border:1px solid var(--border);border-radius:10px;font-size:14px;outline:none}
+input:focus{border-color:var(--clay)}
 .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px;display:inline-flex}
 .eye:hover{color:var(--ink)}
-.submit{width:100%;padding:11px;background:var(--clay);color:#FAF9F5;border:0;border-radius:11px;font-size:15px;font-weight:600;cursor:pointer}
+.submit{width:100%;padding:10px;background:var(--clay);color:#FFFFFF;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer}
 .submit:hover{background:var(--clay-h)}
 </style>
 </head><body><div class="card">

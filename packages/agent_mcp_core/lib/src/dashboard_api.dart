@@ -196,7 +196,7 @@ class DashboardHandler {
     }
 
     return Response.ok(
-      '<!doctype html><html><meta charset="utf-8"><body style="font-family:sans-serif;padding:40px;background:#FAF9F5;color:#141413">'
+      '<!doctype html><html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;padding:40px;background:#F8FAFC;color:#0F172A">'
       '<h2>Agent MCP Dashboard (v$agentMcpVersion)</h2>'
       '<p>Web 前端静态资源尚未构建。请在工程根目录运行 <code>flutter build web --base-href /dashboard/</code>（或执行 <code>scripts/build_windows.ps1</code>）。</p>'
       '</body></html>',
