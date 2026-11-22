@@ -248,11 +248,7 @@ jobs:
       - name: Compile Native Windows ARM64 Server Binary
         shell: pwsh
         run: |
-          $pub = Get-Content 'packages/agent_mcp_core/pubspec.yaml' -Raw
-          $pub = $pub -replace '(?m)^resolution:\s*workspace
-?
-', ''
-          Set-Content 'packages/agent_mcp_core/pubspec.yaml' $pub -NoNewline -Encoding UTF8
+          (Get-Content 'packages/agent_mcp_core/pubspec.yaml' | Where-Object { $_ -notmatch '^resolution:' }) | Set-Content 'packages/agent_mcp_core/pubspec.yaml' -Encoding UTF8
           Push-Location packages/agent_mcp_core
           dart pub get
           Pop-Location
