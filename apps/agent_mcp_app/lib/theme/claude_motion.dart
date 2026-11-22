@@ -872,3 +872,138 @@ class _CircularWaveRingPainter extends CustomPainter {
   bool shouldRepaint(covariant _CircularWaveRingPainter oldDelegate) =>
       oldDelegate.radius != radius || oldDelegate.opacity != opacity;
 }
+
+/// Top-left-pinned directional Shared-Axis switcher (Linear / Material Shared Axis).
+///
+/// Unlike Flutter's default [AnimatedSwitcher], which centers outgoing/incoming
+/// children in a [Stack] and causes shorter sub-pages inside a scroll view to
+/// float in the middle and snap to `y = 0` on completion, [ClaudeSharedAxisSwitcher]
+/// pins outgoing children via [Positioned] at `top: 0, left: 0, right: 0` so:
+/// 1. Intrinsic layout height immediately matches the incoming child (zero snap).
+/// 2. Outgoing content exits quickly (~85ms) before incoming glides into place,
+///    eliminating muddy 50/50 text overlap.
+class ClaudeSharedAxisSwitcher extends StatefulWidget {
+  final Widget child;
+  final Axis axis;
+  final bool reverse;
+  final Duration duration;
+  final double distance;
+
+  const ClaudeSharedAxisSwitcher({
+    super.key,
+    required this.child,
+    this.axis = Axis.vertical,
+    this.reverse = false,
+    this.duration = const Duration(milliseconds: 220),
+    this.distance = 14.0,
+  });
+
+  @override
+  State<ClaudeSharedAxisSwitcher> createState() =>
+      _ClaudeSharedAxisSwitcherState();
+}
+
+class _ClaudeSharedAxisSwitcherState extends State<ClaudeSharedAxisSwitcher>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+    value: 1.0,
+  )..addStatusListener((status) {
+      if (status == AnimationStatus.completed && _outgoingChild != null) {
+        setState(() => _outgoingChild = null);
+      }
+    });
+
+  late Widget _currentChild = widget.child;
+  Widget? _outgoingChild;
+  bool _reverse = false;
+
+  @override
+  void didUpdateWidget(covariant ClaudeSharedAxisSwitcher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.duration != oldWidget.duration) {
+      _ctrl.duration = widget.duration;
+    }
+    if (widget.child.key != _currentChild.key) {
+      final effectiveDur = ClaudeMotion.duration(context, widget.duration);
+      if (effectiveDur == Duration.zero) {
+        _outgoingChild = null;
+        _currentChild = widget.child;
+        _ctrl.value = 1.0;
+        return;
+      }
+      _outgoingChild = _currentChild;
+      _currentChild = widget.child;
+      _reverse = widget.reverse;
+      _ctrl.duration = effectiveDur;
+      _ctrl.forward(from: 0.0);
+    } else {
+      _currentChild = widget.child;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Offset _axisOffset(double delta) =>
+      widget.axis == Axis.vertical ? Offset(0, delta) : Offset(delta, 0);
+
+  @override
+  Widget build(BuildContext context) {
+    if (_outgoingChild == null || !_ctrl.isAnimating) {
+      return _currentChild;
+    }
+
+    final sign = _reverse ? -1.0 : 1.0;
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = _ctrl.value.clamp(0.0, 1.0);
+        // Fast outgoing fade (0.0 -> 0.36) so text never ghosts over incoming
+        final outProgress = (t / 0.36).clamp(0.0, 1.0);
+        final outOpacity = 1.0 - Curves.easeInCubic.transform(outProgress);
+        final outShift =
+            -sign * widget.distance * 0.45 * Curves.easeIn.transform(outProgress);
+
+        // Smooth incoming glide (0.08 -> 1.0) with editorial deceleration
+        final inRaw = ((t - 0.08) / 0.92).clamp(0.0, 1.0);
+        final inCurve = ClaudeMotion.editorialOut.transform(inRaw);
+        final inOpacity = ((t - 0.06) / 0.68).clamp(0.0, 1.0);
+        final inShift = sign * widget.distance * (1.0 - inCurve);
+
+        return Stack(
+          alignment: Alignment.topLeft,
+          clipBehavior: Clip.none,
+          children: [
+            if (outOpacity > 0.01 && _outgoingChild != null)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: outOpacity,
+                    child: Transform.translate(
+                      offset: _axisOffset(outShift),
+                      child: _outgoingChild,
+                    ),
+                  ),
+                ),
+              ),
+            Opacity(
+              opacity: Curves.easeOut.transform(inOpacity),
+              child: Transform.translate(
+                offset: _axisOffset(inShift),
+                child: _currentChild,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

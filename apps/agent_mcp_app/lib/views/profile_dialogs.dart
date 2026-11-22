@@ -48,6 +48,8 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   bool _writable = true;
   bool _allowSecrets = false;
   bool _relaxedCmd = false;
+  bool _showManualUrls = false;
+  bool _showStaticOAuthCreds = false;
 
   @override
   void initState() {
@@ -94,6 +96,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
         savedManual.add(_baseCtrl.text.trim());
       }
       if (savedManual.isNotEmpty) {
+        _showManualUrls = true;
         _manualUrlCtrls
           ..clear()
           ..addAll(savedManual.map((u) => TextEditingController(text: u)));
@@ -104,6 +107,9 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       _csecCtrl.text = (e['oauth_client_secret'] ?? '').toString();
       _rurisCtrl.text =
           ((e['oauth_redirect_uris'] as List?) ?? const []).join('\n');
+      if (_rurisCtrl.text.trim().isNotEmpty) {
+        _showStaticOAuthCreds = true;
+      }
       _apiKeyCtrl.text = (e['api_key'] ?? '').toString();
       _inheritPerm = e['inherit_permissions'] != false;
       _writable = e['read_only'] != true;
@@ -467,79 +473,117 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     ),
                                   ),
                                 ],
-                                const SizedBox(height: 12),
-                                Text(
-                                  '手动输入地址 / 反代域名（可与上方网卡多选叠加）',
-                                  style: sansStyle(
-                                    c,
-                                    size: 12.6,
-                                    weight: FontWeight.w600,
-                                    color: c.ink,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                for (var i = 0;
-                                    i < _manualUrlCtrls.length;
-                                    i++) ...[
-                                  if (i > 0) const SizedBox(height: 7),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _manualUrlCtrls[i],
-                                          onChanged: (_) => setState(() {}),
-                                          style: monoStyle(
-                                            c,
-                                            size: 12.4,
-                                            color: c.ink,
-                                          ),
-                                          decoration: InputDecoration(
-                                            hintText: i == 0
-                                                ? '可选：如 https://mcp.example.com 或 192.168.1.50:8000'
-                                                : '额外反代域名或自定义地址',
-                                          ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        previewEps.isEmpty
+                                            ? '未勾选网卡时默认使用本机监听地址'
+                                            : '已生成 ${previewEps.length} 个入口：${previewEps.take(2).join(" · ")}${previewEps.length > 2 ? " 等" : ""}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: sansStyle(
+                                          c,
+                                          size: 11.5,
+                                          color: previewEps.isEmpty
+                                              ? c.meta
+                                              : c.sage,
                                         ),
                                       ),
-                                      if (_manualUrlCtrls.length > 1 ||
-                                          _manualUrlCtrls[i]
-                                              .text
-                                              .trim()
-                                              .isNotEmpty) ...[
-                                        const SizedBox(width: 6),
-                                        ClaudeButton(
-                                          label: '',
-                                          compact: true,
-                                          tooltip: '移除该行',
-                                          leading:
-                                              const Icon(Icons.remove_rounded),
-                                          onPressed: () =>
-                                              _removeManualUrlRow(i),
-                                        ),
+                                    ),
+                                    ClaudeButton(
+                                      label: _showManualUrls
+                                          ? '收起自定义域名'
+                                          : '添加反代域名 / 自定义地址',
+                                      compact: true,
+                                      variant: ClaudeBtnVariant.ghost,
+                                      leading: Icon(
+                                        _showManualUrls
+                                            ? Icons.keyboard_arrow_up_rounded
+                                            : Icons.add_link_rounded,
+                                        size: 15,
+                                      ),
+                                      onPressed: () => setState(
+                                        () =>
+                                            _showManualUrls = !_showManualUrls,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                ClaudeCollapsible(
+                                  expanded: _showManualUrls,
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        for (var i = 0;
+                                            i < _manualUrlCtrls.length;
+                                            i++) ...[
+                                          if (i > 0) const SizedBox(height: 7),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: TextField(
+                                                  controller:
+                                                      _manualUrlCtrls[i],
+                                                  onChanged: (_) =>
+                                                      setState(() {}),
+                                                  style: monoStyle(
+                                                    c,
+                                                    size: 12.4,
+                                                    color: c.ink,
+                                                  ),
+                                                  decoration: InputDecoration(
+                                                    isDense: true,
+                                                    hintText: i == 0
+                                                        ? '可选：如 https://mcp.example.com 或 192.168.1.50:8000'
+                                                        : '额外反代域名或自定义地址',
+                                                  ),
+                                                ),
+                                              ),
+                                              if (_manualUrlCtrls.length > 1 ||
+                                                  _manualUrlCtrls[i]
+                                                      .text
+                                                      .trim()
+                                                      .isNotEmpty) ...[
+                                                const SizedBox(width: 6),
+                                                ClaudeButton(
+                                                  label: '',
+                                                  compact: true,
+                                                  tooltip: '移除该行',
+                                                  leading: const Icon(
+                                                    Icons.remove_rounded,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _removeManualUrlRow(i),
+                                                ),
+                                              ],
+                                              if (i ==
+                                                  _manualUrlCtrls.length -
+                                                      1) ...[
+                                                const SizedBox(width: 6),
+                                                ClaudeButton(
+                                                  label: '',
+                                                  compact: true,
+                                                  variant:
+                                                      ClaudeBtnVariant.clay,
+                                                  tooltip: '再添加一个自定义地址',
+                                                  leading: const Icon(
+                                                    Icons.add_rounded,
+                                                  ),
+                                                  onPressed: _addManualUrlRow,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
                                       ],
-                                      if (i == _manualUrlCtrls.length - 1) ...[
-                                        const SizedBox(width: 6),
-                                        ClaudeButton(
-                                          label: '',
-                                          compact: true,
-                                          variant: ClaudeBtnVariant.clay,
-                                          tooltip: '再添加一个自定义地址',
-                                          leading:
-                                              const Icon(Icons.add_rounded),
-                                          onPressed: _addManualUrlRow,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
-                                const SizedBox(height: 9),
-                                Text(
-                                  previewEps.isEmpty
-                                      ? '未勾选或填写时，默认使用本机监听地址访问'
-                                      : '已生成 ${previewEps.length} 个入口地址：${previewEps.take(2).join(" · ")}${previewEps.length > 2 ? " 等" : ""}',
-                                  style: sansStyle(
-                                    c,
-                                    size: 11.5,
-                                    color: previewEps.isEmpty ? c.meta : c.sage,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -609,47 +653,131 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                       ),
                       ClaudeCollapsible(
                         expanded: _authMode == 'oauth-local',
-                        builder: (_) => Column(
-                          children: [
-                            _ModalGridRow(
-                              label: 'Client ID (备选)',
-                              trailing: ClaudeButton(
-                                label: '随机',
-                                compact: true,
-                                onPressed: () => setState(() {
-                                  _cidCtrl.text =
-                                      generateRandomToken('mcp-client-', 10);
-                                }),
-                              ),
-                              child: TextField(
-                                controller: _cidCtrl,
-                                style: monoStyle(c, size: 12.5, color: c.ink),
+                        builder: (_) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
+                            decoration: ShapeDecoration(
+                              color: c.paper2,
+                              shape: claudeSuperellipse(
+                                10,
+                                side: BorderSide(color: c.hairline),
                               ),
                             ),
-                            _ModalGridRow(
-                              label: 'Client Secret',
-                              trailing: ClaudeButton(
-                                label: '随机',
-                                compact: true,
-                                onPressed: () => setState(() {
-                                  _csecCtrl.text =
-                                      generateRandomToken('mcp-sec-', 24);
-                                }),
-                              ),
-                              child: ClaudePasswordField(controller: _csecCtrl),
-                            ),
-                            _ModalGridRow(
-                              label: '允许的回调 URI',
-                              child: TextField(
-                                controller: _rurisCtrl,
-                                maxLines: 2,
-                                style: monoStyle(c, size: 12, color: c.ink),
-                                decoration: const InputDecoration(
-                                  hintText: '留空自动放行动态注册回调（推荐）；或每行填一个固定 URI',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.verified_user_outlined,
+                                          size: 15,
+                                          color: c.sage,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            '已启用 RFC 7591 动态注册（主流客户端免填密钥自动授权）',
+                                            style: sansStyle(
+                                              c,
+                                              size: 11.8,
+                                              color: c.muted,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    ClaudeButton(
+                                      label: _showStaticOAuthCreds
+                                          ? '收起静态凭证'
+                                          : '高级静态凭证（备用）',
+                                      compact: true,
+                                      variant: ClaudeBtnVariant.ghost,
+                                      onPressed: () => setState(
+                                        () => _showStaticOAuthCreds =
+                                            !_showStaticOAuthCreds,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
+                                ClaudeCollapsible(
+                                  expanded: _showStaticOAuthCreds,
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Column(
+                                      children: [
+                                        _ModalGridRow(
+                                          label: 'Client ID (备选)',
+                                          trailing: ClaudeButton(
+                                            label: '随机',
+                                            compact: true,
+                                            onPressed: () => setState(() {
+                                              _cidCtrl.text =
+                                                  generateRandomToken(
+                                                'mcp-client-',
+                                                10,
+                                              );
+                                            }),
+                                          ),
+                                          child: TextField(
+                                            controller: _cidCtrl,
+                                            style: monoStyle(
+                                              c,
+                                              size: 12.5,
+                                              color: c.ink,
+                                            ),
+                                          ),
+                                        ),
+                                        _ModalGridRow(
+                                          label: 'Client Secret',
+                                          trailing: ClaudeButton(
+                                            label: '随机',
+                                            compact: true,
+                                            onPressed: () => setState(() {
+                                              _csecCtrl.text =
+                                                  generateRandomToken(
+                                                'mcp-sec-',
+                                                24,
+                                              );
+                                            }),
+                                          ),
+                                          child: ClaudePasswordField(
+                                            controller: _csecCtrl,
+                                          ),
+                                        ),
+                                        _ModalGridRow(
+                                          label: '允许的回调 URI',
+                                          child: TextField(
+                                            controller: _rurisCtrl,
+                                            maxLines: 2,
+                                            style: monoStyle(
+                                              c,
+                                              size: 12,
+                                              color: c.ink,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              hintText:
+                                                  '留空自动放行动态注册回调（推荐）；或每行填一个固定 URI',
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                       ClaudeCollapsible(

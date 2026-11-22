@@ -903,14 +903,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // Dialog auto-opens on Exposure tab with dropped HTML path and PIN control
+    // Dialog auto-opens on Exposure tab with dropped HTML path and progressive-disclosure default summary
     expect(find.text('新建外网映射与分享'), findsOneWidget);
     expect(find.text(r'D:\demo\optics_lab.html'), findsOneWidget);
+    expect(find.textContaining('默认策略：智能优选'), findsOneWidget);
     expect(find.text('安全提取码与限次保护（可选）'), findsOneWidget);
 
-    // Switch mode to single file to verify burn-after-download ("1次即焚") segmented option
+    // Switch mode to single file and expand progressive-disclosure protection drawer to verify "1次即焚"
     await tester.tap(find.text('单个视频 / 文件'));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('安全提取码与限次保护（可选）'));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('1次即焚'), findsOneWidget);
   });
 
@@ -1134,6 +1137,68 @@ void main() {
     await tester.tap(find.text('mcp_tool_9'));
     await tester.pump(const Duration(milliseconds: 200));
     expect(selectedTool, equals('tool_9'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v2.7 De-Forming & Shared-Axis Motion: zero raw TextFields on Setup load, inline edit drawer, 1-click sidebar v2.7.0 About jump, and top-pinned sub-page switch',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // 1. Sidebar exposes un-hidden v2.7.0 About & Update entry directly on main shell
+    expect(find.text('关于与更新'), findsOneWidget);
+    expect(find.text('v2.7.0'), findsOneWidget);
+    await tester.tap(find.text('v2.7.0'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+
+    // Lands directly on ServiceSetupPage -> dedicated '关于与更新' Hero & Update Center
+    expect(find.text('GitHub Releases'), findsOneWidget);
+    expect(find.text('立即检查更新'), findsOneWidget);
+    expect(find.text('更新策略与下载通道'), findsOneWidget);
+
+    // 2. Switch to '基础与外观' and verify top-pinned Shared-Axis motion (zero vertical center snap!)
+    await tester.tap(find.text('基础与外观'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final midAnimTop =
+        tester.getTopLeft(find.byKey(const ValueKey('setup-sec-basic'))).dy;
+    await tester.pump(const Duration(milliseconds: 250));
+    final settledTop =
+        tester.getTopLeft(find.byKey(const ValueKey('setup-sec-basic'))).dy;
+    // Incoming pane glides smoothly within ~14px of top rather than centering at y > 200px!
+    expect((midAnimTop - settledTop).abs(), lessThan(18.0));
+
+    // 3. Zero raw TextFields exposed on Setup load (Read-First calm aesthetic)
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('未启用前缀'), findsOneWidget);
+    expect(find.text('127.0.0.1:8000'), findsOneWidget);
+    expect(find.text('已设密码保护'), findsOneWidget);
+
+    // Tapping a single row smoothly expands ONLY that row's inline editor
+    await tester.tap(find.text('MCP 服务名称'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Omen Studio v2.7');
+    await tester.pump();
+    await tester.tap(find.text('保存'));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(backend.config['server_name'], equals('Omen Studio v2.7'));
+    expect(find.byType(TextField), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

@@ -295,7 +295,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.6.0';
+  String _version = '2.7.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -336,6 +336,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   StreamSubscription<List<String>>? _dropSub;
   StreamSubscription<String>? _trayCmdSub;
   final ValueNotifier<String?> _droppedSharePath = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> _setupSectionJump = ValueNotifier<String?>(null);
   final GlobalKey _themeBtnKey = GlobalKey();
   AppLifecycleState _appLifecycle = AppLifecycleState.resumed;
 
@@ -447,6 +448,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _dropSub?.cancel();
     _trayCmdSub?.cancel();
     _droppedSharePath.dispose();
+    _setupSectionJump.dispose();
     _eventSub?.cancel();
     _pollTimer?.cancel();
     _toastTimer?.cancel();
@@ -478,7 +480,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.6.0').toString();
+      _version = (auth['version'] ?? '2.7.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -945,6 +947,16 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       }
     }
     return false;
+  }
+
+  void _openAboutAndUpdates() {
+    setState(() {
+      _tabIndex = 3;
+      _chromeVisible = true;
+      _scrollAccum = 0.0;
+    });
+    _setupSectionJump.value = 'about';
+    unawaited(_refreshStatus());
   }
 
   void _selectTab(int idx) {
@@ -1434,6 +1446,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         latestUpdate: _latestUpdate,
         onUpdatePrefsChanged: _handleUpdatePrefsChanged,
         onCheckUpdate: () => _checkForUpdates(manual: true),
+        requestedSectionSignal: _setupSectionJump,
+        onConsumeRequestedSection: () => _setupSectionJump.value = null,
       ),
     ];
 
@@ -1693,9 +1707,115 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                           onSelect: _selectTab,
                                         ),
                                         const Spacer(),
+                                        if (showLabels)
+                                          Opacity(
+                                            opacity: labelOpacity,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 2,
+                                              ),
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: InkWell(
+                                                  onTap: _openAboutAndUpdates,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6.5,
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons
+                                                              .verified_outlined,
+                                                          size: 15,
+                                                          color: (_latestUpdate !=
+                                                                      null &&
+                                                                  compareSemVer(
+                                                                        _latestUpdate!
+                                                                            .version,
+                                                                        widget
+                                                                            .backend
+                                                                            .currentAppVersion,
+                                                                      ) >
+                                                                      0)
+                                                              ? c.clay
+                                                              : c.meta,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            '关于与更新',
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: sansStyle(
+                                                              c,
+                                                              size: 12.2,
+                                                              weight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                              color: c.muted,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        ClaudePill(
+                                                          text: (_latestUpdate !=
+                                                                      null &&
+                                                                  compareSemVer(
+                                                                        _latestUpdate!
+                                                                            .version,
+                                                                        widget
+                                                                            .backend
+                                                                            .currentAppVersion,
+                                                                      ) >
+                                                                      0)
+                                                              ? 'v${_latestUpdate!.version} ↑'
+                                                              : 'v${widget.backend.currentAppVersion}',
+                                                          fg: (_latestUpdate !=
+                                                                      null &&
+                                                                  compareSemVer(
+                                                                        _latestUpdate!
+                                                                            .version,
+                                                                        widget
+                                                                            .backend
+                                                                            .currentAppVersion,
+                                                                      ) >
+                                                                      0)
+                                                              ? c.clay
+                                                              : c.meta,
+                                                          bg: (_latestUpdate !=
+                                                                      null &&
+                                                                  compareSemVer(
+                                                                        _latestUpdate!
+                                                                            .version,
+                                                                        widget
+                                                                            .backend
+                                                                            .currentAppVersion,
+                                                                      ) >
+                                                                      0)
+                                                              ? c.clay
+                                                                  .withValues(
+                                                                  alpha: 0.14,
+                                                                )
+                                                              : c.paper2,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         Padding(
                                           padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
+                                            vertical: 8,
                                           ),
                                           child: Divider(
                                             color: c.hairline,
@@ -1932,13 +2052,26 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                       ],
                       if (width >= 760) ...[
                         const SizedBox(width: 12),
-                        Text(
-                          'Agent MCP · v$_version',
-                          maxLines: 1,
-                          style: monoStyle(
-                            c,
-                            size: 10.8,
-                            color: c.meta,
+                        Tooltip(
+                          message: '打开关于与版本更新',
+                          child: InkWell(
+                            onTap: _openAboutAndUpdates,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                'Agent MCP · v$_version',
+                                maxLines: 1,
+                                style: monoStyle(
+                                  c,
+                                  size: 10.8,
+                                  color: c.meta,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],

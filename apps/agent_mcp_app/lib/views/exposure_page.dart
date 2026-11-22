@@ -402,105 +402,68 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             const SizedBox(height: 12),
           ],
 
-          if (_enabled) ...[
+          if (_enabled && items.isNotEmpty) ...[
             if (!widget.backend.isAndroidPlatform)
               _DashedDropZone(
-                borderColor: c.clay.withValues(alpha: c.isDark ? 0.50 : 0.38),
-                fillColor: c.clay.withValues(alpha: c.isDark ? 0.07 : 0.035),
-                radius: 12,
+                borderColor: c.clay.withValues(alpha: c.isDark ? 0.32 : 0.24),
+                fillColor: c.paper2,
+                radius: 10,
                 onTap: () => _openCreateDialog(initialMode: 'file'),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 11,
+                    vertical: 8.5,
                   ),
                   child: Wrap(
                     alignment: WrapAlignment.spaceBetween,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     spacing: 12,
-                    runSpacing: 8,
+                    runSpacing: 6,
                     children: [
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: ShapeDecoration(
-                              color: c.clay.withValues(alpha: 0.13),
-                              shape: claudeSuperellipse(9),
-                            ),
-                            child: Icon(
-                              Icons.file_upload_outlined,
-                              size: 17,
-                              color: c.clay,
-                            ),
+                          Icon(
+                            Icons.file_upload_outlined,
+                            size: 16,
+                            color: c.clay,
                           ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '拖拽文件、文件夹或 HTML 到此处一键生成外网链接',
-                                    style: sansStyle(
-                                      c,
-                                      size: 13,
-                                      weight: FontWeight.w600,
-                                      color: c.ink,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                  ClaudePill(
-                                    text: '松手即享',
-                                    mono: false,
-                                    fg: c.clay,
-                                    bg: c.clay.withValues(alpha: 0.12),
-                                  ),
-                                ],
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              '拖入文件、目录或 HTML 松手即享',
+                              style: sansStyle(
+                                c,
+                                size: 12.5,
+                                weight: FontWeight.w500,
+                                color: c.inkSoft,
                               ),
-                              Text(
-                                '自动识别视频流放 / 目录树浏览 / 静态站点；也可直接点击右侧快捷模式创建',
-                                style: sansStyle(c, size: 11.5, color: c.muted),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
                       Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                        spacing: 4,
+                        runSpacing: 4,
                         children: [
                           ClaudeButton(
-                            label: '单文件',
+                            label: '传文件',
                             compact: true,
-                            leading: const Icon(
-                              Icons.insert_drive_file_outlined,
-                            ),
+                            variant: ClaudeBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'file'),
                           ),
                           ClaudeButton(
-                            label: '文件夹',
+                            label: '传目录 / 网站',
                             compact: true,
-                            leading: const Icon(Icons.folder_open_rounded),
+                            variant: ClaudeBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'folder'),
                           ),
                           ClaudeButton(
-                            label: '静态网站',
+                            label: '映射端口',
                             compact: true,
-                            leading: const Icon(Icons.web_rounded),
-                            onPressed: () =>
-                                _openCreateDialog(initialMode: 'site'),
-                          ),
-                          ClaudeButton(
-                            label: '端口转发',
-                            compact: true,
-                            leading: const Icon(Icons.podcasts_rounded),
+                            variant: ClaudeBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'port'),
                           ),
@@ -509,10 +472,6 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     ],
                   ),
                 ),
-              )
-            else
-              _MobileQuickShareGrid(
-                onOpenMode: (m) => _openCreateDialog(initialMode: m),
               ),
             const SizedBox(height: 14),
           ],
@@ -549,52 +508,102 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   }
 
   Widget _buildEmptyState(ClaudePalette c) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-      decoration: ShapeDecoration(
-        color: c.paper2,
-        shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
-      ),
+    final heroBody = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Column(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 46,
+            height: 46,
             decoration: ShapeDecoration(
-              color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10),
-              shape: claudeSuperellipse(11),
+              color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.09),
+              shape: claudeSuperellipse(13),
             ),
-            child: Icon(Icons.link_rounded, size: 20, color: c.clay),
+            child: Icon(
+              widget.backend.isAndroidPlatform
+                  ? Icons.share_arrival_time_outlined
+                  : Icons.file_upload_outlined,
+              size: 22,
+              color: c.clay,
+            ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Text(
-            '暂无活跃分享链接',
+            widget.backend.isAndroidPlatform
+                ? '一键生成组网或公网分享链接'
+                : '拖入文件、目录或 HTML，松手即生外网链接',
+            textAlign: TextAlign.center,
             style: sansStyle(
               c,
-              size: 14,
+              size: 15,
               weight: FontWeight.w600,
               color: c.ink,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '可直接对 AI 说“把这个文件夹做成目录链接发我”，或点击上方快捷模式手动创建。',
-            textAlign: TextAlign.center,
-            style: sansStyle(c, size: 12.2, color: c.muted),
-          ),
-          if (widget.backend.isAndroidPlatform) ...[
-            const SizedBox(height: 14),
-            ClaudeButton(
-              label: '开始新建分享',
-              compact: true,
-              variant: ClaudeBtnVariant.clay,
-              leading: const Icon(Icons.add_link_rounded),
-              onPressed: () => _openCreateDialog(initialMode: 'wizard'),
+          const SizedBox(height: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Text(
+              '自动识别流式视频、目录树或静态网页，无需手动填表；也可直接对 AI 说“把这个目录做成分享链接”。',
+              textAlign: TextAlign.center,
+              style: sansStyle(c, size: 12.4, color: c.muted, height: 1.48),
             ),
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: 18),
+            if (widget.backend.isAndroidPlatform)
+              _MobileQuickShareGrid(
+                onOpenMode: (m) => _openCreateDialog(initialMode: m),
+              )
+            else
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ClaudeButton(
+                    label: '选择文件',
+                    compact: true,
+                    variant: ClaudeBtnVariant.clay,
+                    leading: const Icon(Icons.insert_drive_file_outlined),
+                    onPressed: () => _openCreateDialog(initialMode: 'file'),
+                  ),
+                  ClaudeButton(
+                    label: '文件夹 / 网站',
+                    compact: true,
+                    leading: const Icon(Icons.folder_open_rounded),
+                    onPressed: () => _openCreateDialog(initialMode: 'folder'),
+                  ),
+                  ClaudeButton(
+                    label: '映射本地端口',
+                    compact: true,
+                    leading: const Icon(Icons.podcasts_rounded),
+                    onPressed: () => _openCreateDialog(initialMode: 'port'),
+                  ),
+                ],
+              ),
           ],
         ],
       ),
+    );
+
+    if (!widget.backend.isAndroidPlatform && _enabled) {
+      return _DashedDropZone(
+        borderColor: c.clay.withValues(alpha: c.isDark ? 0.36 : 0.26),
+        fillColor: c.paper2,
+        radius: 14,
+        onTap: () => _openCreateDialog(initialMode: 'file'),
+        child: heroBody,
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: ShapeDecoration(
+        color: c.paper2,
+        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline)),
+      ),
+      child: heroBody,
     );
   }
 }
@@ -1027,6 +1036,8 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   late int _ttlMinutes = widget.defaultTtlMinutes;
   int _maxDownloads = 0;
   bool _spa = false;
+  bool _showAdvancedOptions = false;
+  bool _editingRawPath = false;
   bool _picking = false;
   bool _submitting = false;
   String _error = '';
@@ -1068,6 +1079,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
       if (!mounted || picked == null || picked.isEmpty) return;
       setState(() {
         _targetCtrl.text = picked;
+        _editingRawPath = false;
         final lower = picked.toLowerCase();
         if (!directory &&
             (lower.endsWith('.html') || lower.endsWith('.htm')) &&
@@ -1138,8 +1150,33 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final compact = MediaQuery.sizeOf(context).width < 560;
-    final curText = _targetCtrl.text.trim().toLowerCase();
+    final curRaw = _targetCtrl.text.trim();
+    final curText = curRaw.toLowerCase();
     final isHtmlTarget = curText.endsWith('.html') || curText.endsWith('.htm');
+    final targetBasename = curRaw
+            .split(RegExp(r'[/\\]'))
+            .where((s) => s.isNotEmpty)
+            .lastOrNull ??
+        curRaw;
+
+    final scopeSummary = switch (_scope) {
+      'tailscale' => '仅 Tailscale',
+      'public' => '公网直达',
+      'lan' => '仅局域网',
+      _ => '智能优选',
+    };
+    final ttlSummary = switch (_ttlMinutes) {
+      30 => '30 分钟',
+      120 => '2 小时',
+      1440 => '24 小时',
+      0 => '常驻开启',
+      _ => '$_ttlMinutes 分钟',
+    };
+    final pinSummary = _pinCtrl.text.trim().isNotEmpty
+        ? '已设提取码'
+        : (_maxDownloads == 1
+            ? '1次即焚'
+            : (_maxDownloads > 0 ? '限 $_maxDownloads 次' : '免口令'));
 
     final modeHelp = switch (_mode) {
       'port' => '填入本机正在运行的端口号（手机或外网打开即实时交互）',
@@ -1337,16 +1374,6 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      Text(
-                        '选择打开形态',
-                        style: sansStyle(
-                          c,
-                          size: 12.5,
-                          weight: FontWeight.w600,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
                       ClaudeSegmented<String>(
                         value: _mode,
                         items: const [
@@ -1359,6 +1386,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                           setState(() {
                             _mode = v;
                             _error = '';
+                            _editingRawPath = false;
                             if (v == 'port' &&
                                 int.tryParse(_targetCtrl.text.trim()) == null) {
                               _targetCtrl.text =
@@ -1372,201 +1400,486 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                           });
                         },
                       ),
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              modeHelp,
-                              style: sansStyle(c, size: 12.2, color: c.muted),
-                            ),
-                          ),
-                          if (_mode != 'port' &&
-                              !widget.backend.isAndroidPlatform) ...[
-                            const SizedBox(width: 8),
-                            Wrap(
-                              spacing: 6,
-                              children: [
-                                if (_mode == 'file' || _mode == 'site')
-                                  ClaudeButton(
-                                    label: _picking
-                                        ? '选择中...'
-                                        : (_mode == 'site'
-                                            ? '选 HTML 文件'
-                                            : '选文件...'),
-                                    compact: true,
-                                    leading: const Icon(
-                                      Icons.insert_drive_file_outlined,
-                                    ),
-                                    onPressed: _picking
-                                        ? null
-                                        : () => _pickPath(directory: false),
-                                  ),
-                                if (_mode == 'folder' || _mode == 'site')
-                                  ClaudeButton(
-                                    label: _picking
-                                        ? '选择中...'
-                                        : (_mode == 'site'
-                                            ? '选网站文件夹'
-                                            : '选文件夹...'),
-                                    compact: true,
-                                    leading:
-                                        const Icon(Icons.folder_open_rounded),
-                                    onPressed: _picking
-                                        ? null
-                                        : () => _pickPath(directory: true),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _targetCtrl,
-                        onChanged: _onTargetChanged,
-                        style: monoStyle(c, size: 13, color: c.ink),
-                        decoration: InputDecoration(hintText: hintText),
-                      ),
-                      if (isHtmlTarget &&
-                          (_mode == 'file' || _mode == 'site')) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.tips_and_updates_outlined,
-                              size: 14,
-                              color: c.clay,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                _mode == 'site'
-                                    ? '当前将该 .html 直接作为网页运行；若只想让人查看源码或下载，可点上方「单个视频 / 文件」。'
-                                    : '检测到 .html 文件：若希望对方点开直接运行网页，可点上方切到「静态网站 / HTML」。',
-                                style: sansStyle(c, size: 11.8, color: c.clay),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (_mode == 'port') ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (final p in defaultPorts)
-                              ClaudeButton(
-                                label: widget.activeLocalPorts.contains(p)
-                                    ? ':$p · 运行中'
-                                    : ':$p',
-                                compact: true,
-                                variant: widget.activeLocalPorts.contains(p)
-                                    ? ClaudeBtnVariant.clay
-                                    : ClaudeBtnVariant.neutral,
-                                onPressed: () =>
-                                    setState(() => _targetCtrl.text = '$p'),
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (_mode == 'site') ...[
-                        const SizedBox(height: 8),
-                        ClaudeCheckToggle(
-                          value: _spa,
-                          label: '前端单页应用路由模式（未知子路径自动回退到 index.html）',
-                          onChanged: (v) => setState(() => _spa = v),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      Text(
-                        '访问范围与自动收起时间',
-                        style: sansStyle(
-                          c,
-                          size: 12.5,
-                          weight: FontWeight.w600,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        children: [
-                          ClaudeSegmented<String>(
-                            value: _scope,
-                            items: const [
-                              ('auto', '智能优选'),
-                              ('tailscale', '仅 Tailscale'),
-                              ('public', '公网直达'),
-                              ('lan', '仅局域网'),
-                            ],
-                            onChanged: (v) => setState(() => _scope = v),
-                          ),
-                          ClaudeSegmented<int>(
-                            value: const [30, 120, 1440, 0]
-                                    .contains(_ttlMinutes)
-                                ? _ttlMinutes
-                                : 120,
-                            items: const [
-                              (30, '30 分钟'),
-                              (120, '2 小时'),
-                              (1440, '24 小时'),
-                              (0, '一直开着'),
-                            ],
-                            onChanged: (v) => setState(() => _ttlMinutes = v),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        '安全提取码与限次保护（可选）',
-                        style: sansStyle(
-                          c,
-                          size: 12.5,
-                          weight: FontWeight.w600,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 190,
-                            child: TextField(
-                              controller: _pinCtrl,
-                              style: monoStyle(c, size: 13, color: c.ink),
-                              decoration: const InputDecoration(
-                                hintText: '免口令（或填4-8位提取码）',
-                              ),
-                            ),
-                          ),
-                          if (_mode == 'file' || _mode == 'folder')
-                            ClaudeSegmented<int>(
-                              value: _maxDownloads,
-                              items: const [
-                                (0, '不限次数'),
-                                (1, '1次即焚'),
-                                (5, '限5次'),
-                                (20, '限20次'),
-                              ],
-                              onChanged: (v) =>
-                                  setState(() => _maxDownloads = v),
-                            ),
-                        ],
-                      ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: _labelCtrl,
-                        style: sansStyle(c, size: 13, color: c.ink),
-                        decoration: const InputDecoration(
-                          hintText: '可选备注名（留空会自动按文件名或端口号生成）',
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: ShapeDecoration(
+                          color: c.paper2,
+                          shape: claudeSuperellipse(
+                            12,
+                            side: BorderSide(color: c.hairline),
+                          ),
                         ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_mode == 'port') ...[
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: ShapeDecoration(
+                                      color: c.clay.withValues(
+                                        alpha: c.isDark ? 0.16 : 0.10,
+                                      ),
+                                      shape: claudeSuperellipse(9),
+                                    ),
+                                    child: Icon(
+                                      Icons.podcasts_rounded,
+                                      size: 17,
+                                      color: c.clay,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '本地监听端口',
+                                          style: sansStyle(
+                                            c,
+                                            size: 13.2,
+                                            weight: FontWeight.w600,
+                                            color: c.ink,
+                                          ),
+                                        ),
+                                        Text(
+                                          modeHelp,
+                                          style: sansStyle(
+                                            c,
+                                            size: 11.6,
+                                            color: c.muted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  SizedBox(
+                                    width: 104,
+                                    child: TextField(
+                                      controller: _targetCtrl,
+                                      keyboardType: TextInputType.number,
+                                      onChanged: _onTargetChanged,
+                                      style: monoStyle(
+                                        c,
+                                        size: 13.5,
+                                        weight: FontWeight.w600,
+                                        color: c.ink,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        prefixText: ':',
+                                        hintText: '3000',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final p in defaultPorts)
+                                    ClaudeButton(
+                                      label:
+                                          widget.activeLocalPorts.contains(p)
+                                              ? ':$p · 运行中'
+                                              : ':$p',
+                                      compact: true,
+                                      variant:
+                                          _targetCtrl.text.trim() == '$p' ||
+                                                  widget.activeLocalPorts
+                                                      .contains(p)
+                                              ? ClaudeBtnVariant.clay
+                                              : ClaudeBtnVariant.neutral,
+                                      onPressed: () => setState(
+                                        () => _targetCtrl.text = '$p',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ] else ...[
+                              Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 10,
+                                runSpacing: 8,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 34,
+                                        height: 34,
+                                        decoration: ShapeDecoration(
+                                          color: c.clay.withValues(
+                                            alpha: c.isDark ? 0.16 : 0.10,
+                                          ),
+                                          shape: claudeSuperellipse(9),
+                                        ),
+                                        child: Icon(
+                                          _mode == 'folder'
+                                              ? Icons.folder_open_rounded
+                                              : (_mode == 'site'
+                                                  ? Icons.web_rounded
+                                                  : Icons
+                                                      .insert_drive_file_outlined),
+                                          size: 17,
+                                          color: c.clay,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 11),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 320,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              curRaw.isNotEmpty
+                                                  ? targetBasename
+                                                  : '尚未选择目标',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: sansStyle(
+                                                c,
+                                                size: 13.4,
+                                                weight: FontWeight.w600,
+                                                color: c.ink,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              curRaw.isNotEmpty
+                                                  ? curRaw
+                                                  : modeHelp,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: curRaw.isNotEmpty
+                                                  ? monoStyle(
+                                                      c,
+                                                      size: 11.4,
+                                                      color: c.muted,
+                                                    )
+                                                  : sansStyle(
+                                                      c,
+                                                      size: 11.6,
+                                                      color: c.muted,
+                                                    ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      if (!widget.backend.isAndroidPlatform) ...[
+                                        if (_mode == 'file' || _mode == 'site')
+                                          ClaudeButton(
+                                            label: _picking
+                                                ? '选择中...'
+                                                : (_mode == 'site'
+                                                    ? '选 HTML 文件'
+                                                    : (curRaw.isEmpty
+                                                        ? '选文件...'
+                                                        : '更换文件')),
+                                            compact: true,
+                                            variant: curRaw.isEmpty
+                                                ? ClaudeBtnVariant.clay
+                                                : ClaudeBtnVariant.neutral,
+                                            leading: const Icon(
+                                              Icons.insert_drive_file_outlined,
+                                            ),
+                                            onPressed: _picking
+                                                ? null
+                                                : () => _pickPath(
+                                                      directory: false,
+                                                    ),
+                                          ),
+                                        if (_mode == 'folder' ||
+                                            _mode == 'site')
+                                          ClaudeButton(
+                                            label: _picking
+                                                ? '选择中...'
+                                                : (_mode == 'site'
+                                                    ? '选网站文件夹'
+                                                    : (curRaw.isEmpty
+                                                        ? '选文件夹...'
+                                                        : '更换目录')),
+                                            compact: true,
+                                            variant: curRaw.isEmpty &&
+                                                    _mode == 'folder'
+                                                ? ClaudeBtnVariant.clay
+                                                : ClaudeBtnVariant.neutral,
+                                            leading: const Icon(
+                                              Icons.folder_open_rounded,
+                                            ),
+                                            onPressed: _picking
+                                                ? null
+                                                : () =>
+                                                    _pickPath(directory: true),
+                                          ),
+                                      ],
+                                      ClaudeButton(
+                                        label: _editingRawPath ? '完成' : '',
+                                        compact: true,
+                                        tooltip: _editingRawPath
+                                            ? '收起手动路径框'
+                                            : '手动输入或粘贴路径',
+                                        variant: ClaudeBtnVariant.ghost,
+                                        leading: Icon(
+                                          _editingRawPath
+                                              ? Icons.check_rounded
+                                              : Icons.edit_outlined,
+                                          size: 15,
+                                        ),
+                                        onPressed: () => setState(
+                                          () => _editingRawPath =
+                                              !_editingRawPath,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              ClaudeCollapsible(
+                                expanded: _editingRawPath ||
+                                    widget.backend.isAndroidPlatform ||
+                                    widget.backend.isWebMode,
+                                builder: (_) => Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: TextField(
+                                    controller: _targetCtrl,
+                                    onChanged: _onTargetChanged,
+                                    style: monoStyle(
+                                      c,
+                                      size: 12.6,
+                                      color: c.ink,
+                                    ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      hintText: hintText,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (isHtmlTarget &&
+                                  (_mode == 'file' || _mode == 'site')) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tips_and_updates_outlined,
+                                      size: 13.5,
+                                      color: c.clay,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _mode == 'site'
+                                            ? '该 .html 将直接作为网页全屏运行；若仅提供下载可切至「单个视频 / 文件」。'
+                                            : '检测到 .html：切至「静态网站 / HTML」可让对方打开直接运行网页。',
+                                        style: sansStyle(
+                                          c,
+                                          size: 11.5,
+                                          color: c.clay,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ClaudeListGroup(
+                        children: [
+                          ClaudeSettingsRow(
+                            onTap: () => setState(
+                              () =>
+                                  _showAdvancedOptions = !_showAdvancedOptions,
+                            ),
+                            leading: Icon(
+                              Icons.tune_rounded,
+                              size: 16,
+                              color: _showAdvancedOptions ? c.clay : c.meta,
+                            ),
+                            title: '默认策略：$scopeSummary · $ttlSummary · $pinSummary',
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '安全提取码与限次保护（可选）',
+                                  style: sansStyle(
+                                    c,
+                                    size: 11.8,
+                                    weight: FontWeight.w500,
+                                    color: _showAdvancedOptions
+                                        ? c.clay
+                                        : c.muted,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _showAdvancedOptions
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
+                                  size: 18,
+                                  color: c.meta,
+                                ),
+                              ],
+                            ),
+                          ),
+                          ClaudeCollapsible(
+                            expanded: _showAdvancedOptions,
+                            builder: (_) => Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                14,
+                                12,
+                                14,
+                                14,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    children: [
+                                      Text(
+                                        '通道范围',
+                                        style: sansStyle(
+                                          c,
+                                          size: 12.2,
+                                          color: c.muted,
+                                        ),
+                                      ),
+                                      ClaudeSegmented<String>(
+                                        value: _scope,
+                                        items: const [
+                                          ('auto', '智能优选'),
+                                          ('tailscale', '仅 Tailscale'),
+                                          ('public', '公网直达'),
+                                          ('lan', '仅局域网'),
+                                        ],
+                                        onChanged: (v) =>
+                                            setState(() => _scope = v),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    children: [
+                                      Text(
+                                        '有效时长',
+                                        style: sansStyle(
+                                          c,
+                                          size: 12.2,
+                                          color: c.muted,
+                                        ),
+                                      ),
+                                      ClaudeSegmented<int>(
+                                        value: const [30, 120, 1440, 0]
+                                                .contains(_ttlMinutes)
+                                            ? _ttlMinutes
+                                            : 120,
+                                        items: const [
+                                          (30, '30 分钟'),
+                                          (120, '2 小时'),
+                                          (1440, '24 小时'),
+                                          (0, '一直开着'),
+                                        ],
+                                        onChanged: (v) =>
+                                            setState(() => _ttlMinutes = v),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: 190,
+                                        child: TextField(
+                                          controller: _pinCtrl,
+                                          onChanged: (_) => setState(() {}),
+                                          style: monoStyle(
+                                            c,
+                                            size: 12.6,
+                                            color: c.ink,
+                                          ),
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            hintText: '免口令（或填4-8位提取码）',
+                                          ),
+                                        ),
+                                      ),
+                                      if (_mode == 'file' || _mode == 'folder')
+                                        ClaudeSegmented<int>(
+                                          value: _maxDownloads,
+                                          items: const [
+                                            (0, '不限次数'),
+                                            (1, '1次即焚'),
+                                            (5, '限5次'),
+                                            (20, '限20次'),
+                                          ],
+                                          onChanged: (v) => setState(
+                                            () => _maxDownloads = v,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                    controller: _labelCtrl,
+                                    style: sansStyle(
+                                      c,
+                                      size: 12.6,
+                                      color: c.ink,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      hintText: '可选备注名（留空自动按文件名或端口号生成）',
+                                    ),
+                                  ),
+                                  if (_mode == 'site') ...[
+                                    const SizedBox(height: 10),
+                                    ClaudeCheckToggle(
+                                      value: _spa,
+                                      label: '前端单页应用路由模式（未知子路径回退至 index.html）',
+                                      onChanged: (v) =>
+                                          setState(() => _spa = v),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (_error.isNotEmpty) ...[
                         const SizedBox(height: 10),
