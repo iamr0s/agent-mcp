@@ -693,34 +693,40 @@ class LocalOAuthProvider {
     );
     final sname = _esc(serverName);
     final page = '''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#EEF1F7;--card:#FFFFFF;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B;--in-bg:#F8FAFC;--clay:#4F46E5;--clay-h:#4338CA}
-@media (prefers-color-scheme: dark){:root{--bg:#080A0F;--card:#141821;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8;--in-bg:#0E1117;--clay:#6366F1;--clay-h:#818CF8}}
+:root{--bg:#EDF0F7;--card:#F8FAFC;--elev:#FFFFFF;--border:#DDE3EE;--ink:#0F172A;--muted:#64748B;--clay:#4F46E5;--clay-h:#4338CA;--clay-bg:rgba(79,70,229,.10);--dot:rgba(15,23,42,.055)}
+@media (prefers-color-scheme: dark){:root{--bg:#080A0F;--card:#0E1117;--elev:#141821;--border:#1F2533;--ink:#F8FAFC;--muted:#8B95A8;--clay:#6366F1;--clay-h:#818CF8;--clay-bg:rgba(99,102,241,.16);--dot:rgba(248,250,252,.045)}}
 *{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei UI",sans-serif;background:var(--bg);color:var(--ink);max-width:420px;margin:70px auto;padding:20px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;box-shadow:0 12px 32px rgba(15,23,42,.08)}
-.pw-box{position:relative;margin:12px 0 16px}
-input{width:100%;padding:10px 40px 10px 12px;background:var(--in-bg);color:var(--ink);border:1px solid var(--border);border-radius:10px;font-size:14px;outline:none}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
+.card{width:100%;max-width:396px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;box-shadow:0 16px 40px -12px rgba(15,23,42,.12);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
+.head-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ico{width:34px;height:34px;border-radius:9px;background:var(--clay-bg);color:var(--clay);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.client-pill{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--elev);border:1px solid var(--border);font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink)}
+.pw-box{position:relative;margin:10px 0 14px}
+input{width:100%;padding:10px 40px 10px 12px;background:var(--elev);color:var(--ink);border:1px solid var(--border);border-radius:9.5px;font-size:14px;outline:none;transition:border-color .15s}
 input:focus{border-color:var(--clay)}
 .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px;display:inline-flex}
 .eye:hover{color:var(--ink)}
-.submit{width:100%;padding:10px;background:var(--clay);color:#FFFFFF;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer}
+.submit{width:100%;padding:10px;background:var(--clay);color:#FFFFFF;border:0;border-radius:9.5px;font-size:13.8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
 .submit:hover{background:var(--clay-h)}
+.spin{width:13px;height:13px;border-radius:99px;border:2px solid rgba(255,255,255,.35);border-top-color:#FFF;display:none;animation:sp .75s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head><body><div class="card">
-<h2 style="margin-top:0;font-weight:600">$sname 授权确认</h2>
-<p style="color:var(--muted);line-height:1.55">客户端 <b>$cname</b> 请求连接你的本地 MCP 服务。</p>
+<div class="head-row"><span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><h2 style="margin:0;font-size:17px;font-weight:600">$sname 授权确认</h2></div>
+<p style="margin:0 0 14px;color:var(--muted);font-size:13.2px;line-height:1.58">客户端 <span class="client-pill">$cname</span> 请求接入你的本地 MCP 控制节点。</p>
 $errorMsg
-<form method="post">
-<label style="font-size:13px;color:var(--muted)">请输入本地 OAuth 授权密码：</label>
+<form method="post" onsubmit="document.getElementById('authSpin').style.display='inline-block'">
+<label style="font-size:12.5px;color:var(--muted);font-weight:500">本地 OAuth 2.1 授权密码</label>
 <div class="pw-box">
 <input id="pwd" type="password" name="password" autofocus required />
 <button type="button" class="eye" onclick="const i=document.getElementById('pwd');i.type=i.type==='password'?'text':'password'" title="显示 / 隐藏密码">
 <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>
 </button>
 </div>
-<button class="submit" type="submit">确认并授权连接</button>
+<button class="submit" type="submit"><span class="spin" id="authSpin"></span><span>确认并授权连接</span></button>
 </form></div></body></html>''';
     return _htmlResp(200, page);
   }

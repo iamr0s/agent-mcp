@@ -515,7 +515,7 @@ void main() {
   }
 
   testWidgets(
-      'Floating bottom nav collapse/restore, surrounding pass-through, semantic args, and empty-page wheel hide',
+      'v2.8 Architectural docked mobile bottom bar, header service menu, semantic args, and empty-page wheel hide',
       (tester) async {
     tester.view.physicalSize = const Size(600, 760);
     tester.view.devicePixelRatio = 1.0;
@@ -533,27 +533,19 @@ void main() {
     expect(find.textContaining('max_depth'), findsNothing);
     expect(find.textContaining('深度 2'), findsOneWidget);
 
-    // Manual collapse button on floating bottom capsule
-    expect(find.byTooltip('收起底栏'), findsOneWidget);
-    expect(tester.getCenter(find.byTooltip('收起底栏')).dy, lessThan(760));
+    // Docked architectural bottom bar spans edge-to-edge with 4 tabs (zero detached collapse circle)
+    expect(find.byTooltip('收起底栏'), findsNothing);
+    expect(find.byTooltip('MCP 服务运行控制'), findsOneWidget);
+    expect(tester.getCenter(find.text('调用流')).dy, lessThan(760));
 
-    // Verify surrounding left/right margins of the floating capsule do NOT intercept hits
-    final navBox = tester.getRect(find.byTooltip('收起底栏'));
-    expect(navBox.right, lessThan(520)); // Centered maxWidth: 420 leaves side margins
-
-    await tester.tap(find.byTooltip('收起底栏'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.takeException(), isNull);
-    expect(tester.getCenter(find.byTooltip('收起底栏')).dy, greaterThan(760));
-    expect(tester.getCenter(find.byTooltip('展开导航栏')).dy, lessThan(760));
-
-    // Restore via mini pill at bottom edge
-    await tester.tap(find.byTooltip('展开导航栏'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.takeException(), isNull);
-    expect(tester.getCenter(find.byTooltip('收起底栏')).dy, lessThan(760));
+    // Tap mobile header service control menu -> shows start/stop & restart actions
+    await tester.tap(find.byTooltip('MCP 服务运行控制'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('停止 MCP 服务'), findsOneWidget);
+    expect(find.text('平滑重启服务'), findsOneWidget);
+    // Dismiss menu
+    await tester.tapAt(const Offset(12, 120));
+    await tester.pump(const Duration(milliseconds: 200));
 
     // Clear logs so feed is completely empty (maxScrollExtent == 0), then test mouse wheel scroll-to-hide
     backend.emptyLogs = true;
@@ -562,7 +554,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('暂无匹配的活动记录'), findsOneWidget);
 
-    // Emit discrete desktop mouse wheel down over empty feed -> hides floating bottom bar!
+    // Emit discrete desktop mouse wheel down over empty feed -> hides docked bottom bar smoothly!
     final center = tester.getCenter(find.text('暂无匹配的活动记录'));
     final pointer = TestPointer(1, PointerDeviceKind.mouse);
     await tester.sendEventToBinding(pointer.hover(center));
@@ -570,14 +562,27 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
-    expect(tester.getCenter(find.byTooltip('收起底栏')).dy, greaterThan(760));
+    expect(tester.getCenter(find.text('调用流')).dy, greaterThan(760));
+    expect(tester.getCenter(find.byTooltip('展开导航栏')).dy, lessThan(760));
 
-    // Wheel up restores chrome smoothly even when page is empty!
+    // Restore via subtle bottom pill
+    await tester.tap(find.byTooltip('展开导航栏'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(tester.getCenter(find.text('调用流')).dy, lessThan(760));
+
+    // Wheel down then wheel up restores chrome smoothly even when page is empty!
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getCenter(find.text('调用流')).dy, greaterThan(760));
+
     await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
-    expect(tester.getCenter(find.byTooltip('收起底栏')).dy, lessThan(760));
+    expect(tester.getCenter(find.text('调用流')).dy, lessThan(760));
   });
 
   test('normalizeRemoteBaseUrl strips /mcp and /dashboard suffixes and infers scheme', () {
@@ -907,12 +912,12 @@ void main() {
     expect(find.text('新建外网映射与分享'), findsOneWidget);
     expect(find.text(r'D:\demo\optics_lab.html'), findsOneWidget);
     expect(find.textContaining('默认策略：智能优选'), findsOneWidget);
-    expect(find.text('安全提取码与限次保护（可选）'), findsOneWidget);
+    expect(find.text('高级保护'), findsOneWidget);
 
     // Switch mode to single file and expand progressive-disclosure protection drawer to verify "1次即焚"
-    await tester.tap(find.text('单个视频 / 文件'));
+    await tester.tap(find.text('单个文件').last);
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('安全提取码与限次保护（可选）'));
+    await tester.tap(find.text('高级保护'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('1次即焚'), findsOneWidget);
   });
@@ -945,7 +950,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('新建外网映射与分享'), findsOneWidget);
 
-    await tester.tap(find.text('静态网站 / HTML'));
+    await tester.tap(find.text('静态网页'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('选 HTML 文件'), findsOneWidget);
     expect(find.text('选网站文件夹'), findsOneWidget);
@@ -1155,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v2.7.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v2.8.0 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v2.7.0'), findsOneWidget);
-    await tester.tap(find.text('v2.7.0'));
+    expect(find.text('v2.8.0'), findsOneWidget);
+    await tester.tap(find.text('v2.8.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1200,5 +1205,83 @@ void main() {
     expect(backend.config['server_name'], equals('Omen Studio v2.7'));
     expect(find.byType(TextField), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v2.8 Narrow 360x780 Precision: single-line chevrons, zero pencil icons, equal-width 4-segment share modal, and 2D horizontal code sheet + 1-line write banner',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend()..customTitleBar = false;
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Emit a create_file call with long Dart lines + 1-line receipt
+    backend._evCtrl.add({
+      'call_id': 'c_write_1',
+      'kind': 'ok',
+      'status': 'done',
+      'badge': '完成',
+      'tool': 'create_file',
+      'source': 'Gemini Web',
+      'ms': 18.2,
+      'ts': '14:20:01',
+      'args': {
+        'path': r'D:\carplay\carplay-research\carvex_ui\lib\pages\settings_page.dart',
+        'content':
+            "import '../bridge/carvex_bridge_controller.dart';\nclass SettingsPage extends StatefulWidget {\n  final CarvexBridgeController controller;\n}",
+      },
+      'result':
+          r'Written 15234 bytes (371 lines) to D:\carplay\carplay-research\carvex_ui\lib\pages\settings_page.dart.',
+    });
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('写入文件'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+    expect(find.text('写入内容 · 4 行'), findsOneWidget);
+    expect(find.text('左右滑动'), findsOneWidget);
+    expect(
+      find.textContaining('Written 15234 bytes (371 lines)'),
+      findsOneWidget,
+    );
+
+    // Navigate to ServiceSetupPage at 360px and verify Level-1 chevron does NOT wrap below title!
+    await tester.tap(find.text('服务配置').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+    final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v2.8.0'));
+    // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
+    expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
+
+    // Enter 基础与外观 -> verify zero cheap pencil icons and single-line right-aligned values
+    await tester.tap(find.text('基础与外观'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    final prefixTitleCenter = tester.getCenter(find.text('工具名前缀'));
+    final prefixPillCenter = tester.getCenter(find.text('未启用前缀'));
+    expect((prefixTitleCenter.dy - prefixPillCenter.dy).abs(), lessThan(8.0));
+
+    // Switch to Exposure tab and open Share dialog via file drop -> verify 4 equal-width segments & zero right-edge overflow at 360px!
+    backend.emitDroppedFiles([r'D:\demo\folder_share']);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    for (final segLabel in const ['端口映射', '单个文件', '文件夹', '静态网页']) {
+      final rect = tester.getRect(find.text(segLabel).last);
+      expect(rect.left, greaterThanOrEqualTo(0.0));
+      expect(rect.right, lessThanOrEqualTo(360.0));
+    }
+    expect(find.text('粘贴路径'), findsOneWidget);
   });
 }

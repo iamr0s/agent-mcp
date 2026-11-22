@@ -295,7 +295,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.7.0';
+  String _version = '2.8.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -480,7 +480,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.7.0').toString();
+      _version = (auth['version'] ?? '2.8.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -867,31 +867,20 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   bool _chromeVisible = true;
   double _scrollAccum = 0.0;
-  int _dockCollapseTick = 0;
 
   void _setChromeVisible(bool visible) {
     if (_chromeVisible == visible) return;
     setState(() => _chromeVisible = visible);
   }
 
-  void _collapseDockOnScroll() {
-    _dockCollapseTick++;
-  }
-
   void _setChromeVisibleManual(bool visible) {
     _scrollAccum = 0.0;
     setState(() {
-      if (!visible) {
-        _collapseDockOnScroll();
-      }
       _chromeVisible = visible;
     });
   }
 
   void _applyScrollDelta(double delta, {double? pixels}) {
-    if (delta.abs() > 2.0) {
-      setState(_collapseDockOnScroll);
-    }
     if (pixels != null && pixels <= 8 && delta < -1.5) {
       _scrollAccum = 0.0;
       _setChromeVisible(true);
@@ -927,9 +916,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   bool _handleShellScroll(ScrollNotification n) {
     if (n.metrics.axis != Axis.vertical) return false;
-    if (n is ScrollStartNotification && n.dragDetails != null) {
-      setState(_collapseDockOnScroll);
-    } else if (n is ScrollUpdateNotification) {
+    if (n is ScrollUpdateNotification) {
       final delta = n.scrollDelta ?? 0.0;
       // Ignore ballistic elastic bounce-back after releasing overscroll on empty/short pages.
       final isBallisticOverscrollReturn = n.dragDetails == null &&
@@ -1198,16 +1185,98 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (showAuthControls && isMobileHeader) ...[
+                      ClaudeActionMenuButton(
+                        tooltip: 'MCP 服务运行控制',
+                        minMenuWidth: 192,
+                        actions: [
+                          ClaudeMenuAction(
+                            label: _isRunning ? '停止 MCP 服务' : '启动 MCP 服务',
+                            badge: _isRunning
+                                ? ':${_config['port'] ?? 8000}'
+                                : 'OFF',
+                            icon: _isRunning
+                                ? Icons.stop_circle_outlined
+                                : Icons.play_circle_outline_rounded,
+                            destructive: _isRunning,
+                            highlight: !_isRunning,
+                            onTap: _restartingService ? null : _toggleService,
+                          ),
+                          ClaudeMenuAction(
+                            label: '平滑重启服务',
+                            icon: Icons.restart_alt_rounded,
+                            onTap: _togglingService ? null : _restartService,
+                          ),
+                          ClaudeMenuAction(
+                            label: '关于与版本更新',
+                            badge: 'v${widget.backend.currentAppVersion}',
+                            icon: Icons.verified_outlined,
+                            dividerBefore: true,
+                            onTap: _openAboutAndUpdates,
+                          ),
+                        ],
+                        customTrigger: Container(
+                          height: 28,
+                          padding: EdgeInsets.symmetric(
+                            horizontal:
+                                (hasCustomBar && viewW < 430) ? 7 : 9,
+                          ),
+                          decoration: ShapeDecoration(
+                            color: _isRunning ? c.sageBg : c.paper2,
+                            shape: claudeSuperellipse(
+                              7.5,
+                              side: BorderSide(
+                                color: _isRunning
+                                    ? c.sage.withValues(alpha: 0.30)
+                                    : c.hairline,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ClaudeStatusDot(
+                                color: _isRunning ? c.sage : c.meta,
+                                pulsing: _isRunning,
+                                size: 6.2,
+                              ),
+                              if (!hasCustomBar || viewW >= 430) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isRunning
+                                      ? ':${_config['port'] ?? 8000}'
+                                      : '已停止',
+                                  style: monoStyle(
+                                    c,
+                                    size: 11.2,
+                                    weight: FontWeight.w600,
+                                    color: _isRunning ? c.sage : c.muted,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 14,
+                                color: _isRunning ? c.sage : c.muted,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
                     if (showAuthControls &&
                         widget.backend.supportsNodeSwitching &&
+                        (!hasCustomBar || viewW >= 400) &&
                         (isMobileHeader ||
                             _sidebarManualCollapsed ||
                             viewW < 960)) ...[
                       ConstrainedBox(
                         constraints: BoxConstraints(
                           maxWidth: (hasCustomBar && viewW < 460)
-                              ? 92
-                              : (viewW < 430 ? 126 : 196),
+                              ? 58
+                              : (viewW < 430 ? 108 : 196),
                         ),
                         child: ClaudeDropMenu<String>(
                           value: activeNode.id,
@@ -2149,63 +2218,31 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           if (isMobile)
             Positioned(
-              right: 14 + safeRight,
-              bottom: 78 + safeBottom,
+              left: 0,
+              right: 0,
+              bottom: 0,
               child: AnimatedSlide(
                 duration: chromeDur,
                 curve: ClaudeMotion.editorialOut,
-                offset: _chromeVisible ? Offset.zero : const Offset(0, 1.8),
+                offset: _chromeVisible ? Offset.zero : const Offset(0, 1.15),
                 child: AnimatedOpacity(
                   duration: chromeDur,
                   curve: ClaudeMotion.editorialOut,
                   opacity: _chromeVisible ? 1.0 : 0.0,
                   child: IgnorePointer(
                     ignoring: !_chromeVisible,
-                    child: _MobileFloatingServiceDock(
-                      isRunning: _isRunning,
-                      toggling: _togglingService,
-                      restarting: _restartingService,
-                      collapseTick: _dockCollapseTick,
-                      onToggle: _toggleService,
-                      onRestart: _restartService,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (isMobile)
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                  child: AnimatedSlide(
-                    duration: chromeDur,
-                    curve: ClaudeMotion.editorialOut,
-                    offset:
-                        _chromeVisible ? Offset.zero : const Offset(0, 1.35),
-                    child: AnimatedOpacity(
-                      duration: chromeDur,
-                      curve: ClaudeMotion.editorialOut,
-                      opacity: _chromeVisible ? 1.0 : 0.0,
-                      child: IgnorePointer(
-                        ignoring: !_chromeVisible,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 420),
-                          child: Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerSignal: _handlePointerSignal,
-                            child: _MobileGlassBottomNav(
-                              selectedIndex: _tabIndex,
-                              enabledSubCount: enabledSubCount,
-                              activeExposeCount: activeExposeCount,
-                              micaActive: micaActive,
-                              onSelect: _selectTab,
-                              onCollapse: () => _setChromeVisibleManual(false),
-                            ),
-                          ),
-                        ),
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerSignal: _handlePointerSignal,
+                      child: _MobileArchitecturalBottomBar(
+                        selectedIndex: _tabIndex,
+                        enabledSubCount: enabledSubCount,
+                        activeExposeCount: activeExposeCount,
+                        micaActive: micaActive,
+                        safeBottom: safeBottom,
+                        safeLeft: safeLeft,
+                        safeRight: safeRight,
+                        onSelect: _selectTab,
                       ),
                     ),
                   ),
@@ -2329,172 +2366,6 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   }
 }
 
-class _MobileFloatingServiceDock extends StatefulWidget {
-  final bool isRunning;
-  final bool toggling;
-  final bool restarting;
-  final int collapseTick;
-  final VoidCallback onToggle;
-  final VoidCallback onRestart;
-
-  const _MobileFloatingServiceDock({
-    required this.isRunning,
-    required this.toggling,
-    required this.restarting,
-    required this.collapseTick,
-    required this.onToggle,
-    required this.onRestart,
-  });
-
-  @override
-  State<_MobileFloatingServiceDock> createState() =>
-      _MobileFloatingServiceDockState();
-}
-
-class _MobileFloatingServiceDockState extends State<_MobileFloatingServiceDock> {
-  bool _expanded = false;
-
-  @override
-  void didUpdateWidget(covariant _MobileFloatingServiceDock oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.collapseTick != oldWidget.collapseTick &&
-        _expanded &&
-        !widget.toggling &&
-        !widget.restarting) {
-      _expanded = false;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    final busy = widget.toggling || widget.restarting;
-    final showExpanded = _expanded || busy;
-
-    return ClaudeGlassBar(
-      blurSigma: 20,
-      borderRadius: 16,
-      tintColor: c.isDark
-          ? const Color(0xDE181A20)
-          : const Color(0xECFFFFFF),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 16,
-          offset: Offset(0, 4),
-        ),
-      ],
-      padding: EdgeInsets.symmetric(
-        horizontal: showExpanded ? 10 : 8,
-        vertical: showExpanded ? 6 : 5,
-      ),
-      child: AnimatedSize(
-        duration: ClaudeMotion.duration(
-          context,
-          const Duration(milliseconds: 220),
-        ),
-        curve: ClaudeMotion.snappySpring,
-        alignment: Alignment.centerRight,
-        child: showExpanded
-            ? Row(
-                key: const ValueKey('dock-expanded'),
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClaudeStatusDot(
-                    color: widget.isRunning ? c.sage : c.meta,
-                    pulsing: widget.isRunning,
-                    size: 7.0,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    widget.isRunning ? '运行中' : '已停止',
-                    style: sansStyle(
-                      c,
-                      size: 12,
-                      weight: FontWeight.w600,
-                      color: widget.isRunning ? c.sage : c.muted,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(width: 1, height: 16, color: c.hairline),
-                  const SizedBox(width: 6),
-                  ClaudeButton(
-                    label: widget.isRunning ? '停止' : '启动',
-                    compact: true,
-                    loading: widget.toggling,
-                    variant: widget.isRunning
-                        ? ClaudeBtnVariant.neutral
-                        : ClaudeBtnVariant.clay,
-                    leading: Icon(
-                      widget.isRunning
-                          ? Icons.stop_rounded
-                          : Icons.play_arrow_rounded,
-                    ),
-                    onPressed: widget.restarting ? null : widget.onToggle,
-                  ),
-                  const SizedBox(width: 6),
-                  ClaudeButton(
-                    label: '',
-                    compact: true,
-                    loading: widget.restarting,
-                    tooltip: '重启 MCP 服务',
-                    leading: const Icon(Icons.refresh_rounded),
-                    onPressed: widget.toggling ? null : widget.onRestart,
-                  ),
-                  const SizedBox(width: 4),
-                  ClaudeButton(
-                    label: '',
-                    compact: true,
-                    variant: ClaudeBtnVariant.ghost,
-                    tooltip: '收起控制坞',
-                    leading: const Icon(Icons.chevron_right_rounded, size: 17),
-                    onPressed:
-                        busy ? null : () => setState(() => _expanded = false),
-                  ),
-                ],
-              )
-            : InkWell(
-                key: const ValueKey('dock-mini'),
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => setState(() => _expanded = true),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 3,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClaudeStatusDot(
-                        color: widget.isRunning ? c.sage : c.meta,
-                        pulsing: widget.isRunning,
-                        size: 7.0,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        widget.isRunning ? '运行中' : '已停止',
-                        style: sansStyle(
-                          c,
-                          size: 12,
-                          weight: FontWeight.w600,
-                          color: widget.isRunning ? c.sage : c.muted,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.tune_rounded,
-                        size: 14,
-                        color: c.muted,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-}
-
 class _ConsoleScrollBehavior extends MaterialScrollBehavior {
   const _ConsoleScrollBehavior();
 
@@ -2509,21 +2380,27 @@ class _ConsoleScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-class _MobileGlassBottomNav extends StatelessWidget {
+/// Linear / Apple HIG edge-to-edge architectural bottom tab bar for narrow viewports.
+/// Replaces the legacy 999px stadium bubble and detached circular collapse button.
+class _MobileArchitecturalBottomBar extends StatelessWidget {
   final int selectedIndex;
   final int enabledSubCount;
   final int activeExposeCount;
   final bool micaActive;
+  final double safeBottom;
+  final double safeLeft;
+  final double safeRight;
   final ValueChanged<int> onSelect;
-  final VoidCallback onCollapse;
 
-  const _MobileGlassBottomNav({
+  const _MobileArchitecturalBottomBar({
     required this.selectedIndex,
     required this.enabledSubCount,
     this.activeExposeCount = 0,
     required this.micaActive,
+    this.safeBottom = 0,
+    this.safeLeft = 0,
+    this.safeRight = 0,
     required this.onSelect,
-    required this.onCollapse,
   });
 
   @override
@@ -2548,174 +2425,80 @@ class _MobileGlassBottomNav extends StatelessWidget {
 
     final slideDur = ClaudeMotion.duration(
       context,
-      const Duration(milliseconds: 280),
+      const Duration(milliseconds: 240),
     );
-    final glassTint = micaActive
-        ? c.micaSidebarTint
-        : (c.isDark ? const Color(0xD8181A20) : const Color(0xE6FFFFFF));
-    final glassBorder = c.isDark
-        ? Colors.white.withValues(alpha: 0.11)
-        : Colors.black.withValues(alpha: 0.08);
-    final glassShadow = [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: c.isDark ? 0.45 : 0.10),
-        blurRadius: 28,
-        offset: const Offset(0, 10),
-      ),
-      BoxShadow(
-        color: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.05),
-        blurRadius: 12,
-        offset: const Offset(0, 2),
-      ),
-    ];
+    final barTint = micaActive
+        ? (c.isDark ? const Color(0xEB0B0E14) : const Color(0xF0EDF0F7))
+        : c.sidebar;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: ClaudeGlassBar(
-            blurSigma: micaActive ? 26 : 0,
-            borderRadius: 999,
-            tintColor: micaActive ? glassTint : c.paper2,
-            border: Border.all(color: glassBorder, width: 1.0),
-            boxShadow: glassShadow,
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-            child: SizedBox(
-              height: 54,
-              child: LayoutBuilder(
-                builder: (ctx, box) {
-                  final slotW = box.maxWidth / items.length;
-                  const hPad = 2.0;
-                  final pillW = (slotW - hPad * 2).clamp(44.0, slotW);
-                  final pillLeft = selectedIndex * slotW + hPad;
+    return ClaudeGlassBar(
+      blurSigma: micaActive ? 20 : 0,
+      tintColor: barTint,
+      border: Border(
+        top: BorderSide(color: c.hairline, width: 1.0),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        8 + safeLeft,
+        5,
+        8 + safeRight,
+        (safeBottom > 0 ? safeBottom : 6),
+      ),
+      child: SizedBox(
+        height: 46,
+        child: LayoutBuilder(
+          builder: (ctx, box) {
+            final slotW = box.maxWidth / items.length;
+            const hPad = 3.0;
+            final pillW = (slotW - hPad * 2).clamp(36.0, slotW);
+            final pillLeft = selectedIndex * slotW + hPad;
 
-                  return Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      AnimatedPositioned(
-                        duration: slideDur,
-                        curve: ClaudeMotion.snappySpring,
-                        left: pillLeft,
-                        top: 1,
-                        bottom: 1,
-                        width: pillW,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: c.clay.withValues(
-                              alpha: c.isDark ? 0.22 : 0.11,
-                            ),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: c.clay.withValues(
-                                alpha: c.isDark ? 0.34 : 0.18,
-                              ),
-                              width: 0.8,
-                            ),
-                          ),
+            return Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                AnimatedPositioned(
+                  duration: slideDur,
+                  curve: ClaudeMotion.snappySpring,
+                  left: pillLeft,
+                  top: 1,
+                  bottom: 1,
+                  width: pillW,
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: c.isDark ? c.paper2 : Colors.white,
+                      shape: claudeSuperellipse(
+                        8.5,
+                        side: BorderSide(color: c.hairline),
+                      ),
+                      shadows: [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: c.isDark ? 0.24 : 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      Expanded(
+                        child: _MobileNavTabButton(
+                          icon: selectedIndex == i
+                              ? items[i].$2
+                              : items[i].$1,
+                          label: items[i].$3,
+                          badge: items[i].$4,
+                          active: selectedIndex == i,
+                          onTap: () => onSelect(i),
                         ),
                       ),
-                      Row(
-                        children: [
-                          for (var i = 0; i < items.length; i++)
-                            Expanded(
-                              child: _MobileNavTabButton(
-                                icon: selectedIndex == i
-                                    ? items[i].$2
-                                    : items[i].$1,
-                                label: items[i].$3,
-                                badge: items[i].$4,
-                                active: selectedIndex == i,
-                                onTap: () => onSelect(i),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        ClaudeGlassBar(
-          blurSigma: micaActive ? 26 : 0,
-          borderRadius: 999,
-          tintColor: micaActive ? glassTint : c.paper2,
-          border: Border.all(color: glassBorder, width: 1.0),
-          boxShadow: glassShadow,
-          padding: const EdgeInsets.all(4),
-          child: _MobileNavCollapseButton(onTap: onCollapse),
-        ),
-      ],
-    );
-  }
-}
-
-class _MobileNavCollapseButton extends StatefulWidget {
-  final VoidCallback onTap;
-
-  const _MobileNavCollapseButton({required this.onTap});
-
-  @override
-  State<_MobileNavCollapseButton> createState() =>
-      _MobileNavCollapseButtonState();
-}
-
-class _MobileNavCollapseButtonState extends State<_MobileNavCollapseButton> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    return Tooltip(
-      message: '收起底栏',
-      waitDuration: const Duration(milliseconds: 420),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() {
-          _hovered = false;
-          _pressed = false;
-        }),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) => setState(() => _pressed = false),
-          onTapCancel: () => setState(() => _pressed = false),
-          onTap: widget.onTap,
-          child: AnimatedScale(
-            scale: _pressed ? 0.90 : 1.0,
-            duration: ClaudeMotion.duration(
-              context,
-              const Duration(milliseconds: 110),
-            ),
-            curve: ClaudeMotion.editorialOut,
-            child: AnimatedContainer(
-              duration: ClaudeMotion.duration(
-                context,
-                const Duration(milliseconds: 150),
-              ),
-              width: 54,
-              height: 54,
-              decoration: ShapeDecoration(
-                color: _hovered
-                    ? (c.isDark
-                        ? Colors.white.withValues(alpha: 0.07)
-                        : Colors.black.withValues(alpha: 0.05))
-                    : Colors.transparent,
-                shape: const CircleBorder(),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: _hovered ? c.ink : c.muted,
-              ),
-            ),
-          ),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

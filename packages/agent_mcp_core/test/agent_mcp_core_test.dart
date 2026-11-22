@@ -897,6 +897,21 @@ void main() {
       expect(midPreview.body, contains('01_intro.mp4'));
       expect(midPreview.body, contains('下一文件'));
       expect(midPreview.body, contains('03_outro.mp4'));
+      expect(midPreview.body, contains('stage-loader'));
+
+      // 2b. v2.8 Architectural code-sheet preview (pinned line-number gutter + 2D horizontal scroll)
+      final dartDemo = File(p.join(albumDir.path, '04_sample.dart'))
+        ..writeAsStringSync("import 'package:flutter/material.dart';\nvoid main() => runApp(const SizedBox());\n");
+      expect(dartDemo.existsSync(), isTrue);
+      final codePreview = await http.get(
+        Uri.http(authority, '/share/$folderId/02_clips/04_sample.dart'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(codePreview.statusCode, equals(200));
+      expect(codePreview.body, contains('code-sheet'));
+      expect(codePreview.body, contains('code-scroll'));
+      expect(codePreview.body, contains('c-ln'));
+      expect(codePreview.body, contains('左右滑动'));
 
       // 3. P1-2: Optional PIN code + max_downloads=1 burn-after-download
       final oneTimeFile = File(p.join(sandboxDir.path, 'burn_secret.txt'))

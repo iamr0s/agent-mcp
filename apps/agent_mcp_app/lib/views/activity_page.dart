@@ -976,22 +976,11 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                         ),
                         const SizedBox(height: 8),
                         Expanded(
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: ShapeDecoration(
-                              color: c.termBg,
-                              shape: claudeSuperellipse(
-                                9,
-                                side: const BorderSide(color: Color(0xFF1F2533)),
-                              ),
-                            ),
-                            child: SingleChildScrollView(
-                              child: SelectableText(
-                                rawJsonStr,
-                                style: monoStyle(c, size: 11.8, color: c.termFg),
-                              ),
-                            ),
+                          child: _StructuredCodeSheet(
+                            text: rawJsonStr,
+                            palette: c,
+                            headerLabel: 'JSON 负载',
+                            fillHeight: true,
                           ),
                         ),
                       ],
@@ -1745,8 +1734,8 @@ class _RichEventSummary extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
             decoration: ShapeDecoration(
-              color: c.termBg,
-              shape: claudeSuperellipse(5),
+              color: c.codeHeader,
+              shape: claudeSuperellipse(5, side: BorderSide(color: c.hairline)),
             ),
             child: Text(
               isBg ? 'BG \$' : r'$',
@@ -2092,47 +2081,77 @@ class _RichToolDetailDrawer extends StatelessWidget {
                 if (resultStr.isNotEmpty) const SizedBox(height: 10),
               ],
               if (resultStr.isNotEmpty || argsMap == null) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      resultStr.isNotEmpty ? '执行结果' : '事件详情',
-                      style: sansStyle(
-                        c,
-                        size: 12,
-                        weight: FontWeight.w600,
-                        color: c.muted,
-                      ),
-                    ),
-                    ClaudeButton(
-                      label: '复制结果',
-                      compact: true,
-                      leading: const Icon(Icons.copy_rounded),
-                      onPressed: () => onCopy(
-                        resultStr.isNotEmpty ? resultStr : summary,
-                        '已复制结果内容',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  constraints: BoxConstraints(maxHeight: docked ? 440 : 280),
-                  padding: const EdgeInsets.all(12),
-                  decoration: ShapeDecoration(
-                    color: c.termBg,
-                    shape: claudeSuperellipse(
-                      11,
-                      side: const BorderSide(color: Color(0xFF1F2533)),
-                    ),
-                  ),
-                  child: SingleChildScrollView(
-                    child: _DiffOutputView(
-                      text: resultStr.isNotEmpty ? resultStr : summary,
+                Builder(
+                  builder: (ctx) {
+                    final outText = resultStr.isNotEmpty ? resultStr : summary;
+                    final trimmedOut = outText.trim();
+                    final isSingleLineReceipt = resultStr.isNotEmpty &&
+                        !trimmedOut.contains('\n') &&
+                        trimmedOut.length <= 180 &&
+                        (ev['kind'] ?? 'ok') != 'err';
+
+                    if (isSingleLineReceipt) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 8,
+                        ),
+                        decoration: ShapeDecoration(
+                          color: c.sageBg,
+                          shape: claudeSuperellipse(
+                            9.5,
+                            side: BorderSide(
+                              color: c.sage.withValues(alpha: 0.28),
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline_rounded,
+                              size: 15,
+                              color: c.sage,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: SelectableText(
+                                  trimmedOut,
+                                  maxLines: 1,
+                                  style: monoStyle(
+                                    c,
+                                    size: 11.8,
+                                    color: c.ink,
+                                    weight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ClaudeButton(
+                              label: '复制',
+                              compact: true,
+                              tooltip: '复制结果',
+                              variant: ClaudeBtnVariant.ghost,
+                              leading: const Icon(Icons.copy_rounded, size: 13.5),
+                              onPressed: () => onCopy(outText, '已复制结果内容'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return _StructuredCodeSheet(
+                      text: outText,
                       palette: c,
-                    ),
-                  ),
+                      headerLabel: resultStr.isNotEmpty ? '执行结果' : '事件详情',
+                      maxHeight: docked ? 440 : 280,
+                      onCopy: () => onCopy(outText, '已复制结果内容'),
+                      copyLabel: '复制结果',
+                    );
+                  },
                 ),
               ],
             ],
@@ -2157,39 +2176,46 @@ class _RichToolDetailDrawer extends StatelessWidget {
         color: c.paper2,
         shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
       ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 6,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14.5, color: c.clay),
-              const SizedBox(width: 6),
-              Flexible(
-                child: SelectableText(
-                  dispPath,
-                  style: monoStyle(c, size: 12, color: c.ink),
+      child: LayoutBuilder(
+        builder: (ctx, pBox) => Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: pBox.maxWidth.isFinite ? pBox.maxWidth : 640,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14.5, color: c.clay),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: SelectableText(
+                      dispPath,
+                      style: monoStyle(c, size: 12, color: c.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ...pills,
+                ClaudeButton(
+                  label: copyLabel,
+                  compact: true,
+                  onPressed: () => onCopy(path, '已复制路径'),
                 ),
-              ),
-            ],
-          ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ...pills,
-              ClaudeButton(
-                label: copyLabel,
-                compact: true,
-                onPressed: () => onCopy(path, '已复制路径'),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2362,20 +2388,13 @@ class _RichToolDetailDrawer extends StatelessWidget {
         ),
         if (patch.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxHeight: 220),
-            padding: const EdgeInsets.all(10),
-            decoration: ShapeDecoration(
-              color: c.termBg,
-              shape: claudeSuperellipse(
-                10,
-                side: const BorderSide(color: Color(0xFF1F2533)),
-              ),
-            ),
-            child: SingleChildScrollView(
-              child: _DiffOutputView(text: patch, palette: c),
-            ),
+          _StructuredCodeSheet(
+            text: patch,
+            palette: c,
+            headerLabel: '补丁内容',
+            maxHeight: 240,
+            onCopy: () => onCopy(patch, '已复制补丁内容'),
+            copyLabel: '复制补丁',
           ),
         ],
       ],
@@ -2718,31 +2737,16 @@ class _RichToolDetailDrawer extends StatelessWidget {
           path,
           pills: [
             ClaudePill(text: '$lines 行 · ${content.length} 字符', mono: false),
-            ClaudeButton(
-              label: '复制内容',
-              compact: true,
-              onPressed: () => onCopy(content, '已复制写入内容'),
-            ),
           ],
         ),
         const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxHeight: 240),
-          padding: const EdgeInsets.all(11),
-          decoration: ShapeDecoration(
-            color: c.termBg,
-            shape: claudeSuperellipse(
-              10,
-              side: const BorderSide(color: Color(0xFF1F2533)),
-            ),
-          ),
-          child: SingleChildScrollView(
-            child: SelectableText(
-              preview,
-              style: monoStyle(c, size: 11.8, color: c.termFg),
-            ),
-          ),
+        _StructuredCodeSheet(
+          text: preview,
+          palette: c,
+          headerLabel: '写入内容',
+          maxHeight: 256,
+          onCopy: () => onCopy(content, '已复制写入内容'),
+          copyLabel: '复制内容',
         ),
       ],
     );
@@ -2760,79 +2764,97 @@ class _RichToolDetailDrawer extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(11),
       decoration: ShapeDecoration(
-        color: c.termBg,
+        color: c.codeSheet,
         shape: claudeSuperellipse(
           10,
-          side: const BorderSide(color: Color(0xFF1F2533)),
+          side: BorderSide(color: c.codeBorder),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
+              decoration: BoxDecoration(
+                color: c.codeHeader,
+                border: Border(bottom: BorderSide(color: c.codeBorder)),
+              ),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
-                  if (isBackground)
-                    ClaudePill(
-                      text: '后台驻留进程',
-                      mono: false,
-                      fg: c.sage,
-                      bg: const Color(0x2834D399),
-                    ),
-                  if (shell.isNotEmpty)
-                    ClaudePill(
-                      text: shell,
-                      fg: const Color(0xFFE2E8F0),
-                      bg: const Color(0xFF182030),
-                      border: const Color(0xFF2D3748),
-                    ),
-                  if (timeout != null)
-                    ClaudePill(
-                      text: '超时 ${timeout}s',
-                      mono: false,
-                      fg: const Color(0xFF94A3B8),
-                      bg: const Color(0xFF141A26),
-                    ),
-                  if (cwd.isNotEmpty)
-                    Text(
-                      cwd,
-                      style: monoStyle(
-                        c,
-                        size: 11,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (isBackground)
+                        ClaudePill(
+                          text: '后台驻留进程',
+                          mono: false,
+                          fg: c.sage,
+                          bg: c.sageBg,
+                        ),
+                      if (shell.isNotEmpty)
+                        ClaudePill(
+                          text: shell,
+                          fg: c.inkSoft,
+                          bg: c.paper2,
+                          border: c.hairline,
+                        ),
+                      if (timeout != null)
+                        ClaudePill(
+                          text: '超时 ${timeout}s',
+                          mono: false,
+                          fg: c.muted,
+                          bg: c.paper2,
+                        ),
+                      if (cwd.isNotEmpty)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 260),
+                          child: Text(
+                            cwd,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: monoStyle(c, size: 11, color: c.muted),
+                          ),
+                        ),
+                    ],
+                  ),
+                  ClaudeButton(
+                    label: '复制命令',
+                    compact: true,
+                    onPressed: () => onCopy(cmd, '已复制命令'),
+                  ),
                 ],
               ),
-              ClaudeButton(
-                label: '复制命令',
-                compact: true,
-                onPressed: () => onCopy(cmd, '已复制命令'),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: SelectableText(
+                '\$ $cmd',
+                style: monoStyle(
+                  c,
+                  size: 12.2,
+                  color: c.clay,
+                  weight: FontWeight.w600,
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          SelectableText(
-            '\$ $cmd',
-            style: monoStyle(c, size: 12.2, color: const Color(0xFF93C5FD)),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _InlineDiffBlock extends StatelessWidget {
+class _InlineDiffBlock extends StatefulWidget {
   final int index;
   final String oldStr;
   final String newStr;
@@ -2846,16 +2868,99 @@ class _InlineDiffBlock extends StatelessWidget {
   });
 
   @override
+  State<_InlineDiffBlock> createState() => _InlineDiffBlockState();
+}
+
+class _InlineDiffBlockState extends State<_InlineDiffBlock> {
+  bool _softWrap = false;
+
+  @override
   Widget build(BuildContext context) {
-    final oldLines = oldStr.split('\n');
-    final newLines = newStr.split('\n');
+    final c = widget.palette;
+    final oldLines = widget.oldStr.split('\n');
+    final newLines = widget.newStr.split('\n');
+    final diffRows = <({String numLabel, String prefix, String text, int kind})>[];
+    final maxOld = oldLines.length > 28 ? 28 : oldLines.length;
+    for (var i = 0; i < maxOld; i++) {
+      diffRows.add((
+        numLabel: '${i + 1}',
+        prefix: '-',
+        text: oldLines[i],
+        kind: -1,
+      ));
+    }
+    if (oldLines.length > 28) {
+      diffRows.add((
+        numLabel: '…',
+        prefix: ' ',
+        text: '(已省略 ${oldLines.length - 28} 行旧代码)',
+        kind: 0,
+      ));
+    }
+    final maxNew = newLines.length > 28 ? 28 : newLines.length;
+    for (var i = 0; i < maxNew; i++) {
+      diffRows.add((
+        numLabel: '${i + 1}',
+        prefix: '+',
+        text: newLines[i],
+        kind: 1,
+      ));
+    }
+    if (newLines.length > 28) {
+      diffRows.add((
+        numLabel: '…',
+        prefix: ' ',
+        text: '(已省略 ${newLines.length - 28} 行新代码)',
+        kind: 0,
+      ));
+    }
+
+    const rowHeight = 20.0;
+    final strut = const StrutStyle(
+      fontFamily: kFontMono,
+      fontSize: 11.8,
+      height: 1.55,
+      forceStrutHeight: true,
+    );
+
+    Widget buildCodeColumn({required bool wrapped}) {
+      return Column(
+        crossAxisAlignment:
+            wrapped ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final r in diffRows)
+            Container(
+              color: r.kind < 0
+                  ? c.diffDelBg
+                  : (r.kind > 0 ? c.diffAddBg : Colors.transparent),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+              constraints: wrapped ? null : const BoxConstraints(minHeight: rowHeight),
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                '${r.prefix} ${r.text}',
+                strutStyle: strut,
+                style: monoStyle(
+                  c,
+                  size: 11.8,
+                  height: 1.55,
+                  color: r.kind < 0
+                      ? c.diffDelFg
+                      : (r.kind > 0 ? c.diffAddFg : c.muted),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
     return Container(
       width: double.infinity,
       decoration: ShapeDecoration(
-        color: palette.termBg,
+        color: c.codeSheet,
         shape: claudeSuperellipse(
           10,
-          side: const BorderSide(color: Color(0xFF1F2533)),
+          side: BorderSide(color: c.codeBorder),
         ),
       ),
       child: ClipRSuperellipse(
@@ -2864,67 +2969,104 @@ class _InlineDiffBlock extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: const Color(0xFF131824),
-              child: Text(
-                '变更片段 #$index',
-                style: monoStyle(
-                  palette,
-                  size: 11,
-                  color: const Color(0xFF818CF8),
-                  weight: FontWeight.w600,
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+              decoration: BoxDecoration(
+                color: c.codeHeader,
+                border: Border(bottom: BorderSide(color: c.codeBorder)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '变更片段 #${widget.index}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(
+                        c,
+                        size: 11.2,
+                        color: c.clay,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => setState(() => _softWrap = !_softWrap),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        _softWrap ? '自动换行：开' : '左右滑动',
+                        style: sansStyle(
+                          c,
+                          size: 11,
+                          weight: FontWeight.w500,
+                          color: _softWrap ? c.clay : c.muted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            for (final line in oldLines.take(24))
-              Container(
-                color: const Color(0x36C94A4A),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1.5),
-                child: SelectableText(
-                  '- $line',
-                  style: monoStyle(
-                    palette,
-                    size: 11.8,
-                    color: const Color(0xFFFFA8A8),
+            if (_softWrap)
+              buildCodeColumn(wrapped: true)
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: c.codeGutter,
+                      border: Border(right: BorderSide(color: c.codeBorder)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final r in diffRows)
+                          Container(
+                            height: rowHeight,
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 7),
+                            color: r.kind < 0
+                                ? c.diffDelBg
+                                : (r.kind > 0
+                                    ? c.diffAddBg
+                                    : Colors.transparent),
+                            child: Text(
+                              r.numLabel,
+                              style: monoStyle(
+                                c,
+                                size: 10.6,
+                                color: r.kind < 0
+                                    ? c.diffDelFg.withValues(alpha: 0.78)
+                                    : (r.kind > 0
+                                        ? c.diffAddFg.withValues(alpha: 0.78)
+                                        : c.meta),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-            if (oldLines.length > 24)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                child: Text(
-                  '…(已省略 ${oldLines.length - 24} 行旧代码)',
-                  style: monoStyle(
-                    palette,
-                    size: 11,
-                    color: const Color(0xFF9C9A92),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (ctx, hBox) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: hBox.maxWidth.isFinite ? hBox.maxWidth : 0,
+                          ),
+                          child: buildCodeColumn(wrapped: false),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            for (final line in newLines.take(24))
-              Container(
-                color: const Color(0x30788C5D),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1.5),
-                child: SelectableText(
-                  '+ $line',
-                  style: monoStyle(
-                    palette,
-                    size: 11.8,
-                    color: const Color(0xFFC3E88D),
-                  ),
-                ),
-              ),
-            if (newLines.length > 24)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                child: Text(
-                  '…(已省略 ${newLines.length - 24} 行新代码)',
-                  style: monoStyle(
-                    palette,
-                    size: 11,
-                    color: const Color(0xFF9C9A92),
-                  ),
-                ),
+                ],
               ),
           ],
         ),
@@ -2986,46 +3128,264 @@ class _ArgValueBox extends StatelessWidget {
   }
 }
 
-class _DiffOutputView extends StatelessWidget {
+/// Theme-adaptive code & diff viewer with pinned left line-number gutter,
+/// smooth 2D horizontal scrolling (zero awkward mid-identifier hard-wraps),
+/// and an optional one-click soft-wrap toggle.
+class _StructuredCodeSheet extends StatefulWidget {
   final String text;
   final ClaudePalette palette;
+  final String headerLabel;
+  final double? maxHeight;
+  final bool fillHeight;
+  final VoidCallback? onCopy;
+  final String copyLabel;
 
-  const _DiffOutputView({required this.text, required this.palette});
+  const _StructuredCodeSheet({
+    required this.text,
+    required this.palette,
+    required this.headerLabel,
+    this.maxHeight,
+    this.fillHeight = false,
+    this.onCopy,
+    this.copyLabel = '复制',
+  });
+
+  @override
+  State<_StructuredCodeSheet> createState() => _StructuredCodeSheetState();
+}
+
+class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
+  bool _softWrap = false;
 
   @override
   Widget build(BuildContext context) {
-    final isDiff = text.contains('\n@@ ') || text.contains('\n--- a/');
-    if (!isDiff) {
-      return SelectableText(
-        text,
-        style: monoStyle(palette, size: 12, color: palette.termFg),
+    final c = widget.palette;
+    final cleanText = widget.text.replaceAll('\r\n', '\n');
+    final lines = cleanText.isEmpty ? const <String>[''] : cleanText.split('\n');
+    final isDiff = cleanText.contains('\n@@ ') ||
+        cleanText.startsWith('@@ ') ||
+        cleanText.contains('\n--- a/') ||
+        cleanText.startsWith('--- a/');
+    final gutterDigits = lines.length.toString().length.clamp(2, 5);
+    final gutterWidth = gutterDigits * 8.2 + 18.0;
+    const lineH = 19.5;
+    final strut = const StrutStyle(
+      fontFamily: kFontMono,
+      fontSize: 11.8,
+      height: 1.62,
+      forceStrutHeight: true,
+    );
+
+    Widget buildBody() {
+      if (_softWrap) {
+        if (!isDiff) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: SelectableText(
+              cleanText,
+              strutStyle: strut,
+              style: monoStyle(c, size: 11.8, height: 1.62, color: c.termFg),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final line in lines)
+              _buildDiffLineBox(c, line, strut: strut, minHeight: null),
+          ],
+        );
+      }
+
+      // Default: Pinned non-selectable line-number gutter + smooth horizontal scroll!
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: gutterWidth,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: c.codeGutter,
+              border: Border(right: BorderSide(color: c.codeBorder)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < lines.length; i++)
+                  SizedBox(
+                    height: lineH,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '${i + 1}',
+                          style: monoStyle(c, size: 10.6, color: c.meta),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (ctx, hBox) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: hBox.maxWidth.isFinite ? hBox.maxWidth : 0,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: isDiff
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final line in lines)
+                                _buildDiffLineBox(
+                                  c,
+                                  line,
+                                  strut: strut,
+                                  minHeight: lineH,
+                                ),
+                            ],
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: SelectableText(
+                              cleanText,
+                              strutStyle: strut,
+                              style: monoStyle(
+                                c,
+                                size: 11.8,
+                                height: 1.62,
+                                color: c.termFg,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
-    final lines = text.split('\n');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: lines.map((line) {
-        Color? bg;
-        Color fg = palette.termFg;
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-          bg = const Color(0x33788C5D);
-          fg = const Color(0xFFC3E88D);
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
-          bg = const Color(0x38C94A4A);
-          fg = const Color(0xFFFF9E9E);
-        } else if (line.startsWith('@@')) {
-          fg = const Color(0xFFD99A6C);
-        }
-        return Container(
-          color: bg,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          child: SelectableText(
-            line,
-            style: monoStyle(palette, size: 12, color: fg),
-          ),
-        );
-      }).toList(),
+    final scrollBody = SingleChildScrollView(child: buildBody());
+
+    return Container(
+      width: double.infinity,
+      constraints: !widget.fillHeight && widget.maxHeight != null
+          ? BoxConstraints(maxHeight: widget.maxHeight!)
+          : null,
+      decoration: ShapeDecoration(
+        color: c.codeSheet,
+        shape: claudeSuperellipse(
+          10,
+          side: BorderSide(color: c.codeBorder),
+        ),
+      ),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(
+          mainAxisSize: widget.fillHeight ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+              decoration: BoxDecoration(
+                color: c.codeHeader,
+                border: Border(bottom: BorderSide(color: c.codeBorder)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${widget.headerLabel} · ${lines.length} 行',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: sansStyle(
+                        c,
+                        size: 11.5,
+                        weight: FontWeight.w600,
+                        color: c.inkSoft,
+                        tabular: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => setState(() => _softWrap = !_softWrap),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      child: Text(
+                        _softWrap ? '自动换行：开' : '左右滑动',
+                        style: sansStyle(
+                          c,
+                          size: 11,
+                          weight: FontWeight.w500,
+                          color: _softWrap ? c.clay : c.muted,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (widget.onCopy != null) ...[
+                    const SizedBox(width: 6),
+                    ClaudeButton(
+                      label: widget.copyLabel,
+                      compact: true,
+                      leading: const Icon(Icons.copy_rounded, size: 13),
+                      onPressed: widget.onCopy,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.fillHeight)
+              Expanded(child: scrollBody)
+            else
+              Flexible(child: scrollBody),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiffLineBox(
+    ClaudePalette c,
+    String line, {
+    required StrutStyle strut,
+    required double? minHeight,
+  }) {
+    Color? bg;
+    Color fg = c.termFg;
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      bg = c.diffAddBg;
+      fg = c.diffAddFg;
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      bg = c.diffDelBg;
+      fg = c.diffDelFg;
+    } else if (line.startsWith('@@')) {
+      fg = c.diffHunkFg;
+    }
+    return Container(
+      height: minHeight,
+      alignment: Alignment.centerLeft,
+      color: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: SelectableText(
+        line,
+        strutStyle: strut,
+        style: monoStyle(c, size: 11.8, height: 1.62, color: fg),
+      ),
     );
   }
 }

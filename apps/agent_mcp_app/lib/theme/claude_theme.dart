@@ -158,8 +158,8 @@ class ClaudePalette {
     dangerBg: Color(0x14EF4444),
     purple: Color(0xFF6366F1),
     purpleBg: Color(0x146366F1),
-    termBg: Color(0xFF0B0E14),
-    termFg: Color(0xFFE2E8F0),
+    termBg: Color(0xFFF3F6FB),
+    termFg: Color(0xFF0F172A),
   );
 
   static const dark = ClaudePalette(
@@ -184,7 +184,7 @@ class ClaudePalette {
     dangerBg: Color(0x20F87171),
     purple: Color(0xFFA5B4FC),
     purpleBg: Color(0x206366F1),
-    termBg: Color(0xFF090C12),
+    termBg: Color(0xFF10141D),
     termFg: Color(0xFFE2E8F0),
   );
 
@@ -282,6 +282,24 @@ class ClaudePalette {
 
   /// Elevated workspace island surface.
   Color get micaCanvasTint => paper;
+
+  /// Theme-adaptive code & inspector surfaces (GitHub Primer / HTTPie contrast).
+  Color get codeSheet => termBg;
+  Color get codeHeader =>
+      isDark ? const Color(0xFF161C28) : const Color(0xFFEAEFF7);
+  Color get codeGutter =>
+      isDark ? const Color(0xFF0D1119) : const Color(0xFFEDF2F9);
+  Color get codeBorder => hairline;
+  Color get diffDelBg =>
+      isDark ? const Color(0x2EF85149) : const Color(0xFFFFEBE9);
+  Color get diffDelFg =>
+      isDark ? const Color(0xFFFFA198) : const Color(0xFFA40E26);
+  Color get diffAddBg =>
+      isDark ? const Color(0x2E2EA043) : const Color(0xFFE6FFEC);
+  Color get diffAddFg =>
+      isDark ? const Color(0xFF7EE787) : const Color(0xFF116329);
+  Color get diffHunkFg =>
+      isDark ? const Color(0xFF79C0FF) : const Color(0xFF0969DA);
 
   /// Specular 1px highlight on floating popovers.
   Color get glassSpecular => isDark
@@ -747,6 +765,7 @@ class ClaudeSettingsRow extends StatelessWidget {
   final Widget? bottomChild;
   final VoidCallback? onTap;
   final double stackBreakpoint;
+  final bool allowTrailingWrap;
 
   const ClaudeSettingsRow({
     super.key,
@@ -759,6 +778,7 @@ class ClaudeSettingsRow extends StatelessWidget {
     this.bottomChild,
     this.onTap,
     this.stackBreakpoint = 430,
+    this.allowTrailingWrap = false,
   });
 
   @override
@@ -766,7 +786,8 @@ class ClaudeSettingsRow extends StatelessWidget {
     final c = ClaudePalette.of(context);
     return LayoutBuilder(
       builder: (ctx, box) {
-        final stack = box.maxWidth < stackBreakpoint &&
+        final stack = allowTrailingWrap &&
+            box.maxWidth < stackBreakpoint &&
             trailing != null &&
             trailing is! ClaudeSwitch &&
             trailing is! Icon;
@@ -837,8 +858,19 @@ class ClaudeSettingsRow extends StatelessWidget {
                   children: [
                     Expanded(child: labelBlock),
                     if (trailing != null) ...[
-                      const SizedBox(width: 14),
-                      Flexible(flex: 0, child: trailing!),
+                      const SizedBox(width: 12),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: box.maxWidth.isFinite
+                              ? (box.maxWidth * 0.56).clamp(84.0, box.maxWidth)
+                              : double.infinity,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          widthFactor: 1.0,
+                          child: trailing!,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1299,17 +1331,19 @@ class _ClaudeCardState extends State<ClaudeCard> {
   }
 }
 
-/// Spring Sliding-Pill Segmented Control (compact Linear / shadcn style).
+/// Spring Sliding-Pill Segmented Control (Apple HIG / Fluent 2 equal-width & intrinsic modes, zero half-char clipping).
 class ClaudeSegmented<T> extends StatefulWidget {
   final List<(T, String)> items;
   final T value;
   final ValueChanged<T> onChanged;
+  final bool expand;
 
   const ClaudeSegmented({
     super.key,
     required this.items,
     required this.value,
     required this.onChanged,
+    this.expand = false,
   });
 
   @override
@@ -1337,6 +1371,9 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
     super.didUpdateWidget(oldWidget);
     if (widget.items.length != _itemKeys.length) {
       _itemKeys = List.generate(widget.items.length, (_) => GlobalKey());
+    }
+    if (oldWidget.value != widget.value && !_animatePill) {
+      _animatePill = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _measure(animate: oldWidget.value != widget.value);
@@ -1368,81 +1405,157 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
     }
   }
 
+  Widget _buildSlidingPill(ClaudePalette c, Duration pillDur,
+      {required double left, required double width}) {
+    return AnimatedPositioned(
+      duration: pillDur,
+      curve: ClaudeMotion.snappySpring,
+      left: left,
+      top: 0,
+      bottom: 0,
+      width: width,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: c.isDark ? c.paper3 : c.paper2,
+          shape: claudeSuperellipse(
+            7.0,
+            side: BorderSide(
+              color: c.isDark
+                  ? c.ringHover
+                  : c.hairline.withValues(alpha: 0.85),
+            ),
+          ),
+          shadows: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: c.isDark ? 0.25 : 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final pillDur = _animatePill
-        ? ClaudeMotion.duration(context, const Duration(milliseconds: 230))
+        ? ClaudeMotion.duration(context, const Duration(milliseconds: 220))
         : Duration.zero;
+    final activeIdx =
+        widget.items.indexWhere((e) => e.$1 == widget.value).clamp(
+              0,
+              widget.items.isEmpty ? 0 : widget.items.length - 1,
+            );
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const ClampingScrollPhysics(),
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
-          shape: claudeSuperellipse(
-            9.5,
-            side: BorderSide(color: c.hairline.withValues(alpha: 0.7)),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(2.5),
-          child: IntrinsicWidth(
-            child: Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                if (_pillLeft != null && _pillWidth != null)
-                  AnimatedPositioned(
-                    duration: pillDur,
-                    curve: ClaudeMotion.snappySpring,
-                    left: _pillLeft!,
-                    top: 0,
-                    bottom: 0,
-                    width: _pillWidth!,
-                    child: DecoratedBox(
-                      decoration: ShapeDecoration(
-                        color: c.isDark ? c.paper3 : c.paper2,
-                        shape: claudeSuperellipse(
-                          7.5,
-                          side: BorderSide(
-                            color: c.isDark
-                                ? c.ringHover
-                                : c.hairline.withValues(alpha: 0.85),
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        final totalChars =
+            widget.items.fold<int>(0, (acc, e) => acc + e.$2.length);
+        final estimatedIntrinsic =
+            totalChars * 12.6 + widget.items.length * 20.0 + 8.0;
+        final forceEqualWidth = widget.expand ||
+            (box.hasBoundedWidth &&
+                box.maxWidth.isFinite &&
+                estimatedIntrinsic > box.maxWidth);
+
+        if (forceEqualWidth && box.hasBoundedWidth && box.maxWidth.isFinite) {
+          final innerW = (box.maxWidth - 5.0).clamp(40.0, box.maxWidth);
+          final count = widget.items.isEmpty ? 1 : widget.items.length;
+          final slotW = innerW / count;
+          final eqPillLeft = activeIdx * slotW;
+          final eqDur = ClaudeMotion.duration(
+            context,
+            const Duration(milliseconds: 220),
+          );
+
+          return DecoratedBox(
+            decoration: ShapeDecoration(
+              color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
+              shape: claudeSuperellipse(
+                9.0,
+                side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(2.5),
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  _buildSlidingPill(
+                    c,
+                    eqDur,
+                    left: eqPillLeft,
+                    width: slotW,
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < widget.items.length; i++)
+                        Expanded(
+                          child: _SegmentTapItem(
+                            label: widget.items[i].$2,
+                            active: widget.items[i].$1 == widget.value,
+                            fallbackHighlight: false,
+                            compactPad: slotW < 76,
+                            palette: c,
+                            onTap: () {
+                              _animatePill = true;
+                              widget.onChanged(widget.items[i].$1);
+                            },
                           ),
                         ),
-                        shadows: [
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: c.isDark ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
-                Row(
-                  key: _rowKey,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < widget.items.length; i++)
-                      _SegmentTapItem(
-                        key: _itemKeys[i],
-                        label: widget.items[i].$2,
-                        active: widget.items[i].$1 == widget.value,
-                        fallbackHighlight: _pillWidth == null &&
-                            widget.items[i].$1 == widget.value,
-                        palette: c,
-                        onTap: () => widget.onChanged(widget.items[i].$1),
-                      ),
-                  ],
-                ),
-              ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        return DecoratedBox(
+          decoration: ShapeDecoration(
+            color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
+            shape: claudeSuperellipse(
+              9.0,
+              side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
             ),
           ),
-        ),
-      ),
+          child: Padding(
+            padding: const EdgeInsets.all(2.5),
+            child: IntrinsicWidth(
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  if (_pillLeft != null && _pillWidth != null)
+                    _buildSlidingPill(
+                      c,
+                      pillDur,
+                      left: _pillLeft!,
+                      width: _pillWidth!,
+                    ),
+                  Row(
+                    key: _rowKey,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < widget.items.length; i++)
+                        _SegmentTapItem(
+                          key: _itemKeys[i],
+                          label: widget.items[i].$2,
+                          active: widget.items[i].$1 == widget.value,
+                          fallbackHighlight: _pillWidth == null &&
+                              widget.items[i].$1 == widget.value,
+                          palette: c,
+                          onTap: () => widget.onChanged(widget.items[i].$1),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1451,6 +1564,7 @@ class _SegmentTapItem extends StatefulWidget {
   final String label;
   final bool active;
   final bool fallbackHighlight;
+  final bool compactPad;
   final ClaudePalette palette;
   final VoidCallback onTap;
 
@@ -1459,6 +1573,7 @@ class _SegmentTapItem extends StatefulWidget {
     required this.label,
     required this.active,
     required this.fallbackHighlight,
+    this.compactPad = false,
     required this.palette,
     required this.onTap,
   });
@@ -1481,20 +1596,26 @@ class _SegmentTapItemState extends State<_SegmentTapItem> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.compactPad ? 5 : 10,
+            vertical: 5,
+          ),
           decoration: widget.fallbackHighlight
               ? ShapeDecoration(
                   color: c.isDark ? c.paper3 : c.paper2,
-                  shape: claudeSuperellipse(7.5),
+                  shape: claudeSuperellipse(7.0),
                 )
               : null,
           child: Text(
             widget.label,
             maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: kFontSans,
               fontFamilyFallback: kSansFallback,
-              fontSize: 12.0,
+              fontSize: widget.compactPad ? 11.5 : 12.0,
               fontWeight: widget.active ? FontWeight.w600 : FontWeight.w500,
               color: widget.active
                   ? c.ink
@@ -1549,20 +1670,27 @@ class ClaudePill extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
-            Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: mono
-                  ? monoStyle(c, size: 10.8, color: effFg, weight: FontWeight.w500)
-                  : TextStyle(
-                      fontFamily: kFontSans,
-                      fontFamilyFallback: kSansFallback,
-                      fontSize: 11.2,
-                      fontWeight: FontWeight.w500,
-                      color: effFg,
-                      fontFeatures: const [ui.FontFeature.tabularFigures()],
-                    ),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: mono
+                    ? monoStyle(
+                        c,
+                        size: 10.8,
+                        color: effFg,
+                        weight: FontWeight.w500,
+                      )
+                    : TextStyle(
+                        fontFamily: kFontSans,
+                        fontFamilyFallback: kSansFallback,
+                        fontSize: 11.2,
+                        fontWeight: FontWeight.w500,
+                        color: effFg,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      ),
+              ),
             ),
           ],
         ),

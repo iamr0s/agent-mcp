@@ -1784,11 +1784,14 @@ class ExposureManager {
         }
       }
       return Response.notFound(
-        '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
-        '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#EEF1F7;color:#0F172A;font-family:system-ui,sans-serif">'
-        '<div style="background:#FFF;padding:28px 32px;border-radius:14px;border:1px solid #E2E8F0;max-width:440px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.06)">'
-        '<h3 style="margin:0 0 8px">未找到网页入口 index.html</h3>'
-        '<p style="margin:0;color:#64748B;font-size:14px;line-height:1.6">当前为「静态网站分享」模式（不会暴露目录文件列表）。如果你想展示文件夹目录，请在分享页切换为「文件夹目录」模式。</p>'
+        '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>未找到网页入口 index.html</title>'
+        '<style>$_shareArchitecturalCss</style></head>'
+        '<body class="center-body"><div class="gate-card">'
+        '<div class="gate-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a14.5 14.5 0 0 0 0 18M12 3a14.5 14.5 0 0 1 0 18"/></svg></div>'
+        '<h2>未找到网页入口 index.html</h2>'
+        '<p>当前为「静态网页」分享模式（不会直接暴露目录列表）。如需浏览与下载子目录文件，请在控制台切换为「文件夹」模式。</p>'
         '</div></body></html>',
         headers: const {'content-type': 'text/html; charset=utf-8'},
       );
@@ -1945,20 +1948,26 @@ class ExposureManager {
     if (relParts.isNotEmpty) {
       rows.writeln(
         '<a class="item" data-name=".." href="../">'
-        '<span class="left"><span class="ico dir">↩</span><span class="nm">返回上一级目录</span></span>'
+        '<span class="left"><span class="ico is-dir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></span><span class="nm">返回上一级目录</span></span>'
         '<span class="meta">上级</span></a>',
       );
     }
     for (final e in entries) {
       final slash = e.isDirectory ? '/' : '';
       final href = '${Uri.encodeComponent(e.name)}$slash';
-      final ico = e.isDirectory ? '📁' : '📄';
+      final extLower = p.extension(e.name).toLowerCase();
+      final isMedia = _isVideoExt(extLower) || _isAudioExt(extLower) || _isImageExt(extLower);
+      final svgIco = e.isDirectory
+          ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
+          : (isMedia
+              ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><polygon points="10 9 15 12 10 15 10 9"/></svg>'
+              : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>');
       final meta = e.isDirectory
-          ? '进入子目录 →'
-          : '${_formatHumanBytes(e.size)} · 点开预览';
+          ? '子目录 ›'
+          : '${_formatHumanBytes(e.size)} · 预览 ›';
       rows.writeln(
         '<a class="item" data-name="${_htmlEscape(e.name.toLowerCase())}" href="$href">'
-        '<span class="left"><span class="ico">$ico</span><span class="nm">${_htmlEscape(e.name)}$slash</span></span>'
+        '<span class="left"><span class="ico ${e.isDirectory ? 'is-dir' : ''}">$svgIco</span><span class="nm">${_htmlEscape(e.name)}$slash</span></span>'
         '<span class="meta">$meta</span></a>',
       );
     }
@@ -1966,31 +1975,26 @@ class ExposureManager {
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(item.label)} · 文件夹分享</title>'
-        '<style>'
-        ':root{--bg:#FAF9F6;--card:rgba(255,255,255,0.88);--soft:#EEF0F6;--hover:#E4E7F2;--ink:#121316;--muted:#646873;--accent:#4F46E5}'
-        '@media(prefers-color-scheme:dark){:root{--bg:#111317;--card:rgba(24,26,32,0.88);--soft:#1E212B;--hover:#272B38;--ink:#F4F5F7;--muted:#8E93A0;--accent:#6366F1}}'
-        'body{background-image:radial-gradient(640px 420px at 12% 0%,rgba(79,70,229,0.09),transparent 70%),radial-gradient(560px 380px at 90% 100%,rgba(14,165,233,0.07),transparent 70%);background-attachment:fixed}'
-        '.top{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:16px}'
-        '*{box-sizing:border-box}body{margin:0;padding:28px 16px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif}'
-        '.wrap{max-width:820px;margin:0 auto;background:var(--card);border-radius:24px;padding:26px;box-shadow:0 12px 36px rgba(0,0,0,.06)}'
-        '.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
-        'h1{margin:0;font-size:20px;font-weight:700}.crumbs{font-size:13.5px;color:var(--muted);margin-top:5px}'
-        '.crumbs a{color:var(--accent);text-decoration:none;font-weight:600}.sep{margin:0 4px;opacity:.5}'
-        '.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}'
-        'input{background:var(--soft);border:none;border-radius:99px;padding:8px 14px;color:var(--ink);font-size:13px;outline:none;width:180px}'
-        '.zbtn{background:var(--soft);color:var(--ink);text-decoration:none;padding:8px 14px;border-radius:99px;font-size:12.5px;font-weight:600}'
-        '.zbtn:hover{background:var(--hover)}'
-        '.list{display:flex;flex-direction:column;gap:8px;margin-top:8px}'
-        '.item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-radius:15px;background:var(--soft);color:var(--ink);text-decoration:none;transition:background .15s}'
-        '.item:hover{background:var(--hover)}.left{display:flex;align-items:center;gap:10px;min-width:0}'
-        '.nm{font-size:14.5px;font-weight:500;word-break:break-all}.meta{font-size:12.5px;color:var(--muted);font-family:ui-monospace,monospace;white-space:nowrap}'
-        '.empty{padding:32px;text-align:center;color:var(--muted);font-size:14px}'
-        '</style></head><body><div class="wrap">'
-        '<div class="head"><div><h1>${_htmlEscape(item.label)}</h1><div class="crumbs">$crumbs</div></div>'
-        '<div class="tools"><input id="q" type="search" placeholder="搜索文件名..." oninput="flt(this.value)">'
-        '<a class="zbtn" href="?zip=1">打包下载 (.zip)</a></div></div>'
-        '<div class="list" id="lst">${entries.isEmpty && relParts.isEmpty ? '<div class="empty">这个文件夹目前是空的</div>' : rows.toString()}</div>'
-        '</div><script>function flt(v){v=v.toLowerCase().trim();document.querySelectorAll(".item").forEach(el=>{const n=el.getAttribute("data-name")||"";el.style.display=(!v||n===".."||n.includes(v))?"flex":"none";});}</script>'
+        '<style>$_shareArchitecturalCss</style></head><body class="page-body">'
+        '<div class="shell">'
+        '<div class="head">'
+        '<div class="head-titles">'
+        '<div class="title-row"><h1>${_htmlEscape(item.label)}</h1><span class="badge">${entries.length} 项</span></div>'
+        '<div class="crumbs">$crumbs</div>'
+        '</div>'
+        '<div class="tools">'
+        '<input class="search-in" id="q" type="search" placeholder="筛选文件 (按 / 聚焦)..." oninput="flt(this.value)">'
+        '<a class="btn pri" id="zipBtn" href="?zip=1" onclick="startZip(this)">'
+        '<span class="btn-spin" id="zipSpin" style="display:none"></span>'
+        '<span id="zipTxt">打包下载 (.zip)</span></a>'
+        '</div></div>'
+        '<div class="list-group" id="lst">${entries.isEmpty && relParts.isEmpty ? '<div class="empty">这个文件夹目前是空的</div>' : rows.toString()}</div>'
+        '</div>'
+        '<script>'
+        'function flt(v){v=v.toLowerCase().trim();document.querySelectorAll(".item").forEach(el=>{const n=el.getAttribute("data-name")||"";el.style.display=(!v||n===".."||n.includes(v))?"flex":"none";});}'
+        'function startZip(el){var s=document.getElementById("zipSpin"),t=document.getElementById("zipTxt");if(s)s.style.display="inline-block";if(t)t.textContent="正在流式打包...";setTimeout(function(){if(s)s.style.display="none";if(t)t.textContent="打包下载 (.zip)";},5000);}'
+        'document.addEventListener("keydown",function(e){if(e.key==="/"&&document.activeElement!==document.getElementById("q")){e.preventDefault();document.getElementById("q").focus();}});'
+        '</script>'
         '</body></html>';
     final bytes = utf8.encode(html);
     item.bytesSent += bytes.length;
@@ -2026,29 +2030,56 @@ class ExposureManager {
     final sizeHuman = _formatHumanBytes(stat.size);
 
     String stageHtml;
+    String extraCodeJs = '';
     if (_isVideoExt(ext)) {
-      stageHtml =
-          '<video controls playsinline preload="metadata" src="$rawHref"></video>';
+      stageHtml = '<div class="media-stage" id="mStage">'
+          '<div class="stage-loader" id="sLoad"><span class="ring-spin"></span><span>正在缓冲流媒体预览...</span></div>'
+          '<video controls playsinline preload="metadata" src="$rawHref" onloadeddata="hideLoad()" oncanplay="hideLoad()" onerror="hideLoad()"></video>'
+          '</div>';
     } else if (_isAudioExt(ext)) {
       stageHtml =
           '<div class="pad-box"><audio controls preload="metadata" src="$rawHref"></audio></div>';
     } else if (_isImageExt(ext)) {
-      stageHtml =
-          '<div class="img-box"><img src="$rawHref" alt="${_htmlEscape(fileName)}"></div>';
+      stageHtml = '<div class="media-stage img-box" id="mStage">'
+          '<div class="stage-loader" id="sLoad"><span class="ring-spin"></span><span>正在加载高清图像...</span></div>'
+          '<img src="$rawHref" alt="${_htmlEscape(fileName)}" onload="hideLoad()" onerror="hideLoad()">'
+          '</div>';
     } else if (_isPdfExt(ext)) {
-      stageHtml =
-          '<iframe class="pdf-frame" src="$rawHref" title="${_htmlEscape(fileName)}"></iframe>';
+      stageHtml = '<div class="media-stage" id="mStage">'
+          '<div class="stage-loader" id="sLoad"><span class="ring-spin"></span><span>正在初始化文档视图...</span></div>'
+          '<iframe class="pdf-frame" src="$rawHref" title="${_htmlEscape(fileName)}" onload="hideLoad()"></iframe>'
+          '</div>';
     } else if (_isTextPreviewExt(ext) && stat.size <= 131072) {
       String snippet = '';
       try {
         final rawBytes = await PrivFs.readBytes(filePath);
         snippet = utf8.decode(rawBytes, allowMalformed: true);
       } catch (_) {}
-      stageHtml = '<pre class="code-box">${_htmlEscape(snippet)}</pre>';
+      final normLines = snippet.replaceAll('\r\n', '\n').split('\n');
+      final codeRows = StringBuffer();
+      for (var i = 0; i < normLines.length; i++) {
+        codeRows.write(
+          '<div class="c-row"><span class="c-ln">${i + 1}</span><span class="c-tx">${_htmlEscape(normLines[i])}</span></div>',
+        );
+      }
+      stageHtml = '<div class="code-sheet">'
+          '<div class="code-head">'
+          '<span>代码与文本预览 · ${normLines.length} 行</span>'
+          '<div class="btns">'
+          '<button type="button" class="chip-btn" id="wrapBtn" onclick="toggleWrap()">左右滑动</button>'
+          '<button type="button" class="chip-btn" onclick="copyCode(this)">复制内容</button>'
+          '</div></div>'
+          '<div class="code-scroll"><div class="code-tbl" id="codeTbl">$codeRows</div></div>'
+          '<textarea id="rawCodeBuf" style="display:none">${_htmlEscape(snippet)}</textarea>'
+          '</div>';
+      extraCodeJs =
+          'function toggleWrap(){var t=document.getElementById("codeTbl"),b=document.getElementById("wrapBtn");if(!t)return;var w=t.classList.toggle("is-wrap");if(b)b.textContent=w?"自动换行：开":"左右滑动";}'
+          'function copyCode(btn){var el=document.getElementById("rawCodeBuf");if(!el||!navigator.clipboard)return;navigator.clipboard.writeText(el.value).then(function(){var old=btn.textContent;btn.textContent="已复制";setTimeout(function(){btn.textContent=old;},1600);});}';
     } else {
       stageHtml = '<div class="dl-stage">'
+          '<div class="gate-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>'
           '<div class="dl-name">${_htmlEscape(fileName)}</div>'
-          '<div class="dl-sub">文件大小 $sizeHuman · 点击下方按钮即可原速下载</div>'
+          '<div class="dl-sub">文件大小 $sizeHuman · 支持多线程与断点续传直下</div>'
           '<a class="btn pri big" href="$dlHref">直接下载文件 ($sizeHuman)</a>'
           '</div>';
     }
@@ -2085,37 +2116,23 @@ class ExposureManager {
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(displayTitle)} · 在线预览</title>'
-        '<style>'
-        ':root{--bg:#FAF9F6;--card:rgba(255,255,255,0.88);--soft:#EEF0F6;--hover:#E4E7F2;--ink:#121316;--muted:#646873;--accent:#4F46E5}'
-        '@media(prefers-color-scheme:dark){:root{--bg:#111317;--card:rgba(24,26,32,0.88);--soft:#1E212B;--hover:#272B38;--ink:#F4F5F7;--muted:#8E93A0;--accent:#6366F1}}'
-        'body{background-image:radial-gradient(640px 420px at 12% 0%,rgba(79,70,229,0.09),transparent 70%),radial-gradient(560px 380px at 90% 100%,rgba(14,165,233,0.07),transparent 70%);background-attachment:fixed}'
-        '*{box-sizing:border-box}body{margin:0;padding:24px 14px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;display:flex;justify-content:center}'
-        '.card{width:100%;max-width:940px;background:var(--card);border-radius:24px;padding:22px 24px;box-shadow:0 14px 44px rgba(0,0,0,.08)}'
-        '.crumbs{font-size:13px;color:var(--muted);margin-bottom:10px;word-break:break-all}.crumbs a{color:var(--accent);text-decoration:none;font-weight:600}.sep{margin:0 4px;opacity:.5}'
-        '.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
-        '.title{font-size:18px;font-weight:700;word-break:break-all}.meta{font-size:12.5px;color:var(--muted);margin-top:4px;font-family:ui-monospace,monospace}'
-        '.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
-        '.btn{padding:8px 15px;border-radius:99px;text-decoration:none;font-size:13px;font-weight:600;background:var(--soft);color:var(--ink);transition:background .15s}'
-        '.btn:hover{background:var(--hover)}'
-        '.btn.pri{background:var(--accent);color:#FFF}.btn.big{padding:11px 22px;font-size:14px;margin-top:8px;display:inline-block}'
-        '.btn.ghost{color:var(--accent)}'
-        '.sib-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--soft);font-size:13px}'
-        '.sib-btn{color:var(--ink);text-decoration:none;background:var(--soft);padding:7px 14px;border-radius:99px;font-weight:500;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}'
-        '.sib-btn:hover{background:var(--hover)}.sib-pos{font-family:ui-monospace,monospace;color:var(--muted);font-size:12px}.sib-muted{color:var(--muted);font-size:12.5px;opacity:.7}'
-        'video{width:100%;max-height:74vh;border-radius:16px;background:#000;display:block}'
-        '.img-box{background:var(--soft);border-radius:16px;padding:16px;text-align:center}img{max-width:100%;max-height:72vh;border-radius:10px}'
-        '.pad-box{background:var(--soft);border-radius:16px;padding:28px}audio{width:100%}'
-        '.pdf-frame{width:100%;height:74vh;border:none;border-radius:16px;background:var(--soft)}'
-        '.code-box{margin:0;padding:18px;border-radius:16px;background:#191816;color:#EDEAE2;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6;overflow:auto;max-height:70vh;white-space:pre-wrap;word-break:break-word}'
-        '.dl-stage{background:var(--soft);border-radius:18px;padding:42px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}'
-        '.dl-name{font-size:17px;font-weight:700}.dl-sub{font-size:13.5px;color:var(--muted)}'
-        '</style></head><body><div class="card">$crumbBar<div class="top"><div>'
+        '<style>$_shareArchitecturalCss</style></head><body class="page-body">'
+        '<div class="shell preview-shell">$crumbBar<div class="head">'
+        '<div class="head-titles">'
         '<div class="title">${_htmlEscape(displayTitle)}</div>'
-        '<div class="meta">${_htmlEscape(fileName)} · $sizeHuman$quotaMeta</div>'
+        '<div class="meta-line">${_htmlEscape(fileName)} · $sizeHuman$quotaMeta</div>'
         '</div><div class="btns">$backLink'
+        '<button type="button" class="btn" onclick="copyShareUrl(this)">复制链接</button>'
         '<a class="btn" href="$rawHref" target="_blank">原始直链</a>'
         '<a class="btn pri" href="$dlHref">下载文件</a>'
-        '</div></div>$stageHtml$siblingNav</div>$keyNavScript</body></html>';
+        '</div></div>$stageHtml$siblingNav</div>'
+        '<script>'
+        'function hideLoad(){var l=document.getElementById("sLoad");if(l){l.style.opacity="0";setTimeout(function(){if(l.parentNode)l.remove();},220);}}'
+        'setTimeout(hideLoad,3500);'
+        'function copyShareUrl(b){if(!navigator.clipboard)return;navigator.clipboard.writeText(location.href).then(function(){var t=b.textContent;b.textContent="已复制链接";setTimeout(function(){b.textContent=t;},1600);});}'
+        '$extraCodeJs'
+        '</script>'
+        '$keyNavScript</body></html>';
 
     final bytes = utf8.encode(html);
     item.bytesSent += bytes.length;
@@ -2371,13 +2388,20 @@ class ExposureManager {
       if ((req.headers['accept'] ?? '').contains('text/html')) {
         return Response(
           502,
-          body: '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8">'
-              '<meta http-equiv="refresh" content="4">'
-              '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#EEF1F7;color:#0F172A;font-family:system-ui,sans-serif">'
-              '<div style="background:#FFF;padding:28px 32px;border-radius:14px;border:1px solid #E2E8F0;max-width:420px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.06)">'
-              '<h3 style="margin:0 0 8px">正在等待本机端口 :$port 启动...</h3>'
-              '<p style="margin:0;color:#64748B;font-size:13.5px;line-height:1.6">当前尚未检测到 127.0.0.1:$port 的响应，本页面每 4 秒会自动刷新一次。</p>'
-              '</div></body></html>',
+          body: '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
+              '<meta name="viewport" content="width=device-width,initial-scale=1">'
+              '<meta http-equiv="refresh" content="6">'
+              '<title>等待端口 :$port 就绪</title>'
+              '<style>$_shareArchitecturalCss</style></head>'
+              '<body class="center-body"><div class="gate-card">'
+              '<div class="radar-wrap"><span class="radar-ping"></span><div class="gate-ico"><span class="ring-spin"></span></div></div>'
+              '<h2 id="waitTitle">正在等待本机端口 :$port 启动...</h2>'
+              '<p id="waitDesc">尚未检测到 <code>127.0.0.1:$port</code> 响应，后台正在实时探测并在服务启动后无感自动接入。</p>'
+              '<div class="wait-bar"><div class="wait-bar-fill"></div></div>'
+              '</div>'
+              '<script>'
+              '(function(){var n=0;setInterval(function(){n++;fetch(location.href,{method:"HEAD",cache:"no-store"}).then(function(r){if(r.status!==502){var t=document.getElementById("waitTitle");if(t)t.textContent="服务已就绪，正在进入...";location.reload();}}).catch(function(){});},1800);})();'
+              '</script></body></html>',
           headers: const {'content-type': 'text/html; charset=utf-8'},
         );
       }
@@ -2389,6 +2413,84 @@ class ExposureManager {
     }
   }
 
+  static const String _shareArchitecturalCss =
+      ':root{--outer:#EDF0F7;--card:#F8FAFC;--elev:#FFFFFF;--sheet:#F3F6FB;--head:#EAEFF7;--gutter:#EDF2F9;--hover:#EEF2F8;--line:#DDE3EE;--ink:#0F172A;--soft-ink:#334155;--muted:#64748B;--accent:#4F46E5;--accent-h:#4338CA;--accent-bg:rgba(79,70,229,.10);--err:#DC2626;--err-bg:rgba(220,38,38,.09);--dot:rgba(15,23,42,.055);--sh:0 14px 36px -10px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.04)}'
+      '@media(prefers-color-scheme:dark){:root{--outer:#080A0F;--card:#0E1117;--elev:#141821;--sheet:#10141D;--head:#161C28;--gutter:#0D1119;--hover:#1C2230;--line:#1F2533;--ink:#F8FAFC;--soft-ink:#CBD5E1;--muted:#8B95A8;--accent:#6366F1;--accent-h:#818CF8;--accent-bg:rgba(99,102,241,.16);--err:#F87171;--err-bg:rgba(248,113,113,.14);--dot:rgba(248,250,252,.045);--sh:0 18px 44px -10px rgba(0,0,0,.62),0 1px 3px rgba(0,0,0,.35)}}'
+      '*{box-sizing:border-box}'
+      'body{margin:0;background-color:var(--outer);background-image:radial-gradient(640px 380px at 15% 0%,var(--accent-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;-webkit-font-smoothing:antialiased}'
+      '.page-body{padding:24px 14px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}'
+      '.center-body{padding:18px;min-height:100vh;display:flex;align-items:center;justify-content:center}'
+      '.shell{width:100%;max-width:860px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--sh);animation:cardRise .22s cubic-bezier(.16,1,.3,1) both}'
+      '.preview-shell{max-width:960px}'
+      '.gate-card{width:100%;max-width:392px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px 24px;box-shadow:var(--sh);text-align:center;animation:cardRise .22s cubic-bezier(.16,1,.3,1) both}'
+      '.gate-ico{width:40px;height:40px;margin:0 auto 12px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center}'
+      '.gate-card h2{margin:0 0 7px;font-size:17px;font-weight:600;letter-spacing:-.01em}'
+      '.gate-card p{margin:0 0 16px;color:var(--muted);font-size:13.2px;line-height:1.58}'
+      '.gate-card p:last-child{margin-bottom:0}'
+      '.gate-card code{font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:1px 5px;border-radius:5px;background:var(--sheet);border:1px solid var(--line)}'
+      '.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}'
+      '.head-titles{min-width:0;flex:1 1 220px}'
+      '.title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
+      'h1,.title{margin:0;font-size:17.5px;font-weight:600;letter-spacing:-.015em;word-break:break-word}'
+      '.badge{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;padding:2px 7px;border-radius:6px;background:var(--sheet);border:1px solid var(--line);color:var(--muted)}'
+      '.crumbs{font-size:12.8px;color:var(--muted);margin-top:4px;margin-bottom:4px;word-break:break-all}'
+      '.crumbs a{color:var(--accent);text-decoration:none;font-weight:500}.crumbs a:hover{text-decoration:underline}.sep{margin:0 4px;opacity:.45}'
+      '.meta-line{font-size:12px;color:var(--muted);margin-top:4px;font-family:ui-monospace,Consolas,monospace}'
+      '.tools,.btns{display:flex;gap:7px;align-items:center;flex-wrap:wrap}'
+      '.search-in{background:var(--elev);border:1px solid var(--line);border-radius:8.5px;padding:6.5px 11px;color:var(--ink);font-size:12.8px;outline:none;width:190px;transition:border-color .15s}'
+      '.search-in:focus,.pin-in:focus{border-color:var(--accent)}'
+      '.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6.5px 12px;border-radius:8.5px;border:1px solid var(--line);background:var(--elev);color:var(--ink);text-decoration:none;font-size:12.6px;font-weight:500;cursor:pointer;transition:background .14s,border-color .14s}'
+      '.btn:hover{background:var(--hover)}'
+      '.btn.pri{background:var(--accent);border-color:var(--accent);color:#FFF}.btn.pri:hover{background:var(--accent-h)}'
+      '.btn.ghost{background:transparent;color:var(--accent);border-color:var(--line)}'
+      '.btn.big{padding:9.5px 18px;font-size:13.5px;margin-top:6px}'
+      '.chip-btn{padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--elev);color:var(--muted);font-size:11.5px;font-weight:500;cursor:pointer}'
+      '.chip-btn:hover{color:var(--ink);background:var(--hover)}'
+      '.list-group{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--elev)}'
+      '.item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;color:var(--ink);text-decoration:none;transition:background .12s}'
+      '.item+.item{border-top:1px solid var(--line)}'
+      '.item:hover{background:var(--hover)}'
+      '.left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}'
+      '.ico{width:28px;height:28px;border-radius:7px;background:var(--sheet);border:1px solid var(--line);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}'
+      '.ico.is-dir{background:var(--accent-bg);border-color:transparent;color:var(--accent)}'
+      '.nm{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+      '.meta{font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;white-space:nowrap;flex-shrink:0}'
+      '.empty{padding:32px;text-align:center;color:var(--muted);font-size:13.5px}'
+      '.media-stage{position:relative;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--sheet);min-height:180px}'
+      '.stage-loader{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--sheet);color:var(--muted);font-size:12.5px;transition:opacity .2s ease}'
+      'video{width:100%;max-height:74vh;background:#000;display:block;position:relative;z-index:2}'
+      '.img-box{padding:14px;text-align:center;display:flex;align-items:center;justify-content:center}img{max-width:100%;max-height:72vh;border-radius:8px;position:relative;z-index:2}'
+      '.pad-box{background:var(--sheet);border:1px solid var(--line);border-radius:11px;padding:24px}audio{width:100%}'
+      '.pdf-frame{width:100%;height:74vh;border:none;display:block;background:var(--sheet);position:relative;z-index:2}'
+      '.code-sheet{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--sheet)}'
+      '.code-head{background:var(--head);border-bottom:1px solid var(--line);padding:7px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:500;color:var(--muted)}'
+      '.code-scroll{overflow-x:auto;overflow-y:auto;max-height:70vh;-webkit-overflow-scrolling:touch}'
+      '.code-tbl{display:flex;flex-direction:column;min-width:max-content;width:100%;font-family:ui-monospace,"JetBrains Mono",Consolas,monospace;font-size:12.2px;padding:6px 0}'
+      '.code-tbl.is-wrap{min-width:0}'
+      '.c-row{display:flex;align-items:stretch;line-height:1.6}'
+      '.c-ln{position:sticky;left:0;z-index:2;width:46px;flex-shrink:0;text-align:right;padding:1px 10px 1px 0;background:var(--gutter);border-right:1px solid var(--line);color:var(--muted);user-select:none;font-variant-numeric:tabular-nums}'
+      '.c-tx{padding:1px 16px 1px 12px;color:var(--soft-ink);white-space:pre}'
+      '.code-tbl.is-wrap .c-tx{white-space:pre-wrap;word-break:break-word}'
+      '.dl-stage{background:var(--sheet);border:1px solid var(--line);border-radius:11px;padding:36px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}'
+      '.dl-name{font-size:16px;font-weight:600;word-break:break-all}.dl-sub{font-size:13px;color:var(--muted)}'
+      '.sib-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px}'
+      '.sib-btn{color:var(--ink);text-decoration:none;background:var(--elev);border:1px solid var(--line);padding:6px 12px;border-radius:8px;font-weight:500;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}'
+      '.sib-btn:hover{background:var(--hover)}.sib-pos{font-family:ui-monospace,Consolas,monospace;color:var(--muted);font-size:12px}.sib-muted{color:var(--muted);font-size:12px;opacity:.75}'
+      '.pin-in{width:100%;padding:10px 14px;border-radius:9px;border:1px solid var(--line);background:var(--elev);color:var(--ink);font-family:ui-monospace,Consolas,monospace;font-size:15px;text-align:center;letter-spacing:.14em;outline:none;margin-bottom:12px}'
+      '.err-box{padding:8px 10px;border-radius:8px;background:var(--err-bg);color:var(--err);font-size:12.5px;margin-bottom:12px;font-weight:500}'
+      '.ring-spin,.btn-spin{width:14px;height:14px;border-radius:99px;border:2px solid var(--line);border-top-color:var(--accent);display:inline-block;animation:spin .75s linear infinite}'
+      '.btn-spin{width:12px;height:12px;border-color:rgba(255,255,255,.35);border-top-color:#FFF}'
+      '.radar-wrap{position:relative;width:44px;height:44px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center}'
+      '.radar-wrap .gate-ico{margin:0}'
+      '.radar-ping{position:absolute;inset:0;border-radius:12px;border:1.5px solid var(--accent);opacity:0;animation:ping 1.8s cubic-bezier(0,0,.2,1) infinite}'
+      '.wait-bar{width:100%;height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative;margin-top:14px}'
+      '.wait-bar-fill{position:absolute;inset:0 auto 0 0;width:36%;background:var(--accent);border-radius:99px;animation:slideBar 1.3s ease-in-out infinite}'
+      '@keyframes spin{to{transform:rotate(360deg)}}'
+      '@keyframes ping{0%{transform:scale(.92);opacity:.75}100%{transform:scale(1.38);opacity:0}}'
+      '@keyframes slideBar{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}'
+      '@keyframes cardRise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}'
+      '@media(max-width:520px){.page-body{padding:12px 10px}.shell{padding:14px}.search-in{width:100%}.tools{width:100%}.tools .btn{flex:1}}';
+
   String _renderPinPromptHtml(
     ExposureItem item,
     String actionPath, {
@@ -2397,31 +2499,26 @@ class ExposureManager {
       '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
       '<title>${_htmlEscape(item.label)} · 输入提取码</title>'
-      '<style>'
-      ':root{--bg:#EEF1F7;--card:#FFFFFF;--soft:#F8FAFC;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B;--accent:#4F46E5;--err:#DC2626}'
-      '@media(prefers-color-scheme:dark){:root{--bg:#080A0F;--card:#141821;--soft:#0E1117;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8;--accent:#6366F1;--err:#F87171}}'
-      '*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;padding:16px}'
-      '.box{width:100%;max-width:380px;padding:28px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 36px rgba(15,23,42,.08);text-align:center}'
-      'h2{margin:0 0 6px;font-size:18px;font-weight:600}p{margin:0 0 18px;color:var(--muted);font-size:13.5px;line-height:1.55}'
-      'input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:var(--soft);color:var(--ink);font-size:16px;text-align:center;letter-spacing:.12em;outline:none;margin-bottom:12px}'
-      'button{width:100%;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#FFF;font-size:14px;font-weight:600;cursor:pointer}'
-      '.err{color:var(--err);font-size:13px;margin-bottom:12px;font-weight:500}'
-      '</style></head><body><form class="box" method="POST" action="${_htmlEscape(actionPath)}?__pin_unlock=1">'
+      '<style>$_shareArchitecturalCss</style></head>'
+      '<body class="center-body"><form class="gate-card" method="POST" action="${_htmlEscape(actionPath)}?__pin_unlock=1" onsubmit="var s=document.getElementById(\'pinSpin\');if(s)s.style.display=\'inline-block\';">'
+      '<div class="gate-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>'
       '<h2>${_htmlEscape(item.label)}</h2>'
-      '<p>这条分享已开启口令保护，请输入提取码继续访问。</p>'
-      '${error != null ? '<div class="err">${_htmlEscape(error)}</div>' : ''}'
-      '<input type="password" name="pin" placeholder="输入提取码" autofocus required autocomplete="off">'
-      '<button type="submit">解锁查看</button></form></body></html>';
+      '<p>该分享链接已启用口令保护，请输入提取码继续查看。</p>'
+      '${error != null ? '<div class="err-box">${_htmlEscape(error)}</div>' : ''}'
+      '<input class="pin-in" type="password" name="pin" placeholder="输入提取码" autofocus required autocomplete="off">'
+      '<button class="btn pri" style="width:100%;padding:9.5px" type="submit"><span class="btn-spin" id="pinSpin" style="display:none"></span><span>解锁查看</span></button>'
+      '</form></body></html>';
 
   String _renderExpiredHtml() =>
       '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
       '<title>分享链接已收起</title>'
-      '<style>:root{--bg:#EEF1F7;--card:#FFFFFF;--border:#E2E8F0;--ink:#0F172A;--muted:#64748B}@media(prefers-color-scheme:dark){:root{--bg:#080A0F;--card:#141821;--border:#222836;--ink:#F1F5F9;--muted:#94A3B8}}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,sans-serif;text-align:center}'
-      '.box{padding:28px 32px;background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:400px;box-shadow:0 12px 32px rgba(15,23,42,.08)}'
-      'h2{margin:0 0 8px;font-size:17px;font-weight:600}p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.55}</style>'
-      '</head><body><div class="box"><h2>这条分享链接已经收起或到期</h2>'
-      '<p>如果还需要查看，可以在「随手分享」页重新开启，或让 AI 再发一次。</p></div></body></html>';
+      '<style>$_shareArchitecturalCss</style>'
+      '</head><body class="center-body"><div class="gate-card">'
+      '<div class="gate-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></div>'
+      '<h2>这条分享链接已收起或到期</h2>'
+      '<p>如需继续访问，可在 Agent MCP「外网与分享」页重新开启，或直接让 AI 重新生成。</p>'
+      '</div></body></html>';
 }
 
 void registerExposureTools(

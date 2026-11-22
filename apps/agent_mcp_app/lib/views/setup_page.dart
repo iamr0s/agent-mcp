@@ -1149,33 +1149,35 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: 'MCP 服务名称',
-                      subtitle: '向 AI 客户端宣告的节点标识',
+                      subtitle: screenW >= 500 ? '向 AI 客户端宣告的节点标识' : null,
                       onTap: () => _toggleInlineEdit('name'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 190),
-                            child: Text(
-                              _nameCtrl.text.trim().isEmpty
-                                  ? 'agent-mcp'
-                                  : _nameCtrl.text.trim(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: sansStyle(
-                                c,
-                                size: 13,
-                                weight: FontWeight.w600,
-                                color: c.ink,
+                          Flexible(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 168),
+                              child: Text(
+                                _nameCtrl.text.trim().isEmpty
+                                    ? 'agent-mcp'
+                                    : _nameCtrl.text.trim(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: sansStyle(
+                                  c,
+                                  size: 13,
+                                  weight: FontWeight.w600,
+                                  color: c.ink,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 5),
                           Icon(
                             _activeInlineEdit == 'name'
                                 ? Icons.keyboard_arrow_up_rounded
-                                : Icons.edit_outlined,
-                            size: 16,
+                                : Icons.chevron_right_rounded,
+                            size: 17,
                             color: _activeInlineEdit == 'name' ? c.clay : c.meta,
                           ),
                         ],
@@ -1229,29 +1231,31 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: '工具名前缀',
-                      subtitle: '多设备同时接入同一客户端时防止工具重名',
+                      subtitle: screenW >= 500 ? '多设备同时接入同一客户端时防止工具重名' : null,
                       onTap: () => _toggleInlineEdit('prefix'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClaudePill(
-                            text: _prefixCtrl.text.trim().isEmpty
-                                ? '未启用前缀'
-                                : '${_prefixCtrl.text.trim()}_*',
-                            mono: _prefixCtrl.text.trim().isNotEmpty,
-                            fg: _prefixCtrl.text.trim().isEmpty
-                                ? c.muted
-                                : c.clay,
-                            bg: _prefixCtrl.text.trim().isEmpty
-                                ? c.recessed
-                                : c.clay.withValues(alpha: 0.12),
+                          Flexible(
+                            child: ClaudePill(
+                              text: _prefixCtrl.text.trim().isEmpty
+                                  ? '未启用前缀'
+                                  : '${_prefixCtrl.text.trim()}_*',
+                              mono: _prefixCtrl.text.trim().isNotEmpty,
+                              fg: _prefixCtrl.text.trim().isEmpty
+                                  ? c.muted
+                                  : c.clay,
+                              bg: _prefixCtrl.text.trim().isEmpty
+                                  ? c.recessed
+                                  : c.clay.withValues(alpha: 0.12),
+                            ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 5),
                           Icon(
                             _activeInlineEdit == 'prefix'
                                 ? Icons.keyboard_arrow_up_rounded
-                                : Icons.edit_outlined,
-                            size: 16,
+                                : Icons.chevron_right_rounded,
+                            size: 17,
                             color:
                                 _activeInlineEdit == 'prefix' ? c.clay : c.meta,
                           ),
@@ -1322,22 +1326,27 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: '监听地址与端口',
-                      subtitle: '本地 HTTP Streamable / SSE 协议绑定网卡',
+                      subtitle:
+                          screenW >= 500 ? '本地 HTTP Streamable / SSE 协议绑定网卡' : null,
                       onTap: () => _toggleInlineEdit('listen'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClaudePill(
-                            text: listenSummary,
-                            fg: c.ink,
-                            bg: c.recessed,
+                          Flexible(
+                            child: ClaudePill(
+                              text: screenW < 440 && _bindAllInterfaces
+                                  ? '0.0.0.0:$curPort'
+                                  : listenSummary,
+                              fg: c.ink,
+                              bg: c.recessed,
+                            ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 5),
                           Icon(
                             _activeInlineEdit == 'listen'
                                 ? Icons.keyboard_arrow_up_rounded
-                                : Icons.edit_outlined,
-                            size: 16,
+                                : Icons.chevron_right_rounded,
+                            size: 17,
                             color:
                                 _activeInlineEdit == 'listen' ? c.clay : c.meta,
                           ),
@@ -1564,29 +1573,32 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: 'OAuth 2.1 本地密码',
-                      subtitle: '用于远程网页授权与 /dashboard 登录保护',
+                      subtitle:
+                          screenW >= 500 ? '用于远程网页授权与 /dashboard 登录保护' : null,
                       onTap: () => _toggleInlineEdit('password'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClaudePill(
-                            text: widget.config['has_password'] == true
-                                ? '已设密码保护'
-                                : '未设置密码',
-                            mono: false,
-                            fg: widget.config['has_password'] == true
-                                ? c.sage
-                                : c.clay,
-                            bg: widget.config['has_password'] == true
-                                ? c.sageBg
-                                : c.clay.withValues(alpha: 0.12),
+                          Flexible(
+                            child: ClaudePill(
+                              text: widget.config['has_password'] == true
+                                  ? '已设密码保护'
+                                  : '未设置密码',
+                              mono: false,
+                              fg: widget.config['has_password'] == true
+                                  ? c.sage
+                                  : c.clay,
+                              bg: widget.config['has_password'] == true
+                                  ? c.sageBg
+                                  : c.clay.withValues(alpha: 0.12),
+                            ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 5),
                           Icon(
                             _activeInlineEdit == 'password'
                                 ? Icons.keyboard_arrow_up_rounded
-                                : Icons.edit_outlined,
-                            size: 16,
+                                : Icons.chevron_right_rounded,
+                            size: 17,
                             color: _activeInlineEdit == 'password'
                                 ? c.clay
                                 : c.meta,
@@ -1655,8 +1667,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 ),
                 ClaudeSettingsRow(
                   title: '界面主题',
-                  subtitle: '冷瓷浅色与曜石暗色双层高对比画布',
+                  subtitle: screenW >= 500 ? '冷瓷浅色与曜石暗色双层高对比画布' : null,
+                  allowTrailingWrap: true,
+                  stackBreakpoint: 470,
                   trailing: ClaudeSegmented<ThemeMode>(
+                    expand: screenW < 500,
                     value: widget.themeMode,
                     items: const [
                       (ThemeMode.system, '跟随系统'),

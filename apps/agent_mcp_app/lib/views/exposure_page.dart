@@ -277,11 +277,12 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             spacing: 12,
             runSpacing: 10,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('外网映射与链接分享', style: serifTitleStyle(c, size: 20)),
-                  const SizedBox(width: 8),
                   ClaudeActionMenuButton(
                     label: channelPillLabel,
                     tooltip: '查看网络通道就绪状态',
@@ -1374,36 +1375,38 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      ClaudeSegmented<String>(
-                        value: _mode,
-                        items: const [
-                          ('port', '本地网站端口'),
-                          ('file', '单个视频 / 文件'),
-                          ('folder', '文件夹目录'),
-                          ('site', '静态网站 / HTML'),
-                        ],
-                        onChanged: (v) {
-                          setState(() {
-                            _mode = v;
-                            _error = '';
-                            _editingRawPath = false;
-                            if (v == 'port' &&
-                                int.tryParse(_targetCtrl.text.trim()) == null) {
-                              _targetCtrl.text =
-                                  widget.activeLocalPorts.isNotEmpty
-                                      ? '${widget.activeLocalPorts.first}'
-                                      : '3000';
-                            } else if (v != 'port' &&
-                                int.tryParse(_targetCtrl.text.trim()) != null) {
-                              _targetCtrl.clear();
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
+                      if (!_folderStep)
+                        ClaudeSegmented<String>(
+                          expand: true,
+                          value: _mode,
+                          items: const [
+                            ('port', '端口映射'),
+                            ('file', '单个文件'),
+                            ('folder', '文件夹'),
+                            ('site', '静态网页'),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              _mode = v;
+                              _error = '';
+                              _editingRawPath = false;
+                              if (v == 'port' &&
+                                  int.tryParse(_targetCtrl.text.trim()) == null) {
+                                _targetCtrl.text =
+                                    widget.activeLocalPorts.isNotEmpty
+                                        ? '${widget.activeLocalPorts.first}'
+                                        : '3000';
+                              } else if (v != 'port' &&
+                                  int.tryParse(_targetCtrl.text.trim()) != null) {
+                                _targetCtrl.clear();
+                              }
+                            });
+                          },
+                        ),
+                      if (!_folderStep) const SizedBox(height: 12),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(13),
                         decoration: ShapeDecoration(
                           color: c.paper2,
                           shape: claudeSuperellipse(
@@ -1418,21 +1421,21 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                               Row(
                                 children: [
                                   Container(
-                                    width: 34,
-                                    height: 34,
+                                    width: 32,
+                                    height: 32,
                                     decoration: ShapeDecoration(
                                       color: c.clay.withValues(
                                         alpha: c.isDark ? 0.16 : 0.10,
                                       ),
-                                      shape: claudeSuperellipse(9),
+                                      shape: claudeSuperellipse(8.5),
                                     ),
                                     child: Icon(
                                       Icons.podcasts_rounded,
-                                      size: 17,
+                                      size: 16.5,
                                       color: c.clay,
                                     ),
                                   ),
-                                  const SizedBox(width: 11),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -1440,34 +1443,38 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                       children: [
                                         Text(
                                           '本地监听端口',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: sansStyle(
                                             c,
-                                            size: 13.2,
+                                            size: 13.0,
                                             weight: FontWeight.w600,
                                             color: c.ink,
                                           ),
                                         ),
                                         Text(
-                                          modeHelp,
+                                          '实时转发本机 Web 服务与 HMR',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: sansStyle(
                                             c,
-                                            size: 11.6,
+                                            size: 11.4,
                                             color: c.muted,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   SizedBox(
-                                    width: 104,
+                                    width: 92,
                                     child: TextField(
                                       controller: _targetCtrl,
                                       keyboardType: TextInputType.number,
                                       onChanged: _onTargetChanged,
                                       style: monoStyle(
                                         c,
-                                        size: 13.5,
+                                        size: 13.2,
                                         weight: FontWeight.w600,
                                         color: c.ink,
                                       ),
@@ -1489,7 +1496,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                     ClaudeButton(
                                       label:
                                           widget.activeLocalPorts.contains(p)
-                                              ? ':$p · 运行中'
+                                              ? ':$p · 在线'
                                               : ':$p',
                                       compact: true,
                                       variant:
@@ -1505,23 +1512,19 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                 ],
                               ),
                             ] else ...[
-                              Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 10,
-                                runSpacing: 8,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
+                              LayoutBuilder(
+                                builder: (ctx, cardBox) {
+                                  final wideTarget = cardBox.maxWidth >= 430;
+                                  final targetHeader = Row(
                                     children: [
                                       Container(
-                                        width: 34,
-                                        height: 34,
+                                        width: 32,
+                                        height: 32,
                                         decoration: ShapeDecoration(
                                           color: c.clay.withValues(
                                             alpha: c.isDark ? 0.16 : 0.10,
                                           ),
-                                          shape: claudeSuperellipse(9),
+                                          shape: claudeSuperellipse(8.5),
                                         ),
                                         child: Icon(
                                           _mode == 'folder'
@@ -1530,15 +1533,12 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                                   ? Icons.web_rounded
                                                   : Icons
                                                       .insert_drive_file_outlined),
-                                          size: 17,
+                                          size: 16.5,
                                           color: c.clay,
                                         ),
                                       ),
-                                      const SizedBox(width: 11),
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 320,
-                                        ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
                                         child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
@@ -1551,7 +1551,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                               overflow: TextOverflow.ellipsis,
                                               style: sansStyle(
                                                 c,
-                                                size: 13.4,
+                                                size: 13.2,
                                                 weight: FontWeight.w600,
                                                 color: c.ink,
                                               ),
@@ -1571,7 +1571,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                                     )
                                                   : sansStyle(
                                                       c,
-                                                      size: 11.6,
+                                                      size: 11.5,
                                                       color: c.muted,
                                                     ),
                                             ),
@@ -1579,8 +1579,9 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                         ),
                                       ),
                                     ],
-                                  ),
-                                  Wrap(
+                                  );
+
+                                  final actionButtons = Wrap(
                                     spacing: 6,
                                     runSpacing: 6,
                                     children: [
@@ -1632,26 +1633,41 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           ),
                                       ],
                                       ClaudeButton(
-                                        label: _editingRawPath ? '完成' : '',
+                                        label: _editingRawPath ? '完成' : '粘贴路径',
                                         compact: true,
                                         tooltip: _editingRawPath
                                             ? '收起手动路径框'
                                             : '手动输入或粘贴路径',
-                                        variant: ClaudeBtnVariant.ghost,
-                                        leading: Icon(
-                                          _editingRawPath
-                                              ? Icons.check_rounded
-                                              : Icons.edit_outlined,
-                                          size: 15,
-                                        ),
+                                        variant: _editingRawPath
+                                            ? ClaudeBtnVariant.neutral
+                                            : ClaudeBtnVariant.ghost,
                                         onPressed: () => setState(
                                           () => _editingRawPath =
                                               !_editingRawPath,
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ],
+                                  );
+
+                                  if (wideTarget) {
+                                    return Row(
+                                      children: [
+                                        Expanded(child: targetHeader),
+                                        const SizedBox(width: 10),
+                                        actionButtons,
+                                      ],
+                                    );
+                                  }
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      targetHeader,
+                                      const SizedBox(height: 10),
+                                      actionButtons,
+                                    ],
+                                  );
+                                },
                               ),
                               ClaudeCollapsible(
                                 expanded: _editingRawPath ||
@@ -1688,8 +1704,8 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                     Expanded(
                                       child: Text(
                                         _mode == 'site'
-                                            ? '该 .html 将直接作为网页全屏运行；若仅提供下载可切至「单个视频 / 文件」。'
-                                            : '检测到 .html：切至「静态网站 / HTML」可让对方打开直接运行网页。',
+                                            ? '该 .html 将直接作为网页全屏运行；若仅提供下载可切至「单个文件」。'
+                                            : '检测到 .html：切至「静态网页」可让对方打开直接运行网页。',
                                         style: sansStyle(
                                           c,
                                           size: 11.5,
@@ -1714,7 +1730,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                             ),
                             leading: Icon(
                               Icons.tune_rounded,
-                              size: 16,
+                              size: 15.5,
                               color: _showAdvancedOptions ? c.clay : c.meta,
                             ),
                             title: '默认策略：$scopeSummary · $ttlSummary · $pinSummary',
@@ -1722,7 +1738,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '安全提取码与限次保护（可选）',
+                                  '高级保护',
                                   style: sansStyle(
                                     c,
                                     size: 11.8,
@@ -1732,12 +1748,12 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                         : c.muted,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 2),
                                 Icon(
                                   _showAdvancedOptions
                                       ? Icons.keyboard_arrow_up_rounded
                                       : Icons.keyboard_arrow_down_rounded,
-                                  size: 18,
+                                  size: 17,
                                   color: c.meta,
                                 ),
                               ],
