@@ -536,105 +536,107 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 1. Hero Software Update Banner (responsive, zero-overflow)
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 14,
-              runSpacing: 12,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+            child: LayoutBuilder(
+              builder: (ctx, box) {
+                final isNarrow = box.maxWidth < 420;
+                final badge = Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: ShapeDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF4F46E5), Color(0xFF312E81)],
-                            ),
-                            shape: claudeSuperellipse(12),
-                            shadows: [
-                              BoxShadow(
-                                color: const Color(0xFF4338CA)
-                                    .withValues(alpha: c.isDark ? 0.35 : 0.22),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: const ClaudeSparkIcon(
-                            size: 20,
-                            color: Color(0xFFFAF9F6),
-                          ),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: ShapeDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF4F46E5), Color(0xFF312E81)],
                         ),
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: hasNewer ? c.clay : c.sage,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: c.paper2, width: 2),
-                            ),
-                            child: Icon(
-                              hasNewer
-                                  ? Icons.arrow_upward_rounded
-                                  : Icons.check_rounded,
-                              size: 8.5,
-                              color: Colors.white,
-                            ),
+                        shape: claudeSuperellipse(12),
+                        shadows: [
+                          BoxShadow(
+                            color: const Color(0xFF4338CA)
+                                .withValues(alpha: c.isDark ? 0.35 : 0.22),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: const ClaudeSparkIcon(
+                        size: 20,
+                        color: Color(0xFFFAF9F6),
+                      ),
                     ),
-                    const SizedBox(width: 14),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              hasNewer
-                                  ? '发现新版本 v${latest.version}'
-                                  : 'Agent MCP 已是最新版本',
-                              style: sansStyle(c, size: 15, weight: FontWeight.w600, color: c.ink),
-                            ),
-                            if (hasNewer) ...[
-                              const SizedBox(width: 8),
-                              ClaudePill(
-                                text: '可升级',
-                                bg: c.clay.withValues(alpha: 0.14),
-                                fg: c.clay,
-                              ),
-                            ],
-                          ],
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: hasNewer ? c.clay : c.sage,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.paper2, width: 2),
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '当前 v$curVer · ${_formatLastChecked(prefs)}',
-                          style: monoStyle(c, size: 11.8, color: c.muted),
+                        child: Icon(
+                          hasNewer
+                              ? Icons.arrow_upward_rounded
+                              : Icons.check_rounded,
+                          size: 8.5,
+                          color: Colors.white,
                         ),
-                      ],
+                      ),
                     ),
                   ],
-                ),
-                ClaudeButton(
+                );
+                final infoCol = Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            hasNewer
+                                ? '发现新版本 v${latest.version}'
+                                : 'Agent MCP 已是最新版本',
+                            style: sansStyle(
+                              c,
+                              size: 15,
+                              weight: FontWeight.w600,
+                              color: c.ink,
+                            ),
+                          ),
+                          if (hasNewer)
+                            ClaudePill(
+                              text: '可升级',
+                              bg: c.clay.withValues(alpha: 0.14),
+                              fg: c.clay,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '当前 v$curVer · ${_formatLastChecked(prefs)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: monoStyle(c, size: 11.6, color: c.muted),
+                      ),
+                    ],
+                  ),
+                );
+                final actionBtn = ClaudeButton(
                   label: widget.checkingUpdate
                       ? '检查中...'
                       : (hasNewer ? '查看更新' : '立即检查更新'),
                   compact: true,
+                  expand: isNarrow,
                   loading: widget.checkingUpdate,
                   variant: hasNewer ? ClaudeBtnVariant.clay : ClaudeBtnVariant.ink,
                   leading: Icon(
@@ -645,54 +647,129 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   onPressed: widget.checkingUpdate || widget.onCheckUpdate == null
                       ? null
                       : () => widget.onCheckUpdate!(),
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [badge, const SizedBox(width: 14), infoCol],
+                      ),
+                      const SizedBox(height: 12),
+                      actionBtn,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    badge,
+                    const SizedBox(width: 14),
+                    infoCol,
+                    const SizedBox(width: 12),
+                    actionBtn,
+                  ],
+                );
+              },
             ),
           ),
           Divider(color: c.hairline, height: 1),
+          // 2. Responsive Auto-Check Row (Switch + Frequency Pill)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('定期自动检查更新', style: sansStyle(c, size: 13.5, weight: FontWeight.w500, color: c.ink)),
-                      const SizedBox(height: 2),
-                      Text('优先拉取 GitHub Releases version.json（自动降级 API）', style: sansStyle(c, size: 11.8, color: c.muted)),
-                    ],
-                  ),
-                ),
-                if (prefs.autoCheckEnabled) ...[
-                  const SizedBox(width: 10),
-                  ClaudeDropMenu<int>(
-                    value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours) ? prefs.checkIntervalHours : 12,
-                    tooltip: '自动检测周期',
-                    minMenuWidth: 126,
-                    items: const [
-                      ClaudeDropMenuItem<int>(value: 6, label: '每 6 小时'),
-                      ClaudeDropMenuItem<int>(value: 12, label: '每 12 小时'),
-                      ClaudeDropMenuItem<int>(value: 24, label: '每天'),
-                      ClaudeDropMenuItem<int>(value: 168, label: '每周'),
-                    ],
-                    onChanged: (hours) async {
-                      final next = prefs.copyWith(checkIntervalHours: hours);
-                      await widget.onUpdatePrefsChanged?.call(next);
-                      widget.onToast('已更新自动检测周期');
-                    },
-                  ),
-                ],
-                const SizedBox(width: 10),
-                ClaudeSwitch(
+            child: LayoutBuilder(
+              builder: (ctx, box) {
+                final isNarrow = box.maxWidth < 430;
+                final freqMenu = ClaudeDropMenu<int>(
+                  value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours)
+                      ? prefs.checkIntervalHours
+                      : 12,
+                  tooltip: '自动检测周期',
+                  minMenuWidth: 126,
+                  items: const [
+                    ClaudeDropMenuItem<int>(value: 6, label: '每 6 小时'),
+                    ClaudeDropMenuItem<int>(value: 12, label: '每 12 小时'),
+                    ClaudeDropMenuItem<int>(value: 24, label: '每天'),
+                    ClaudeDropMenuItem<int>(value: 168, label: '每周'),
+                  ],
+                  onChanged: (hours) async {
+                    final next = prefs.copyWith(checkIntervalHours: hours);
+                    await widget.onUpdatePrefsChanged?.call(next);
+                    widget.onToast('已更新自动检测周期');
+                  },
+                );
+                final autoSwitch = ClaudeSwitch(
                   value: prefs.autoCheckEnabled,
                   onChanged: (v) async {
                     final next = prefs.copyWith(autoCheckEnabled: v);
                     await widget.onUpdatePrefsChanged?.call(next);
                     widget.onToast(v ? '已开启定期自动检查更新' : '已关闭定期自动检查更新');
                   },
-                ),
-              ],
+                );
+                final titleCol = Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '定期自动检查更新',
+                        style: sansStyle(
+                          c,
+                          size: 13.5,
+                          weight: FontWeight.w500,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '优先拉取 Releases version.json（自动降级 API）',
+                        style: sansStyle(c, size: 11.8, color: c.muted),
+                      ),
+                    ],
+                  ),
+                );
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          titleCol,
+                          const SizedBox(width: 12),
+                          autoSwitch,
+                        ],
+                      ),
+                      if (prefs.autoCheckEnabled) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Icon(Icons.schedule_rounded, size: 14, color: c.meta),
+                            const SizedBox(width: 6),
+                            Text(
+                              '检测频率',
+                              style: sansStyle(c, size: 12.2, color: c.muted),
+                            ),
+                            const Spacer(),
+                            freqMenu,
+                          ],
+                        ),
+                      ],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    titleCol,
+                    if (prefs.autoCheckEnabled) ...[
+                      const SizedBox(width: 10),
+                      freqMenu,
+                    ],
+                    const SizedBox(width: 10),
+                    autoSwitch,
+                  ],
+                );
+              },
             ),
           ),
           if (prefs.skippedVersion.isNotEmpty) ...[
@@ -704,14 +781,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   Icon(Icons.notifications_off_outlined, size: 15, color: c.meta),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('已跳过 v${prefs.skippedVersion} 的自动弹窗提醒', style: sansStyle(c, size: 12, color: c.muted)),
+                    child: Text(
+                      '已跳过 v${prefs.skippedVersion} 的自动弹窗提醒',
+                      style: sansStyle(c, size: 12, color: c.muted),
+                    ),
                   ),
                   ClaudeButton(
                     label: '恢复提醒',
                     compact: true,
                     variant: ClaudeBtnVariant.ghost,
                     onPressed: () async {
-                      await widget.onUpdatePrefsChanged?.call(prefs.copyWith(skippedVersion: ''));
+                      await widget.onUpdatePrefsChanged
+                          ?.call(prefs.copyWith(skippedVersion: ''));
                       widget.onToast('已恢复所有版本的更新提醒');
                     },
                   ),
@@ -720,6 +801,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
             ),
           ],
           Divider(color: c.hairline, height: 1),
+          // 3. Collapsible Advanced GitHub Mirror Row
           InkWell(
             onTap: () => setState(() => _showMirrorConfig = !_showMirrorConfig),
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
@@ -729,17 +811,27 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 children: [
                   Icon(Icons.bolt_rounded, size: 15, color: c.meta),
                   const SizedBox(width: 8),
-                  Text('GitHub 下载加速镜像', style: sansStyle(c, size: 12.8, color: c.ink)),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      hasMirror ? prefs.mirrorPrefix : '直连 GitHub（可选配置）',
+                      'GitHub 下载加速镜像',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: monoStyle(c, size: 11.5, color: c.meta),
+                      style: sansStyle(c, size: 12.8, color: c.ink),
                     ),
                   ),
-                  Icon(showMirror ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 18, color: c.meta),
+                  const SizedBox(width: 8),
+                  Text(
+                    hasMirror ? '自定义镜像' : '直连',
+                    style: monoStyle(c, size: 11.5, color: hasMirror ? c.clay : c.meta),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    showMirror
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: c.meta,
+                  ),
                 ],
               ),
             ),
@@ -1122,32 +1214,30 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (showDesktopWindowToggle) ...[
-                                _StartupSwitchRow(
-                                  palette: c,
-                                  title: '窗口云母与毛玻璃透光 (Win11 Mica)',
-                                  subtitle:
-                                      '启用 Windows 11 原生 DWM 云母材质背板与半透明侧边栏叠色（支持实时切换）',
-                                  value: _windowEffect,
-                                  onChanged: (v) => _applyStartupToggle(
-                                    windowEffect: v,
-                                    toastMsg: v
-                                        ? '已启用 Win11 云母透光背板'
-                                        : '已切换为纯色纸感背板',
-                                  ),
+                              _StartupSwitchRow(
+                                palette: c,
+                                title: showDesktopWindowToggle
+                                    ? '窗口云母与毛玻璃透光 (Win11 Mica)'
+                                    : '界面毛玻璃与柔光背板',
+                                subtitle: showDesktopWindowToggle
+                                    ? '启用 Windows 11 原生 DWM Mica Alt 云母材质与半透明侧边栏叠色（支持实时切换）'
+                                    : '启用毛玻璃虚化侧栏、悬浮底栏与柔光背景；macOS 同步启用原生窗口虚化',
+                                value: _windowEffect,
+                                onChanged: (v) => _applyStartupToggle(
+                                  windowEffect: v,
+                                  toastMsg: v
+                                      ? (showDesktopWindowToggle
+                                          ? '已启用 Win11 云母透光背板'
+                                          : '已启用界面毛玻璃效果')
+                                      : '已切换为纯色纸感背板',
                                 ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                  child: Divider(color: c.hairline, height: 1),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                ClaudeStaggeredReveal(
-                  index: 2,
-                  child: _buildAppUpdateCard(c),
-                ),
-                if (isAndroidHost) ...[
+                              ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                                child: Divider(color: c.hairline, height: 1),
+                              ),
+                              if (isAndroidHost) ...[
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1298,6 +1388,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                       ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 16),
+                ClaudeStaggeredReveal(
+                  index: 2,
+                  child: _buildAppUpdateCard(c),
                 ),
                 if (isAndroidHost) ...[
                   const SizedBox(height: 16),

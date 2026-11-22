@@ -6,9 +6,9 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Agent MCP Console — Anthropic Editorial Desktop & Web Console">
-  <meta name="theme-color" content="#F5F4ED" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Agent MCP Console — Cross-Device Remote Execution & MCP Control Plane">
+  <meta name="theme-color" content="#FAF9F6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111317" media="(prefers-color-scheme: dark)">
 
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -17,7 +17,6 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Preload lightweight Latin/Mono typography without blocking CJK multi-MB fonts -->
   <link rel="preload" href="assets/assets/fonts/AnthropicSerif-Medium.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="assets/assets/fonts/AnthropicSans-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="assets/assets/fonts/JetBrainsMono-Regular.ttf" as="font" type="font/ttf" crossorigin>
@@ -26,17 +25,27 @@
 
   <style>
     :root {
-      --bg: #F5F4ED;
-      --ink: #141413;
-      --muted: #87867F;
-      --clay: #C96442;
+      --bg: #FAF9F6;
+      --bg-glow-1: rgba(79, 70, 229, 0.08);
+      --bg-glow-2: rgba(99, 102, 241, 0.06);
+      --ink: #121316;
+      --muted: #646873;
+      --accent: #4F46E5;
+      --accent-soft: #6366F1;
+      --track: rgba(79, 70, 229, 0.14);
+      --ring: rgba(79, 70, 229, 0.22);
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #141413;
-        --ink: #FAF9F5;
-        --muted: #828078;
-        --clay: #D97757;
+        --bg: #111317;
+        --bg-glow-1: rgba(99, 102, 241, 0.16);
+        --bg-glow-2: rgba(79, 70, 229, 0.10);
+        --ink: #F4F5F7;
+        --muted: #8E93A0;
+        --accent: #6366F1;
+        --accent-soft: #818CF8;
+        --track: rgba(129, 140, 248, 0.18);
+        --ring: rgba(129, 140, 248, 0.28);
       }
     }
     html, body {
@@ -59,46 +68,61 @@
       align-items: center;
       justify-content: center;
       gap: 16px;
-      background-color: var(--bg);
+      background:
+        radial-gradient(520px 360px at 22% 18%, var(--bg-glow-1), transparent 70%),
+        radial-gradient(480px 340px at 78% 82%, var(--bg-glow-2), transparent 70%),
+        var(--bg);
       transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
       pointer-events: none;
     }
     #mcp-boot.done {
       opacity: 0;
-      transform: scale(1.03);
+      transform: scale(1.025);
     }
-    .mcp-spark-wrap {
+    .mcp-emblem-wrap {
       position: relative;
-      width: 56px;
-      height: 56px;
+      width: 68px;
+      height: 68px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .mcp-spark-halo {
+    .mcp-emblem-ring {
       position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(201, 100, 66, 0.24) 0%, rgba(201, 100, 66, 0) 70%);
-      animation: haloPulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      inset: -6px;
+      border-radius: 24px;
+      border: 1.5px solid var(--ring);
+      background: radial-gradient(circle, rgba(79, 70, 229, 0.18) 0%, rgba(79, 70, 229, 0) 72%);
+      animation: ringPulse 2.0s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .mcp-emblem {
+      position: relative;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #4F46E5 0%, #3730A3 55%, #1E1B4B 100%);
+      box-shadow: 0 12px 28px -8px rgba(67, 56, 202, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: emblemFloat 2.0s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     .mcp-spark {
-      width: 36px;
-      height: 36px;
-      animation: sparkPulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      width: 28px;
+      height: 28px;
     }
     .mcp-boot-label {
-      font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
-      font-size: 17px;
-      font-weight: 500;
-      letter-spacing: 0.015em;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
       color: var(--ink);
     }
     .mcp-boot-bar {
-      width: 180px;
+      width: 176px;
       height: 3.5px;
       border-radius: 999px;
-      background-color: rgba(135, 134, 127, 0.22);
+      background-color: var(--track);
       overflow: hidden;
       position: relative;
     }
@@ -107,22 +131,22 @@
       inset: 0 auto 0 0;
       width: 44%;
       border-radius: 999px;
-      background: linear-gradient(90deg, rgba(201, 100, 66, 0.25), var(--clay), rgba(201, 100, 66, 0.25));
+      background: linear-gradient(90deg, rgba(99, 102, 241, 0.15), var(--accent), var(--accent-soft), rgba(99, 102, 241, 0.15));
       animation: bootSlide 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     .mcp-boot-sub {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 12px;
       color: var(--muted);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.01em;
     }
-    @keyframes sparkPulse {
-      0%, 100% { transform: scale(0.90) rotate(0deg); opacity: 0.82; }
-      50% { transform: scale(1.12) rotate(12deg); opacity: 1; }
+    @keyframes emblemFloat {
+      0%, 100% { transform: translateY(0px) scale(0.98); }
+      50% { transform: translateY(-2.5px) scale(1.02); }
     }
-    @keyframes haloPulse {
-      0%, 100% { transform: scale(0.85); opacity: 0.45; }
-      50% { transform: scale(1.32); opacity: 0.95; }
+    @keyframes ringPulse {
+      0%, 100% { transform: scale(0.92); opacity: 0.45; }
+      50% { transform: scale(1.12); opacity: 0.95; }
     }
     @keyframes bootSlide {
       0% { transform: translateX(-110%); }
@@ -132,11 +156,13 @@
 </head>
 <body>
   <div id="mcp-boot">
-    <div class="mcp-spark-wrap">
-      <div class="mcp-spark-halo"></div>
-      <svg class="mcp-spark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 6L38.2 25.8L58 32L38.2 38.2L32 58L25.8 38.2L6 32L25.8 25.8L32 6Z" fill="var(--clay)"/>
-      </svg>
+    <div class="mcp-emblem-wrap">
+      <div class="mcp-emblem-ring"></div>
+      <div class="mcp-emblem">
+        <svg class="mcp-spark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M32 8L38.4 25.6L56 32L38.4 38.4L32 56L25.6 38.4L8 32L25.6 25.6L32 8Z" fill="#FAF9F6"/>
+        </svg>
+      </div>
     </div>
     <div class="mcp-boot-label">Agent MCP Console</div>
     <div class="mcp-boot-bar"><div class="mcp-boot-bar-fill"></div></div>

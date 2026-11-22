@@ -252,7 +252,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.4.1';
+  String _version = '2.4.2';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -435,7 +435,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.4.1').toString();
+      _version = (auth['version'] ?? '2.4.2').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -950,12 +950,13 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     return ValueListenableBuilder<DesktopWindowState>(
       valueListenable: widget.backend.windowState,
       builder: (ctx, winState, _) {
-        final micaActive =
+        final nativeMica =
             widget.backend.hasCustomTitleBar && winState.windowEffect;
+        final micaActive = winState.windowEffect;
 
         if (_checkingAuth) {
           return Scaffold(
-            backgroundColor: micaActive ? Colors.transparent : c.paper,
+            backgroundColor: nativeMica ? Colors.transparent : c.paper,
             body: Column(
               children: [
                 if (widget.backend.hasCustomTitleBar)
@@ -1358,9 +1359,44 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       },
       child: Scaffold(
       key: const ValueKey('shell'),
-      backgroundColor: micaActive ? Colors.transparent : c.paper,
+      backgroundColor:
+          (widget.backend.hasCustomTitleBar && micaActive) ? Colors.transparent : c.paper,
       body: Stack(
         children: [
+          if (micaActive && !widget.backend.hasCustomTitleBar)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.82, -0.78),
+                      radius: 1.25,
+                      colors: [
+                        c.clay.withValues(alpha: c.isDark ? 0.16 : 0.11),
+                        c.paper.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (micaActive && !widget.backend.hasCustomTitleBar)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0.85, 0.88),
+                      radius: 1.15,
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: c.isDark ? 0.12 : 0.08),
+                        c.paper.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Column(
             children: [
               if (!useFloatingTopBar)
@@ -2227,9 +2263,9 @@ class _MobileGlassBottomNav extends StatelessWidget {
             tintColor: glassTint,
             border: Border.all(color: glassBorder, width: 1.0),
             boxShadow: glassShadow,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
             child: SizedBox(
-              height: 46,
+              height: 54,
               child: LayoutBuilder(
                 builder: (ctx, box) {
                   final slotW = box.maxWidth / items.length;
@@ -2345,8 +2381,8 @@ class _MobileNavCollapseButtonState extends State<_MobileNavCollapseButton> {
                 context,
                 const Duration(milliseconds: 150),
               ),
-              width: 44,
-              height: 44,
+              width: 54,
+              height: 54,
               decoration: ShapeDecoration(
                 color: _hovered
                     ? (c.isDark
@@ -2483,7 +2519,7 @@ class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
         ? c.clay
         : (_hovered ? c.inkSoft : c.muted);
     final labelColor = widget.active
-        ? c.ink
+        ? c.clay
         : (_hovered ? c.inkSoft : c.muted);
 
     return MouseRegion(
@@ -2493,58 +2529,61 @@ class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 3),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(widget.icon, size: 16.0, color: iconColor),
-                const SizedBox(width: 4.0),
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: sansStyle(
-                      c,
-                      size: 11.8,
-                      weight: widget.active ? FontWeight.w600 : FontWeight.w500,
-                      color: labelColor,
-                      height: 1.1,
-                    ),
-                  ),
-                ),
-                if (widget.badge != null) ...[
-                  const SizedBox(width: 5),
-                  DecoratedBox(
-                    decoration: ShapeDecoration(
-                      color: widget.active
-                          ? c.clay
-                          : c.clay.withValues(alpha: 0.14),
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5.5,
-                        vertical: 1,
-                      ),
-                      child: Text(
-                        widget.badge!,
-                        style: monoStyle(
-                          c,
-                          size: 10.5,
-                          color:
-                              widget.active ? const Color(0xFFFAF9F5) : c.clay,
-                          weight: FontWeight.w600,
+        child: SizedBox.expand(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(widget.icon, size: 19.0, color: iconColor),
+                  if (widget.badge != null)
+                    Positioned(
+                      top: -5,
+                      right: -12,
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          color: c.clay,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4.5,
+                            vertical: 0.5,
+                          ),
+                          child: Text(
+                            widget.badge!,
+                            style: monoStyle(
+                              c,
+                              size: 9.0,
+                              weight: FontWeight.w700,
+                              color: Colors.white,
+                              height: 1.15,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
-              ],
-            ),
+              ),
+              const SizedBox(height: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: sansStyle(
+                    c,
+                    size: 10.5,
+                    weight: widget.active ? FontWeight.w600 : FontWeight.w500,
+                    color: labelColor,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
