@@ -319,7 +319,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     variant: ClaudeBtnVariant.clay,
                     leading: const Icon(Icons.add_link_rounded),
                     onPressed:
-                        _enabled ? () => _openCreateDialog(initialMode: 'port') : null,
+                        _enabled ? () => _openCreateDialog(initialMode: 'wizard') : null,
                   ),
                 ],
               ),
@@ -513,97 +513,49 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             ),
             const SizedBox(height: 12),
             ],
-            LayoutBuilder(
-              builder: (ctx, qbox) {
-                final cols = qbox.maxWidth < 520
-                    ? 1
-                    : (qbox.maxWidth < 920 ? 2 : 4);
-                const gap = 10.0;
-                final cardW = (qbox.maxWidth - gap * (cols - 1)) / cols;
-                const modeCards = [
-                  (
-                    'file',
-                    Icons.smart_display_outlined,
-                    '1. 单个文件分享',
-                    '视频流式拖进度条播放，PDF/图片直接看，安装包直下',
-                  ),
-                  (
-                    'folder',
-                    Icons.folder_open_rounded,
-                    '2. 文件夹目录分享',
-                    '展示目录与子文件夹，点击文件无缝进入单文件预览态',
-                  ),
-                  (
-                    'site',
-                    Icons.web_rounded,
-                    '3. 静态网站 / HTML',
-                    '单个 .html 或前端目录直接作为正式网页全屏运行',
-                  ),
-                  (
-                    'port',
-                    Icons.podcasts_rounded,
-                    '4. 端口转发分享',
-                    '把本机 :3000 / :5173 等正在运行的服务实时映射出去',
-                  ),
-                ];
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: gap,
+            if (widget.backend.isAndroidPlatform)
+              ClaudeCard(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+                child: Column(
                   children: [
-                    for (final mc in modeCards)
-                      SizedBox(
-                        width: cardW,
-                        child: ClaudeCard(
-                          hoverable: true,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          onTap: () => _openCreateDialog(initialMode: mc.$1),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      mc.$3,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: sansStyle(
-                                        c,
-                                        size: 13.8,
-                                        weight: FontWeight.w600,
-                                        color: c.ink,
-                                      ),
-                                    ),
-                                  ),
-                                  Icon(mc.$2, size: 17, color: c.clay),
-                                ],
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                mc.$4,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: sansStyle(
-                                  c,
-                                  size: 12,
-                                  color: c.muted,
-                                  height: 1.42,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: ShapeDecoration(
+                        color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
+                        shape: claudeSuperellipse(15),
                       ),
+                      child: Icon(Icons.share_rounded, size: 25, color: c.clay),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '一键生成外网分享链接',
+                      style: sansStyle(c, size: 16, weight: FontWeight.w600, color: c.ink),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '支持单文件预览、文件夹目录、静态网页与本地端口，按向导 2 步完成创建。',
+                      textAlign: TextAlign.center,
+                      style: sansStyle(c, size: 12.5, color: c.muted),
+                    ),
+                    const SizedBox(height: 16),
+                    ClaudeButton(
+                      label: '开始新建分享',
+                      variant: ClaudeBtnVariant.clay,
+                      leading: const Icon(Icons.add_link_rounded),
+                      onPressed: () => _openCreateDialog(initialMode: 'wizard'),
+                    ),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 12),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(
+                  '提示：拖入文件或文件夹可自动识别；也可以点击上方「新建外网分享」按向导选择文件、文件夹或本地端口。',
+                  style: sansStyle(c, size: 12.2, color: c.muted),
+                ),
+              ),
           ],
 
           // Quiet 1-line network readiness strip (borderless tonal surface)
@@ -1252,7 +1204,10 @@ class _CreateExposureDialog extends StatefulWidget {
 }
 
 class _CreateExposureDialogState extends State<_CreateExposureDialog> {
-  late String _mode = widget.initialMode; // 'port' | 'file' | 'folder' | 'site'
+  late String _mode = widget.initialMode == 'wizard' ? 'folder' : widget.initialMode;
+  late bool _inStep1 = widget.initialMode == 'wizard' &&
+      (widget.initialTarget == null || widget.initialTarget!.trim().isEmpty);
+  bool _folderStep = false;
   late final TextEditingController _targetCtrl = TextEditingController(
     text: (widget.initialTarget != null && widget.initialTarget!.trim().isNotEmpty)
         ? widget.initialTarget!.trim()
@@ -1432,6 +1387,109 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                if (_inStep1) ...[
+                  Text(
+                    '第 1 步 · 选择要分享的内容类型',
+                    style: sansStyle(c, size: 13.5, weight: FontWeight.w600, color: c.ink),
+                  ),
+                  const SizedBox(height: 12),
+                  _WizardChoiceCard(
+                    icon: Icons.insert_drive_file_outlined,
+                    title: '单个文件',
+                    subtitle: '视频流式播放、PDF / 图片直接预览、APK 或安装包高速直下',
+                    onTap: () => setState(() {
+                      _mode = 'file';
+                      _folderStep = false;
+                      _inStep1 = false;
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  _WizardChoiceCard(
+                    icon: Icons.folder_open_rounded,
+                    title: '文件夹 / 静态网站',
+                    subtitle: '下一步选择作为「文件夹目录共享」或「静态网站目录」发布',
+                    onTap: () => setState(() {
+                      _mode = 'folder';
+                      _folderStep = true;
+                      _inStep1 = false;
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  _WizardChoiceCard(
+                    icon: Icons.podcasts_rounded,
+                    title: '本地端口转发',
+                    subtitle: '把本机 :3000 / :5173 等 Web 服务与 WebSocket 实时映射出去',
+                    onTap: () => setState(() {
+                      _mode = 'port';
+                      _folderStep = false;
+                      _inStep1 = false;
+                      if (_targetCtrl.text.trim().isEmpty) {
+                        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
+                            ? '${widget.activeLocalPorts.first}'
+                            : '3000';
+                      }
+                    }),
+                  ),
+                ] else ...[
+                  if (_folderStep) ...[
+                    Row(
+                      children: [
+                        ClaudeButton(
+                          label: '更换类型',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
+                          onPressed: () => setState(() => _inStep1 = true),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '第 2 步 · 选择文件夹分享方式',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: sansStyle(c, size: 13, weight: FontWeight.w600, color: c.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _FolderKindChip(
+                            icon: Icons.folder_shared_outlined,
+                            title: '文件夹目录共享',
+                            subtitle: '列表浏览与文件下载',
+                            active: _mode == 'folder',
+                            onTap: () => setState(() => _mode = 'folder'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _FolderKindChip(
+                            icon: Icons.web_rounded,
+                            title: '静态网站目录',
+                            subtitle: '直接作为网页运行',
+                            active: _mode == 'site',
+                            onTap: () => setState(() => _mode = 'site'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ] else if (widget.initialMode == 'wizard') ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClaudeButton(
+                        label: '更换分享类型',
+                        compact: true,
+                        variant: ClaudeBtnVariant.ghost,
+                        leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
+                        onPressed: () => setState(() => _inStep1 = true),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 Text(
                   '选择打开形态',
                   style: sansStyle(
@@ -1652,6 +1710,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                     style: sansStyle(c, size: 12.2, color: c.clay),
                   ),
                 ],
+                ],
                 const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -1663,15 +1722,17 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                       onPressed:
                           _submitting ? null : () => Navigator.of(context).pop(),
                     ),
-                    const SizedBox(width: 8),
-                    ClaudeButton(
-                      label: _submitting ? '正在生成链接...' : '生成分享链接',
-                      compact: true,
-                      loading: _submitting,
-                      variant: ClaudeBtnVariant.clay,
-                      leading: const Icon(Icons.link_rounded),
-                      onPressed: _submit,
-                    ),
+                    if (!_inStep1) ...[
+                      const SizedBox(width: 8),
+                      ClaudeButton(
+                        label: _submitting ? '正在生成链接...' : '生成分享链接',
+                        compact: true,
+                        loading: _submitting,
+                        variant: ClaudeBtnVariant.clay,
+                        leading: const Icon(Icons.link_rounded),
+                        onPressed: _submit,
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -2254,4 +2315,156 @@ class _DashedRRectPainter extends CustomPainter {
       oldDelegate.color != color ||
       oldDelegate.radius != radius ||
       oldDelegate.strokeWidth != strokeWidth;
+}
+
+
+class _WizardChoiceCard extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _WizardChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  State<_WizardChoiceCard> createState() => _WizardChoiceCardState();
+}
+
+class _WizardChoiceCardState extends State<_WizardChoiceCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: ShapeDecoration(
+            color: _hovered
+                ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.06)
+                : c.recessed,
+            shape: claudeSuperellipse(
+              14,
+              side: BorderSide(
+                color: _hovered ? c.clay.withValues(alpha: 0.45) : c.hairline,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: ShapeDecoration(
+                  color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.11),
+                  shape: claudeSuperellipse(11),
+                ),
+                child: Icon(widget.icon, size: 20, color: c.clay),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: sansStyle(c, size: 14.2, weight: FontWeight.w600, color: c.ink),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.subtitle,
+                      style: sansStyle(c, size: 12, color: c.muted),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 20, color: c.meta),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderKindChip extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _FolderKindChip({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: ShapeDecoration(
+          color: active
+              ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.10)
+              : c.recessed,
+          shape: claudeSuperellipse(
+            12,
+            side: BorderSide(
+              color: active ? c.clay : c.hairline,
+              width: active ? 1.4 : 1.0,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: active ? c.clay : c.muted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: sansStyle(
+                      c,
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: active ? c.clay : c.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: sansStyle(c, size: 11.2, color: c.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

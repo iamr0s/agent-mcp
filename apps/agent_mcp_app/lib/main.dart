@@ -295,7 +295,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.4.6';
+  String _version = '2.5.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -478,7 +478,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.4.6').toString();
+      _version = (auth['version'] ?? '2.5.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1328,8 +1328,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     );
     // Floating immersive header on Android & Web so scrolling content invades
     // right behind the frosted glass header, status bar, and camera cutout!
-    final useFloatingTopBar = !widget.backend.hasCustomTitleBar;
-    final hideTopOnScroll = isMobile || useFloatingTopBar;
+    final useFloatingTopBar = true;
+    final hideTopOnScroll = true;
     final showTopChrome = !hideTopOnScroll || _chromeVisible;
     final pageTopInset = useFloatingTopBar
         ? (46.0 + safeTop + (isMobile ? 14.0 : 22.0))
@@ -1427,10 +1427,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
-                      center: const Alignment(-0.82, -0.78),
-                      radius: 1.25,
+                      center: const Alignment(-0.85, -0.82),
+                      radius: 1.15,
                       colors: [
-                        c.clay.withValues(alpha: c.isDark ? 0.16 : 0.11),
+                        c.clay.withValues(alpha: c.isDark ? 0.30 : 0.22),
                         c.paper.withValues(alpha: 0.0),
                       ],
                     ),
@@ -1444,10 +1444,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
-                      center: const Alignment(0.85, 0.88),
-                      radius: 1.15,
+                      center: const Alignment(0.88, 0.85),
+                      radius: 1.10,
                       colors: [
-                        const Color(0xFF6366F1).withValues(alpha: c.isDark ? 0.12 : 0.08),
+                        const Color(0xFF0EA5E9).withValues(alpha: c.isDark ? 0.22 : 0.16),
                         c.paper.withValues(alpha: 0.0),
                       ],
                     ),
@@ -1705,8 +1705,23 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         },
                       ),
                     Expanded(
-                      child: ColoredBox(
-                        color: micaActive ? c.micaCanvasTint : c.paper,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: !micaActive
+                              ? c.paper
+                              : (widget.backend.hasCustomTitleBar
+                                  ? c.micaCanvasTint
+                                  : Colors.transparent),
+                          borderRadius: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
+                              ? const BorderRadius.only(topLeft: Radius.circular(14))
+                              : null,
+                          border: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
+                              ? Border(
+                                  top: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
+                                  left: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
+                                )
+                              : null,
+                        ),
                         child: Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 1280),
@@ -1862,6 +1877,21 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     ),
                   ),
                 ),
+              ),
+            ),
+          if (useFloatingTopBar && !showTopChrome)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 12,
+              child: MouseRegion(
+                opaque: false,
+                onEnter: (_) {
+                  if (!_chromeVisible && mounted) {
+                    setState(() => _chromeVisible = true);
+                  }
+                },
               ),
             ),
           if (useFloatingTopBar)
@@ -2316,9 +2346,9 @@ class _MobileGlassBottomNav extends StatelessWidget {
       children: [
         Expanded(
           child: ClaudeGlassBar(
-            blurSigma: 26,
+            blurSigma: micaActive ? 26 : 0,
             borderRadius: 999,
-            tintColor: glassTint,
+            tintColor: micaActive ? glassTint : c.paper2,
             border: Border.all(color: glassBorder, width: 1.0),
             boxShadow: glassShadow,
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
@@ -2381,9 +2411,9 @@ class _MobileGlassBottomNav extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         ClaudeGlassBar(
-          blurSigma: 26,
+          blurSigma: micaActive ? 26 : 0,
           borderRadius: 999,
-          tintColor: glassTint,
+          tintColor: micaActive ? glassTint : c.paper2,
           border: Border.all(color: glassBorder, width: 1.0),
           boxShadow: glassShadow,
           padding: const EdgeInsets.all(4),

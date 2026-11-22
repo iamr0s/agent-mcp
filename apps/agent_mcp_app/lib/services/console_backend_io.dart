@@ -683,7 +683,10 @@ class _IoConsoleBackend extends ConsoleBackend {
 
   @override
   Future<bool> setWindowEffect(bool enabled) async {
-    if (!Platform.isWindows) return false;
+    if (!Platform.isWindows) {
+      _windowState.value = _windowState.value.copyWith(windowEffect: enabled);
+      return enabled;
+    }
     try {
       final applied =
           await _winChannel.invokeMethod<bool>('setWindowEffect', enabled) ??
@@ -815,7 +818,7 @@ class _IoConsoleBackend extends ConsoleBackend {
       return _guardRemote((c) => c.saveConfig(patch));
     }
     saveUpdatedConfigMap(_ctrl.configFile, patch);
-    if (patch.containsKey('window_effect') && Platform.isWindows) {
+    if (patch.containsKey('window_effect')) {
       await setWindowEffect(patch['window_effect'] != false);
     }
     if (patch.containsKey('server_name') && Platform.isWindows) {

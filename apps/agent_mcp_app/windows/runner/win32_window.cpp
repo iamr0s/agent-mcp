@@ -895,9 +895,16 @@ void Win32Window::ApplyFramelessStyle() {
 
   if (IsWindows11BackdropAvailable()) {
     if (use_mica) {
-      const int tabbed = kDwmBackdropTabbed;
+      // Prefer Win11 Native Acrylic (DWMSBT_TRANSIENTWINDOW = 3) for true real-time frosted glass
+      // on the top titlebar & left sidebar; gracefully fall back to Mica Alt / Mica if unsupported.
+      const int acrylic = kDwmBackdropTransient;
       HRESULT hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                                         &tabbed, sizeof(tabbed));
+                                         &acrylic, sizeof(acrylic));
+      if (FAILED(hr)) {
+        const int tabbed = kDwmBackdropTabbed;
+        hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
+                                   &tabbed, sizeof(tabbed));
+      }
       if (FAILED(hr)) {
         const int mica = kDwmBackdropMica;
         DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,

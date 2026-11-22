@@ -93,6 +93,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   bool _showMirrorConfig = false;
   String? _cleaningTarget;
   String _setupSection = 'basic';
+  bool _mobileInDetail = false;
   final Set<String> _togglingTunnels = <String>{};
 
   String _lastSyncedKey = '';
@@ -886,54 +887,48 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     final showExpose = _setupSection == 'expose' || _setupSection == 'all';
     final showSecurity = _setupSection == 'security' || _setupSection == 'all';
 
-    return SingleChildScrollView(
-      controller: _scrollCtrl,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.only(
-        top: widget.topPadding,
-        right: 2,
-        bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 42) + widget.extraBottomPadding,
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isWideDesktop = screenW >= 820;
+    final bottomPad = (screenW < 700 ? 124.0 : 42.0) + widget.extraBottomPadding;
+    final curPort = _portCtrl.text.trim().isEmpty ? '8000' : _portCtrl.text.trim();
+    final curVer = widget.backend.currentAppVersion;
+    final hasUpdate = widget.latestUpdate != null &&
+        compareSemVer(widget.latestUpdate!.version, curVer) > 0;
+    final navCategories = <(String, IconData, String, String, bool)>[
+      (
+        'basic',
+        Icons.tune_rounded,
+        _basicDirty ? '基础与外观 ●' : '基础与外观',
+        '端口 :$curPort · v$curVer${hasUpdate ? ' · 有新版本' : ''}',
+        hasUpdate || _basicDirty,
       ),
-      child: Column(
+      (
+        'profiles',
+        Icons.hub_outlined,
+        '接入入口 (${profs.length})',
+        '管理 MCP 多入口配置与根目录权限',
+        false,
+      ),
+      (
+        'expose',
+        Icons.public_rounded,
+        '外网与隧道',
+        'Tailscale 网卡、外网分享开关与公网隧道',
+        false,
+      ),
+      (
+        'security',
+        Icons.shield_outlined,
+        _permDirty ? '权限与维护 ●' : '权限与维护',
+        '安全权限策略、运行日志与本地缓存清理',
+        _permDirty,
+      ),
+    ];
+
+    Widget buildCategoryDetailContent() {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ClaudeStaggeredReveal(
-            index: 0,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 10,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('服务配置', style: serifTitleStyle(c, size: 25)),
-                    const SizedBox(height: 2),
-                    Text(
-                      '按分组收纳基础监听、接入入口、外网联动与安全权限，也可一键展开全部。',
-                      style: sansStyle(c, size: 12.5, color: c.muted),
-                    ),
-                  ],
-                ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ClaudeSegmented<String>(
-                    value: _setupSection,
-                    items: [
-                      ('basic', _basicDirty ? '基础与外观 ●' : '基础与外观'),
-                      ('profiles', '接入入口 (${profs.length})'),
-                      ('expose', '外网与隧道'),
-                      ('security', _permDirty ? '权限与维护 ●' : '权限与维护'),
-                      ('all', '全部展开'),
-                    ],
-                    onChanged: (next) => setState(() => _setupSection = next),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           if (showBasic) ...[
                 ClaudeStaggeredReveal(
                   index: 1,
@@ -1635,9 +1630,263 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   ),
                 ),
           ],
-              ],
+        ],
+      );
+    }
+
+    // 1. Desktop Wide Screen (>= 820px): FlClash / macOS System Settings 2-Pane Master-Detail
+    if (isWideDesktop) {
+      return Padding(
+        padding: EdgeInsets.only(top: widget.topPadding),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 214,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(right: 16, bottom: bottomPad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('服务配置', style: serifTitleStyle(c, size: 22)),
+                          const SizedBox(height: 2),
+                          Text(
+                            '按分类快速管理各项参数',
+                            style: sansStyle(c, size: 12, color: c.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    for (final item in navCategories)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _SetupNavTile(
+                          icon: item.$2,
+                          title: item.$3,
+                          badgeDot: item.$5,
+                          active: _setupSection == item.$1,
+                          onTap: () => setState(() => _setupSection = item.$1),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(color: c.hairline, height: 1),
+                    ),
+                    _SetupNavTile(
+                      icon: Icons.view_agenda_outlined,
+                      title: '全部展开',
+                      badgeDot: false,
+                      active: _setupSection == 'all',
+                      onTap: () => setState(() => _setupSection = 'all'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          );
+            Container(width: 1, color: c.hairline.withValues(alpha: 0.55)),
+            const SizedBox(width: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollCtrl,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(right: 2, bottom: bottomPad),
+                child: buildCategoryDetailContent(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. Mobile / Narrow Screen (< 820px): Level-1 Category List -> Level-2 Detail Page
+    if (!_mobileInDetail) {
+      return SingleChildScrollView(
+        controller: _scrollCtrl,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(
+          top: widget.topPadding,
+          right: 2,
+          bottom: bottomPad,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClaudeStaggeredReveal(
+              index: 0,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('服务配置', style: serifTitleStyle(c, size: 24)),
+                  const SizedBox(height: 3),
+                  Text(
+                    '轻点下方分组进入对应设置项，界面更专注清爽。',
+                    style: sansStyle(c, size: 12.5, color: c.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            ClaudeCard(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                children: [
+                  for (var i = 0; i < navCategories.length; i++) ...[
+                    if (i > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 62, right: 16),
+                        child: Divider(color: c.hairline, height: 1),
+                      ),
+                    InkWell(
+                      onTap: () => setState(() {
+                        _setupSection = navCategories[i].$1;
+                        _mobileInDetail = true;
+                      }),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: ShapeDecoration(
+                                color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10),
+                                shape: claudeSuperellipse(11),
+                              ),
+                              child: Icon(
+                                navCategories[i].$2,
+                                size: 19,
+                                color: c.clay,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          navCategories[i].$3,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: sansStyle(
+                                            c,
+                                            size: 14.5,
+                                            weight: FontWeight.w600,
+                                            color: c.ink,
+                                          ),
+                                        ),
+                                      ),
+                                      if (navCategories[i].$5) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: BoxDecoration(
+                                            color: c.clay,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    navCategories[i].$4,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: sansStyle(
+                                      c,
+                                      size: 12,
+                                      color: c.muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: c.meta,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (isAndroidHost) ...[
+              const SizedBox(height: 14),
+              AndroidPrivilegeCard(
+                backend: widget.backend,
+                config: widget.config,
+                onRefreshStatus: widget.onRefreshStatus,
+                onToast: widget.onToast,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Mobile Level-2 Detail Page with crisp back bar
+    final currentCatTitle = navCategories
+        .where((e) => e.$1 == _setupSection)
+        .map((e) => e.$3)
+        .firstOrNull ?? '全部配置';
+    return SingleChildScrollView(
+      controller: _scrollCtrl,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(
+        top: widget.topPadding,
+        right: 2,
+        bottom: bottomPad,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ClaudeButton(
+                label: '返回服务配置',
+                compact: true,
+                variant: ClaudeBtnVariant.ghost,
+                leading: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
+                onPressed: () => setState(() => _mobileInDetail = false),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  currentCatTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: sansStyle(
+                    c,
+                    size: 16,
+                    weight: FontWeight.w600,
+                    color: c.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          buildCategoryDetailContent(),
+        ],
+      ),
+    );
   }
 
   Widget _buildProfileItem(
@@ -2485,3 +2734,85 @@ class _StartupSwitchRow extends StatelessWidget {
   }
 }
 
+
+
+class _SetupNavTile extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final bool active;
+  final bool badgeDot;
+  final VoidCallback onTap;
+
+  const _SetupNavTile({
+    required this.icon,
+    required this.title,
+    required this.active,
+    required this.badgeDot,
+    required this.onTap,
+  });
+
+  @override
+  State<_SetupNavTile> createState() => _SetupNavTileState();
+}
+
+class _SetupNavTileState extends State<_SetupNavTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final bg = widget.active
+        ? c.clay.withValues(alpha: c.isDark ? 0.20 : 0.11)
+        : (_hovered
+            ? (c.isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.04))
+            : Colors.transparent);
+    final fg = widget.active ? c.clay : (_hovered ? c.ink : c.inkSoft);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
+          decoration: ShapeDecoration(
+            color: bg,
+            shape: claudeSuperellipse(11),
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 17, color: fg),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: sansStyle(
+                    c,
+                    size: 13.2,
+                    weight: widget.active ? FontWeight.w600 : FontWeight.w500,
+                    color: fg,
+                  ),
+                ),
+              ),
+              if (widget.badgeDot)
+                Container(
+                  width: 6.5,
+                  height: 6.5,
+                  decoration: BoxDecoration(
+                    color: c.clay,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

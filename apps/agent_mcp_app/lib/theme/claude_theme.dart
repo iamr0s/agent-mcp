@@ -271,15 +271,16 @@ class ClaudePalette {
       ? const Color(0xC813151A) // 78% obsidian glass
       : const Color(0xD4EFF2F6); // 83% architectural mist
 
-  /// Translucent sidebar tint when Windows 11 Mica backdrop is active.
+  /// Whisper-light translucent chrome tint so Win11 Native Acrylic frosted glass
+  /// shines unmistakably through the top titlebar & left vertical sidebar.
   Color get micaSidebarTint => isDark
-      ? const Color(0x3C13151A) // 24% translucent obsidian over real Win11 Mica
-      : const Color(0x34EFF2F6); // 20% translucent mist over real Win11 Mica
+      ? const Color(0x2213151A) // ~13% whisper obsidian over Win11 Acrylic
+      : const Color(0x18FFFFFF); // ~9% whisper frost over Win11 Acrylic
 
-  /// Translucent main reading pane tint over Mica (visible wallpaper glow + crisp text).
+  /// Crisp high-contrast main reading pane over Acrylic chrome (Windows 11 Settings / Fluent style).
   Color get micaCanvasTint => isDark
-      ? const Color(0xC2181A20) // 76% translucent obsidian
-      : const Color(0xC6FAF9F6); // 78% translucent ivory
+      ? const Color(0xF0181A20) // ~94% crisp obsidian canvas
+      : const Color(0xF4FAF9F6); // ~96% crisp paper canvas
 
   /// Specular 1px top/inner highlight on frosted glass surfaces.
   Color get glassSpecular => isDark
@@ -2567,6 +2568,137 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// Industry-standard horizontal scroll container with edge-fade affordance & desktop chevron controls
+/// so users immediately recognize horizontally scrollable controls.
+class ClaudeScrollHintRow extends StatefulWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  const ClaudeScrollHintRow({
+    super.key,
+    required this.child,
+    this.padding,
+  });
+
+  @override
+  State<ClaudeScrollHintRow> createState() => _ClaudeScrollHintRowState();
+}
+
+class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
+  final ScrollController _ctrl = ScrollController();
+  bool _canLeft = false;
+  bool _canRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_syncHints);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncHints());
+  }
+
+  @override
+  void dispose() {
+    _ctrl.removeListener(_syncHints);
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _syncHints() {
+    if (!mounted || !_ctrl.hasClients) return;
+    final pos = _ctrl.position;
+    final left = pos.pixels > 4;
+    final right = pos.pixels < pos.maxScrollExtent - 4;
+    if (left != _canLeft || right != _canRight) {
+      setState(() {
+        _canLeft = left;
+        _canRight = right;
+      });
+    }
+  }
+
+  void _nudge(double delta) {
+    if (!_ctrl.hasClients) return;
+    final target = (_ctrl.offset + delta).clamp(0.0, _ctrl.position.maxScrollExtent);
+    _ctrl.animateTo(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (_) {
+        _syncHints();
+        return false;
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SingleChildScrollView(
+            controller: _ctrl,
+            scrollDirection: Axis.horizontal,
+            padding: widget.padding,
+            child: widget.child,
+          ),
+          if (_canLeft)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () => _nudge(-140),
+                    child: Container(
+                      width: 26,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            c.paper.withValues(alpha: 0.96),
+                            c.paper.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: Icon(Icons.chevron_left_rounded, size: 16, color: c.muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_canRight)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                onTap: () => _nudge(140),
+                child: Container(
+                  width: 30,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        c.paper.withValues(alpha: 0.0),
+                        c.paper.withValues(alpha: 0.96),
+                      ],
+                    ),
+                  ),
+                  alignment: Alignment.centerRight,
+                  child: Icon(Icons.chevron_right_rounded, size: 16, color: c.clay),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -505,6 +505,10 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 450));
       expect(tester.takeException(), isNull);
+      if (vp.width < 820) {
+        await tester.tap(find.text('基础与外观'));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
       expect(find.textContaining('窗口云母与毛玻璃透光'), findsOneWidget);
     });
   }
@@ -763,10 +767,13 @@ void main() {
     await tester.tap(find.text('新建外网分享'));
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('新建外网映射与分享'), findsOneWidget);
-    expect(find.text('本地网站端口'), findsOneWidget);
-    expect(find.text('单个视频 / 文件'), findsOneWidget);
-    expect(find.text('文件夹目录'), findsOneWidget);
-    expect(find.text('静态网站 / HTML'), findsOneWidget);
+    expect(find.text('单个文件'), findsWidgets);
+    expect(find.text('文件夹 / 静态网站'), findsOneWidget);
+    expect(find.text('本地端口转发'), findsOneWidget);
+    await tester.tap(find.text('文件夹 / 静态网站'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('文件夹目录共享'), findsOneWidget);
+    expect(find.text('静态网站目录'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -955,16 +962,16 @@ void main() {
       equals('https://gh-proxy.com/https://github.com/iamr0s/agent-mcp/releases/latest/download/version.json'),
     );
     final parsed = UpdateInfo.tryParseVersionJson({
-      'version': '2.5.0',
-      'tag': 'v2.5.0',
+      'version': '2.9.0',
+      'tag': 'v2.9.0',
       'build': 7,
       'published_at': '2026-11-22T12:00:00Z',
-      'release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v2.5.0',
+      'release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v2.9.0',
       'notes': '- 新增自动更新与智能安装器',
       'assets': {
         'windows_sfx': {
-          'name': 'AgentMCP-v2.5.0-windows-x64-sfx.exe',
-          'url': 'https://github.com/iamr0s/agent-mcp/releases/download/v2.5.0/AgentMCP-v2.5.0-windows-x64-sfx.exe',
+          'name': 'AgentMCP-v2.9.0-windows-x64-sfx.exe',
+          'url': 'https://github.com/iamr0s/agent-mcp/releases/download/v2.9.0/AgentMCP-v2.9.0-windows-x64-sfx.exe',
           'sha256': 'deadbeef',
           'size': 49000000,
         },
@@ -997,16 +1004,16 @@ void main() {
 
     await tester.tap(find.text('不再提醒本次更新'));
     await tester.pump(const Duration(milliseconds: 350));
-    expect(backend.updatePrefs.skippedVersion, equals('2.5.0'));
+    expect(backend.updatePrefs.skippedVersion, equals('2.9.0'));
 
-    expect(find.text('新版本 v2.5.0'), findsOneWidget);
-    await tester.tap(find.text('新版本 v2.5.0'));
+    expect(find.text('新版本 v2.9.0'), findsOneWidget);
+    await tester.tap(find.text('新版本 v2.9.0'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.text('一键升级'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(backend.launchedInstallerPath, contains('AgentMCP-v2.5.0-windows-x64-sfx.exe'));
+    expect(backend.launchedInstallerPath, contains('AgentMCP-v2.9.0-windows-x64-sfx.exe'));
     expect(backend.launchedInstallerAfter, equals('gui'));
     expect(backend.launchedInstallerSilent, isFalse);
     expect(tester.takeException(), isNull);
