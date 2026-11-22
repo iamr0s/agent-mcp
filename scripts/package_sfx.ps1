@@ -1,6 +1,6 @@
 param(
     [switch]$SkipBuild,
-    [string]$Version = "2.5.1"
+    [string]$Version = "2.5.2"
 )
 
 $ErrorActionPreference = "Stop"
@@ -108,7 +108,7 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Agent MCP Smart Setup")]
 [assembly: AssemblyProduct("Agent MCP Console")]
-[assembly: AssemblyVersion("2.5.1.0")]
+[assembly: AssemblyVersion("2.5.2.0")]
 
 namespace AgentMcpSfx {
     internal sealed class InstallOptions {
@@ -763,8 +763,8 @@ namespace AgentMcpSfx {
 }
 '@
 
-$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "2.5.1.0" }
-$renderedCs = $csSource.Replace('AssemblyVersion("2.5.1.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
+$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "2.5.2.0" }
+$renderedCs = $csSource.Replace('AssemblyVersion("2.5.2.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
 [System.IO.File]::WriteAllText($csFile, $renderedCs, (New-Object System.Text.UTF8Encoding($true)))
 if (Test-Path $sfxOutPath) { Remove-Item -Force $sfxOutPath }
 

@@ -51,25 +51,14 @@ struct WindowCompositionAttribData {
 
 using SetWindowCompositionAttributeFn = BOOL(WINAPI*)(HWND, WindowCompositionAttribData*);
 
-void ApplyWin32AcrylicAccent(HWND hwnd, bool enabled, bool is_dark) {
+void SetWin32AccentPolicy(HWND hwnd, int accent_state, DWORD gradient_color) {
   if (!hwnd) return;
   HMODULE user32 = GetModuleHandleW(L"user32.dll");
   if (!user32) return;
   auto set_wca = reinterpret_cast<SetWindowCompositionAttributeFn>(
       GetProcAddress(user32, "SetWindowCompositionAttribute"));
   if (!set_wca) return;
-  AccentPolicy policy{};
-  if (enabled) {
-    // ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, AccentFlags = 2 (draw all borders)
-    // ABGR format: 0xAABBGGRR — rich frosted glass that clearly blurs windows & wallpaper behind
-    policy.accent_state = 4;
-    policy.accent_flags = 2;
-    policy.gradient_color = is_dark ? 0xB416100Eu : 0x99F8F5F4u;
-  } else {
-    policy.accent_state = 0;  // ACCENT_DISABLED
-    policy.accent_flags = 0;
-    policy.gradient_color = 0;
-  }
+  AccentPolicy policy{accent_state, 2, gradient_color, 0};
   WindowCompositionAttribData data{19, &policy, sizeof(policy)};
   set_wca(hwnd, &data);
 }
@@ -931,41 +920,50 @@ void Win32Window::ApplyFramelessStyle() {
     }
   }
 
+  // Exact flutter_acrylic Win11 Acrylic pipeline:
+  // 1) ALWAYS reset ACCENT_DISABLED first so WCA never conflicts with DWMWA_SYSTEMBACKDROP_TYPE (which causes solid grey!)
+  SetWin32AccentPolicy(window_handle_, 0, 0);
+
   if (IsWindows11BackdropAvailable()) {
     if (use_mica) {
-      // Prefer Win11 Native Acrylic (DWMSBT_TRANSIENTWINDOW = 3) for true real-time frosted glass
-      // on the top titlebar & left sidebar; gracefully fall back to Mica Alt / Mica if unsupported.
+      // 2) Extend glass sheet across entire client area FIRST
+      MARGINS margins{-1, -1, -1, -1};
+      DwmExtendFrameIntoClientArea(window_handle_, &margins);
+      // 3) Sync dark mode + clear native caption color (DWMWA_CAPTION_COLOR = 35, COLOR_NONE = 0xFFFFFFFE)
+      BOOL dark_bool = is_dark_mode_ ? TRUE : FALSE;
+      DwmSetWindowAttribute(window_handle_, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                            &dark_bool, sizeof(dark_bool));
+      COLORREF color_none = 0xFFFFFFFE;
+      DwmSetWindowAttribute(window_handle_, 35, &color_none, sizeof(color_none));
+      // 4) Enable Win11 Native Acrylic (DWMSBT_TRANSIENTWINDOW = 3)
       const int acrylic = kDwmBackdropTransient;
       HRESULT hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
                                          &acrylic, sizeof(acrylic));
       if (FAILED(hr)) {
         const int tabbed = kDwmBackdropTabbed;
-        hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                                   &tabbed, sizeof(tabbed));
-      }
-      if (FAILED(hr)) {
-        const int mica = kDwmBackdropMica;
         DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                              &mica, sizeof(mica));
+                              &tabbed, sizeof(tabbed));
       }
     } else {
+      MARGINS margins{0, 0, 0, 0};
+      DwmExtendFrameIntoClientArea(window_handle_, &margins);
       const int none = kDwmBackdropNone;
       DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
                             &none, sizeof(none));
     }
+  } else if (use_mica) {
+    // Windows 10 / Early Win11 fallback via SetWindowCompositionAttribute Acrylic
+    MARGINS margins{-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(window_handle_, &margins);
+    SetWin32AccentPolicy(window_handle_, 4, is_dark_mode_ ? 0xB416100Eu : 0x99F8F5F4u);
+  } else {
+    MARGINS margins{0, 0, 0, 0};
+    if (!IsWindows11OrGreater()) {
+      const RECT frame = ComputeFrameInsets(window_handle_, WS_OVERLAPPEDWINDOW, 0);
+      margins.cyTopHeight = -frame.top;
+    }
+    DwmExtendFrameIntoClientArea(window_handle_, &margins);
   }
-
-  ApplyWin32AcrylicAccent(window_handle_, use_mica, is_dark_mode_);
-
-  MARGINS margins{0, 0, 0, 0};
-  if (use_mica) {
-    margins = {-1, -1, -1, -1};
-  } else if (!IsWindows11OrGreater()) {
-    const RECT frame =
-        ComputeFrameInsets(window_handle_, WS_OVERLAPPEDWINDOW, 0);
-    margins.cyTopHeight = -frame.top;
-  }
-  DwmExtendFrameIntoClientArea(window_handle_, &margins);
   UpdateCornerPreference();
 
   SetWindowPos(window_handle_, nullptr, 0, 0, 0, 0,
@@ -1016,7 +1014,7 @@ void Win32Window::SetDarkTheme(bool is_dark) {
                           sizeof(border_col));
   }
   if (IsBackdropEffectEnabled()) {
-    ApplyWin32AcrylicAccent(window_handle_, true, is_dark_mode_);
+    ApplyFramelessStyle();
   } else {
     InvalidateRect(window_handle_, nullptr, TRUE);
   }

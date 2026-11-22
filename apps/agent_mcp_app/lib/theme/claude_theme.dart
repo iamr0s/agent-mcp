@@ -132,54 +132,54 @@ class ClaudePalette {
 
   static const light = ClaudePalette(
     isDark: false,
-    paper: Color(0xFFFAF9F6), // Quiet warm off-white canvas
-    paper2: Color(0xFFFFFFFF), // Crisp pure-white elevated surface
-    paper3: Color(0xFFECEEF5), // Subtle indigo-mist interactive fill
-    sidebar: Color(0xFFEFF2F6), // Cool architectural mist sidebar
-    recessed: Color(0xFFF3F4F7), // Clean recessed well
-    ink: Color(0xFF13161C), // Deep Swiss slate ink
-    inkSoft: Color(0xFF3A404D), // Soft slate body
-    muted: Color(0xFF636B78), // Balanced secondary text
-    meta: Color(0xFF858D9B), // Tertiary metadata
-    hairline: Color(0xFFE4E6EB), // Crisp 1px hairline
-    ringHover: Color(0xFFC9CED8), // Subtle hover ring
-    clay: Color(0xFF4338CA), // Restrained indigo-slate primary accent
-    clayHover: Color(0xFF3730A3),
+    paper: Color(0xFFF6F7FB), // High-clarity porcelain canvas
+    paper2: Color(0xFFFFFFFF), // Pure elevated card surface
+    paper3: Color(0xFFEEF1F7), // Soft slate interactive fill
+    sidebar: Color(0xFFECEFF6), // Cool frosted-slate rail
+    recessed: Color(0xFFF2F4F9), // Subtle recessed well
+    ink: Color(0xFF0F172A), // Razor-crisp deep slate ink
+    inkSoft: Color(0xFF334155), // Balanced slate body
+    muted: Color(0xFF64748B), // Calm secondary text
+    meta: Color(0xFF94A3B8), // Subtle metadata
+    hairline: Color(0xFFE2E6F0), // Refined 1px border
+    ringHover: Color(0xFFCBD5E1), // Crisp hover ring
+    clay: Color(0xFF4F46E5), // Surgical Indigo primary accent
+    clayHover: Color(0xFF4338CA),
     focusRing: Color(0xFF4F46E5),
-    sage: Color(0xFF168A45),
-    sageBg: Color(0x1A168A45),
-    danger: Color(0xFFDC2626), // Crisp crimson
-    dangerBg: Color(0x18DC2626),
-    purple: Color(0xFF5B4FD9),
-    purpleBg: Color(0x1C5B4FD9),
-    termBg: Color(0xFF13151A),
-    termFg: Color(0xFFECEFF4),
+    sage: Color(0xFF10B981),
+    sageBg: Color(0x1810B981),
+    danger: Color(0xFFEF4444),
+    dangerBg: Color(0x16EF4444),
+    purple: Color(0xFF6366F1),
+    purpleBg: Color(0x166366F1),
+    termBg: Color(0xFF0B0D12),
+    termFg: Color(0xFFE2E8F0),
   );
 
   static const dark = ClaudePalette(
     isDark: true,
-    paper: Color(0xFF181A20), // Deep obsidian canvas
-    paper2: Color(0xFF1F222A), // Elevated obsidian surface
-    paper3: Color(0xFF262A36), // Interactive surface
-    sidebar: Color(0xFF13151A), // Recessed dark rail
-    recessed: Color(0xFF14161C), // Recessed well
-    ink: Color(0xFFF3F4F6), // Cool white ink
-    inkSoft: Color(0xFFC7CDD8),
-    muted: Color(0xFF939CAE), // Calm slate silver
-    meta: Color(0xFF727B8E),
-    hairline: Color(0xFF2A2E39), // 1px specular hairline
-    ringHover: Color(0xFF3E4454),
-    clay: Color(0xFF818CF8), // Luminous soft indigo accent
-    clayHover: Color(0xFF939DFA),
+    paper: Color(0xFF0C0E14), // Raycast deep blue-shifted obsidian
+    paper2: Color(0xFF141720), // Machined elevated obsidian card
+    paper3: Color(0xFF1C202E), // Interactive obsidian surface
+    sidebar: Color(0xFF090B10), // Deep recessed chrome rail
+    recessed: Color(0xFF10131C), // Subtle recessed well
+    ink: Color(0xFFF8FAFC), // Crisp luminous white ink
+    inkSoft: Color(0xFFCBD5E1),
+    muted: Color(0xFF8B95A8), // Airy slate silver
+    meta: Color(0xFF647084),
+    hairline: Color(0xFF222736), // Specular obsidian hairline
+    ringHover: Color(0xFF353D54),
+    clay: Color(0xFF6366F1), // Luminous Indigo punctuation
+    clayHover: Color(0xFF818CF8),
     focusRing: Color(0xFF818CF8),
-    sage: Color(0xFF22C55E),
-    sageBg: Color(0x2422C55E),
+    sage: Color(0xFF34D399),
+    sageBg: Color(0x2234D399),
     danger: Color(0xFFF87171),
-    dangerBg: Color(0x24F87171),
+    dangerBg: Color(0x22F87171),
     purple: Color(0xFFA5B4FC),
-    purpleBg: Color(0x26818CF8),
-    termBg: Color(0xFF0F1116),
-    termFg: Color(0xFFECEFF4),
+    purpleBg: Color(0x226366F1),
+    termBg: Color(0xFF080A0F),
+    termFg: Color(0xFFE2E8F0),
   );
 
   static bool _dynamicEnabled = false;
@@ -971,13 +971,22 @@ class _ClaudeCardState extends State<ClaudeCard> {
       width: double.infinity,
       padding: widget.padding,
       decoration: ShapeDecoration(
-        color: c.paper2,
+        color: c.isDark ? null : c.paper2,
+        gradient: c.isDark
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF181C28), Color(0xFF131620)],
+              )
+            : null,
         shape: claudeSuperellipse(
           widget.radius,
           side: BorderSide(
             color: (_hovered && interactive)
                 ? c.ringHover
-                : c.hairline.withValues(alpha: c.isDark ? 0.55 : 0.35),
+                : (c.isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0x140F172A)),
           ),
         ),
         shadows: (_hovered && interactive) ? c.cardHoverShadow : c.whisperShadow,
