@@ -7,6 +7,9 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import java.io.File
 import android.view.View
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -257,6 +260,46 @@ class MainActivity : FlutterActivity() {
                     val isDark = (call.arguments as? Boolean) ?: false
                     applySystemBarIconBrightness(isDark)
                     result.success(null)
+                }
+                "installApk" -> {
+                    val filePath = (call.arguments as? String) ?: ""
+                    val apkFile = File(filePath)
+                    if (!apkFile.exists()) {
+                        result.success(mapOf("ok" to false, "error" to "APK 文件不存在：$filePath"))
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                        try {
+                            val permIntent = Intent(
+                                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                Uri.parse("package:$packageName"),
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(permIntent)
+                        } catch (_: Throwable) {}
+                        result.success(
+                            mapOf(
+                                "ok" to false,
+                                "needsPermission" to true,
+                                "error" to "请先开启「安装未知应用」权限，返回后再次点击一键升级",
+                            )
+                        )
+                    } else {
+                        try {
+                            val contentUri = FileProvider.getUriForFile(
+                                this,
+                                "${applicationContext.packageName}.fileprovider",
+                                apkFile,
+                            )
+                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(installIntent)
+                            result.success(mapOf("ok" to true, "mode" to "android_installer"))
+                        } catch (e: Throwable) {
+                            result.success(mapOf("ok" to false, "error" to "拉起系统安装器失败：${e.message}"))
+                        }
+                    }
                 }
                 "openExternalUrl" -> {
                     val url = (call.arguments as? String) ?: ""

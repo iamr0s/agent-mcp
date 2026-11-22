@@ -1501,8 +1501,10 @@ class _IoConsoleBackend extends ConsoleBackend {
         return {'ok': true, 'mode': 'explorer'};
       }
       if (Platform.isAndroid) {
-        final opened = await _androidChannel.invokeMethod<bool>('openExternalUrl', filePath);
-        if (opened == true) return {'ok': true, 'mode': 'android'};
+        final raw = await _androidChannel.invokeMethod<dynamic>('installApk', filePath);
+        if (raw is Map) {
+          return raw.map((k, v) => MapEntry('$k', v));
+        }
         return const {'ok': false, 'error': '已下载至本地缓存，请在系统文件管理器中点击安装 APK'};
       }
       return const {'ok': false, 'error': '当前平台请手动解压或安装下载的包'};

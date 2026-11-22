@@ -1,4 +1,4 @@
-﻿name: Build & Publish Releases
+name: Build & Publish Releases
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v2.4.4)'
+        description: 'Release tag to publish (e.g. v2.4.5)'
         required: true
-        default: 'v2.4.4'
+        default: 'v2.4.5'
 
 permissions:
   contents: write
@@ -334,11 +334,11 @@ jobs:
               'published_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
               'release_url': f'https://github.com/{repo}/releases/tag/{tag}',
               'notes': (
-                  f'Agent MCP {tag} 姝ｅ紡鐗堝彂甯冿細\n'
-                  '- 鍏ㄦ柊鐟炲＋宸ヨ壓闈涢潚搴旂敤鍥炬爣锛堝叏骞冲彴澶氬垎杈ㄧ巼鍚屾鏇存柊锛変笌 Windows 鎵樼洏寮瑰眰鐣岄潰鍗囩骇\n'
-                  '- 鏂板搴旂敤鍐?GitHub Releases 鏇存柊妫€娴嬶紙version.json + API 鍙屾簮鍏滃簳锛夈€佸畾鏈熸娴嬪紑鍏充笌鍥涘姩浣滄洿鏂板脊绐梊n'
-                  '- 鍗囩骇 Windows 鏅鸿兘鍏嶆巿鏉冧笁妯″紡瀹夎鍣紙GUI / CLI / Silent锛岃嚜鍔ㄨ瘑鍒師瀹夎鐩綍涓?--after gui 閲嶅洖鐣岄潰锛塡n'
-                  '- 澶栫綉鍒嗕韩椤靛己鍖栬櫄绾挎嫋鎷芥彁绀哄尯锛屽苟鎵╁睍鍏ㄦ灦鏋勫澶勭悊鍣?Release 浜х墿鐭╅樀'
+                  f'Agent MCP {tag} 正式版发布：\n'
+                  '- 全新瑞士工艺靛青应用图标（全平台多分辨率同步更新）与 Windows 托盘弹层界面升级\n'
+                  '- 新增应用内 GitHub Releases 更新检测（version.json + API 双源兜底）、定期检测开关与四动作更新弹窗\n'
+                  '- 升级 Windows 智能免授权三模式安装器（GUI / CLI / Silent，自动识别原安装目录与 --after gui 重回界面）\n'
+                  '- 外网分享页强化虚线拖拽提示区，并扩展全架构多处理器 Release 产物矩阵'
               ),
               'assets': assets,
           }
@@ -377,7 +377,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} 鈥?Auto-Updater, Smart Installer, New Icon & Multi-Arch Release"
+          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Auto-Updater, Smart Installer, New Icon & Multi-Arch Release"
           generate_release_notes: true
           files: |
             dist_artifacts/AgentMCP-*
