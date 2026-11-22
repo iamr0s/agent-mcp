@@ -189,7 +189,7 @@ abstract class ConsoleBackend {
   bool get isAndroidPlatform => false;
   bool get isWindowsPlatform => false;
   bool get isLinuxPlatform => false;
-  String get currentAppVersion => '2.4.0';
+  String get currentAppVersion => '2.4.1';
   bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;

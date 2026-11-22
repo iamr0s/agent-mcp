@@ -193,13 +193,13 @@ class ClaudePalette {
 
   /// Translucent sidebar tint when Windows 11 Mica backdrop is active.
   Color get micaSidebarTint => isDark
-      ? const Color(0xB013151A) // 69% obsidian rail over Mica
-      : const Color(0xC2EFF2F6); // 76% mist rail over Mica
+      ? const Color(0x3C13151A) // 24% translucent obsidian over real Win11 Mica
+      : const Color(0x34EFF2F6); // 20% translucent mist over real Win11 Mica
 
-  /// Translucent main reading pane tint over Mica (keeps text ultra-crisp).
+  /// Translucent main reading pane tint over Mica (visible wallpaper glow + crisp text).
   Color get micaCanvasTint => isDark
-      ? const Color(0xED181A20) // 93% deep obsidian
-      : const Color(0xF0FAF9F6); // 94% warm off-white
+      ? const Color(0xC2181A20) // 76% translucent obsidian
+      : const Color(0xC6FAF9F6); // 78% translucent ivory
 
   /// Specular 1px top/inner highlight on frosted glass surfaces.
   Color get glassSpecular => isDark

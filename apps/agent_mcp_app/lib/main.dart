@@ -174,8 +174,8 @@ class _TopLevelToastLayer extends StatelessWidget {
                           blurSigma: 20,
                           borderRadius: 14,
                           tintColor: c.isDark
-                              ? const Color(0xEC282724)
-                              : const Color(0xEB1F1E1C),
+                              ? const Color(0xEB181A20)
+                              : const Color(0xEB1A1D24),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 10.5,
@@ -201,7 +201,7 @@ class _TopLevelToastLayer extends StatelessWidget {
                                   size: 14,
                                   color: c.isDark
                                       ? c.clay
-                                      : const Color(0xFFD97757),
+                                      : const Color(0xFF818CF8),
                                 ),
                                 const SizedBox(width: 9),
                                 Flexible(
@@ -252,7 +252,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.4.0';
+  String _version = '2.4.1';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -293,6 +293,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   StreamSubscription<List<String>>? _dropSub;
   StreamSubscription<String>? _trayCmdSub;
   final ValueNotifier<String?> _droppedSharePath = ValueNotifier<String?>(null);
+  final GlobalKey _themeBtnKey = GlobalKey();
   AppLifecycleState _appLifecycle = AppLifecycleState.resumed;
 
   static String _computeSearchBlob(Map<String, dynamic> ev) {
@@ -434,7 +435,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.4.0').toString();
+      _version = (auth['version'] ?? '2.4.1').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -914,19 +915,28 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     }
   }
 
-  void _applyThemeWithSnapshot(ThemeMode next) {
+  Offset? _themeToggleOrigin() {
+    final box = _themeBtnKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      return box.localToGlobal(box.size.center(Offset.zero));
+    }
+    return null;
+  }
+
+  void _applyThemeWithSnapshot(ThemeMode next, {Offset? origin}) {
     if (widget.themeMode == next) return;
     unawaited(
       ClaudeThemeCrossFade.runThemeTransition(
         context,
         () => widget.onThemeChanged(next),
+        origin: origin ?? _themeToggleOrigin(),
       ),
     );
   }
 
   void _cycleTheme(ClaudePalette c) {
     final next = c.isDark ? ThemeMode.light : ThemeMode.dark;
-    _applyThemeWithSnapshot(next);
+    _applyThemeWithSnapshot(next, origin: _themeToggleOrigin());
   }
 
   @override
@@ -1164,6 +1174,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           const SizedBox(width: 6),
                         ],
                         ClaudeButton(
+                        key: _themeBtnKey,
                         label: '',
                         compact: true,
                         variant: ClaudeBtnVariant.ghost,
@@ -1936,7 +1947,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                   size: 14,
                                   color: c.isDark
                                       ? c.clay
-                                      : const Color(0xFFD97757),
+                                      : const Color(0xFF818CF8),
                                 ),
                                 const SizedBox(width: 9),
                                 Flexible(
@@ -2011,8 +2022,8 @@ class _MobileFloatingServiceDockState extends State<_MobileFloatingServiceDock> 
       blurSigma: 20,
       borderRadius: 16,
       tintColor: c.isDark
-          ? const Color(0xD8201F1C)
-          : const Color(0xE8FAF9F5),
+          ? const Color(0xDE181A20)
+          : const Color(0xECFFFFFF),
       boxShadow: const [
         BoxShadow(
           color: Color(0x26000000),
@@ -2166,7 +2177,7 @@ class _MobileGlassBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
     final items = <(IconData, IconData, String, String?)>[
-      (Icons.notes_rounded, Icons.notes_rounded, '调用流', null),
+      (Icons.bolt_outlined, Icons.bolt_rounded, '调用流', null),
       (
         Icons.hub_outlined,
         Icons.hub_rounded,
@@ -2179,90 +2190,74 @@ class _MobileGlassBottomNav extends StatelessWidget {
         '外网',
         activeExposeCount > 0 ? '$activeExposeCount' : null,
       ),
-      (Icons.tune_rounded, Icons.tune_rounded, '服务配置', null),
+      (Icons.tune_outlined, Icons.tune_rounded, '服务配置', null),
     ];
 
     final slideDur = ClaudeMotion.duration(
       context,
       const Duration(milliseconds: 280),
     );
-
-    return ClaudeGlassBar(
-      blurSigma: 22,
-      borderRadius: 22,
-      tintColor: micaActive
-          ? c.micaSidebarTint
-          : (c.isDark ? const Color(0xD41E1D1B) : const Color(0xDEFAF9F5)),
-      border: Border.all(
-        color: c.isDark ? const Color(0xFF36342F) : const Color(0xFFDAD6CC),
+    final glassTint = micaActive
+        ? c.micaSidebarTint
+        : (c.isDark ? const Color(0xD8181A20) : const Color(0xE6FFFFFF));
+    final glassBorder = c.isDark
+        ? Colors.white.withValues(alpha: 0.11)
+        : Colors.black.withValues(alpha: 0.08);
+    final glassShadow = [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: c.isDark ? 0.45 : 0.10),
+        blurRadius: 28,
+        offset: const Offset(0, 10),
       ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: c.isDark ? 0.44 : 0.10),
-          blurRadius: 24,
-          offset: const Offset(0, 8),
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: c.isDark ? 0.22 : 0.04),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
-        ),
-      ],
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: SizedBox(
-        height: 44,
-        child: Row(
-          children: [
-            Expanded(
+      BoxShadow(
+        color: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.05),
+        blurRadius: 12,
+        offset: const Offset(0, 2),
+      ),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: ClaudeGlassBar(
+            blurSigma: 26,
+            borderRadius: 999,
+            tintColor: glassTint,
+            border: Border.all(color: glassBorder, width: 1.0),
+            boxShadow: glassShadow,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            child: SizedBox(
+              height: 46,
               child: LayoutBuilder(
                 builder: (ctx, box) {
                   final slotW = box.maxWidth / items.length;
                   const hPad = 2.0;
-                  final pillW = (slotW - hPad * 2).clamp(42.0, slotW);
+                  final pillW = (slotW - hPad * 2).clamp(44.0, slotW);
                   final pillLeft = selectedIndex * slotW + hPad;
 
                   return Stack(
                     alignment: Alignment.centerLeft,
                     children: [
-                      // Spring-sliding superellipse active pill + Terracotta underline
                       AnimatedPositioned(
                         duration: slideDur,
                         curve: ClaudeMotion.snappySpring,
                         left: pillLeft,
-                        top: 0,
-                        bottom: 0,
+                        top: 1,
+                        bottom: 1,
                         width: pillW,
                         child: DecoratedBox(
-                          decoration: ShapeDecoration(
-                            color: c.isDark
-                                ? const Color(0xFF2B2925)
-                                : c.paper2.withValues(alpha: 0.96),
-                            shape: claudeSuperellipse(
-                              16,
-                              side: BorderSide(
-                                color: c.isDark ? c.ringHover : c.hairline,
-                              ),
+                          decoration: BoxDecoration(
+                            color: c.clay.withValues(
+                              alpha: c.isDark ? 0.22 : 0.11,
                             ),
-                            shadows: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                  alpha: c.isDark ? 0.28 : 0.06,
-                                ),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: c.clay.withValues(
+                                alpha: c.isDark ? 0.34 : 0.18,
                               ),
-                            ],
-                          ),
-                          child: Align(
-                            alignment: Alignment.bottomCenter,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 3),
-                              width: 16,
-                              height: 2.5,
-                              decoration: BoxDecoration(
-                                color: c.clay,
-                                borderRadius: BorderRadius.circular(99),
-                              ),
+                              width: 0.8,
                             ),
                           ),
                         ),
@@ -2288,16 +2283,19 @@ class _MobileGlassBottomNav extends StatelessWidget {
                 },
               ),
             ),
-            Container(
-              width: 1,
-              height: 18,
-              margin: const EdgeInsets.only(left: 3, right: 3),
-              color: c.hairline,
-            ),
-            _MobileNavCollapseButton(onTap: onCollapse),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(width: 8),
+        ClaudeGlassBar(
+          blurSigma: 26,
+          borderRadius: 999,
+          tintColor: glassTint,
+          border: Border.all(color: glassBorder, width: 1.0),
+          boxShadow: glassShadow,
+          padding: const EdgeInsets.all(4),
+          child: _MobileNavCollapseButton(onTap: onCollapse),
+        ),
+      ],
     );
   }
 }
@@ -2347,15 +2345,15 @@ class _MobileNavCollapseButtonState extends State<_MobileNavCollapseButton> {
                 context,
                 const Duration(milliseconds: 150),
               ),
-              width: 30,
-              height: 38,
+              width: 44,
+              height: 44,
               decoration: ShapeDecoration(
                 color: _hovered
                     ? (c.isDark
                         ? Colors.white.withValues(alpha: 0.07)
                         : Colors.black.withValues(alpha: 0.05))
                     : Colors.transparent,
-                shape: claudeSuperellipse(13),
+                shape: const CircleBorder(),
               ),
               alignment: Alignment.center,
               child: Icon(
@@ -2416,8 +2414,8 @@ class _MobileCollapsedRestorePillState
               blurSigma: 16,
               borderRadius: 99,
               tintColor: c.isDark
-                  ? const Color(0xCC242320)
-                  : const Color(0xDCFAF9F5),
+                  ? const Color(0xD8181A20)
+                  : const Color(0xE8FFFFFF),
               border: Border.all(
                 color: _hovered ? c.ringHover : c.hairline,
               ),

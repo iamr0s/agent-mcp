@@ -107,14 +107,15 @@ class ClaudeThemeCrossFade extends StatefulWidget {
   /// and runs a 120Hz single-pass transition.
   static Future<void> runThemeTransition(
     BuildContext context,
-    VoidCallback applyThemeChange,
-  ) async {
+    VoidCallback applyThemeChange, {
+    Offset? origin,
+  }) async {
     final state = context.findAncestorStateOfType<_ClaudeThemeCrossFadeState>();
     if (state == null) {
       applyThemeChange();
       return;
     }
-    await state._performTransition(applyThemeChange);
+    await state._performTransition(applyThemeChange, origin: origin);
   }
 
   @override
@@ -126,7 +127,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
   final GlobalKey _repaintKey = GlobalKey();
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 260),
+    duration: const Duration(milliseconds: 440),
   )..addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _disposeSnapshot();
@@ -137,6 +138,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
     });
 
   ui.Image? _snapshot;
+  Offset? _revealOrigin;
   bool _switching = false;
   bool _busyCapturing = false;
   late Brightness _effectiveBrightness = _resolveBrightness(
@@ -168,7 +170,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
     }
   }
 
-  Future<void> _performTransition(VoidCallback applyThemeChange) async {
+  Future<void> _performTransition(VoidCallback applyThemeChange, {Offset? origin}) async {
     if (_busyCapturing) {
       applyThemeChange();
       return;
@@ -206,6 +208,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
       _disposeSnapshot();
       setState(() {
         _snapshot = captured;
+        _revealOrigin = origin;
         _switching = true;
       });
       applyThemeChange();
@@ -260,20 +263,50 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
           if (_snapshot != null)
             Positioned.fill(
               child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _ctrl,
-                  builder: (ctx, child) {
-                    final t = ClaudeMotion.editorialOut.transform(_ctrl.value);
-                    return Opacity(
-                      opacity: (1.0 - t).clamp(0.0, 1.0),
-                      child: child,
+                child: LayoutBuilder(
+                  builder: (ctx, box) {
+                    final size = Size(box.maxWidth, box.maxHeight);
+                    final origin = _revealOrigin ?? Offset(size.width - 132, 24);
+                    final maxR = [
+                      origin.distance,
+                      (origin - Offset(size.width, 0)).distance,
+                      (origin - Offset(0, size.height)).distance,
+                      (origin - Offset(size.width, size.height)).distance,
+                    ].reduce(math.max);
+                    return AnimatedBuilder(
+                      animation: _ctrl,
+                      builder: (ctx, child) {
+                        final t = const Cubic(0.22, 1.0, 0.36, 1.0)
+                            .transform(_ctrl.value);
+                        final radius = maxR * t;
+                        final ringOpacity = (1.0 - t).clamp(0.0, 1.0) * 0.55;
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipPath(
+                              clipper: _CircularCutoutClipper(
+                                center: origin,
+                                radius: radius,
+                              ),
+                              child: child,
+                            ),
+                            CustomPaint(
+                              painter: _CircularWaveRingPainter(
+                                center: origin,
+                                radius: radius,
+                                opacity: ringOpacity,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                      child: RawImage(
+                        image: _snapshot,
+                        fit: BoxFit.fill,
+                        filterQuality: FilterQuality.medium,
+                      ),
                     );
                   },
-                  child: RawImage(
-                    image: _snapshot,
-                    fit: BoxFit.fill,
-                    filterQuality: FilterQuality.medium,
-                  ),
                 ),
               ),
             ),
@@ -791,4 +824,51 @@ class _StatusDotPainter extends CustomPainter {
       oldDelegate.color != color ||
       oldDelegate.dotSize != dotSize ||
       oldDelegate.pulsing != pulsing;
+}
+
+
+class _CircularCutoutClipper extends CustomClipper<Path> {
+  final Offset center;
+  final double radius;
+
+  const _CircularCutoutClipper({required this.center, required this.radius});
+
+  @override
+  Path getClip(Size size) {
+    final outer = Path()..addRect(Offset.zero & size);
+    if (radius <= 0.5) return outer;
+    final hole = Path()
+      ..addOval(Rect.fromCircle(center: center, radius: radius));
+    return Path.combine(PathOperation.difference, outer, hole);
+  }
+
+  @override
+  bool shouldReclip(covariant _CircularCutoutClipper oldClipper) =>
+      oldClipper.radius != radius || oldClipper.center != center;
+}
+
+class _CircularWaveRingPainter extends CustomPainter {
+  final Offset center;
+  final double radius;
+  final double opacity;
+
+  const _CircularWaveRingPainter({
+    required this.center,
+    required this.radius,
+    required this.opacity,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (radius <= 1.0 || opacity <= 0.01) return;
+    final paint = Paint()
+      ..color = Color.fromRGBO(129, 140, 248, opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CircularWaveRingPainter oldDelegate) =>
+      oldDelegate.radius != radius || oldDelegate.opacity != opacity;
 }

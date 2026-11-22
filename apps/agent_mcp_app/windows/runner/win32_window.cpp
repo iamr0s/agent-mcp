@@ -34,6 +34,7 @@ constexpr int kDwmCornerRound = 2;
 constexpr int kDwmBackdropNone = 1;        // DWMSBT_NONE
 constexpr int kDwmBackdropMica = 2;        // DWMSBT_MAINWINDOW
 constexpr int kDwmBackdropTransient = 3;   // DWMSBT_TRANSIENTWINDOW
+constexpr int kDwmBackdropTabbed = 4;      // DWMSBT_TABBEDWINDOW (Mica Alt)
 
 constexpr UINT kWmTrayCallback = WM_USER + 20;
 constexpr UINT_PTR kTrayIdOpen = 1001;
@@ -893,9 +894,20 @@ void Win32Window::ApplyFramelessStyle() {
   }
 
   if (IsWindows11BackdropAvailable()) {
-    const int backdrop_type = use_mica ? kDwmBackdropMica : kDwmBackdropNone;
-    DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                          &backdrop_type, sizeof(backdrop_type));
+    if (use_mica) {
+      const int tabbed = kDwmBackdropTabbed;
+      HRESULT hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
+                                         &tabbed, sizeof(tabbed));
+      if (FAILED(hr)) {
+        const int mica = kDwmBackdropMica;
+        DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
+                              &mica, sizeof(mica));
+      }
+    } else {
+      const int none = kDwmBackdropNone;
+      DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
+                            &none, sizeof(none));
+    }
   }
 
   MARGINS margins{0, 0, 0, 0};
