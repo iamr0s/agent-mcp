@@ -76,7 +76,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Universal APK build failed ($LASTEXITCODE)" }
 
   $uniSrc = Join-Path $AppDir 'build\app\outputs\flutter-apk\app-release.apk'
-  $uniDst = Join-Path $ReleaseDir 'AgentMCP-v2.5.2-android-universal.apk'
+  $uniDst = Join-Path $ReleaseDir 'AgentMCP-v2.5.3-android-universal.apk'
   Copy-Item -Force $uniSrc $uniDst
 
   if (-not $UniversalOnly) {
@@ -85,13 +85,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Split-ABI APK build failed ($LASTEXITCODE)" }
 
     $arm64Src = Join-Path $AppDir 'build\app\outputs\flutter-apk\app-arm64-v8a-release.apk'
-    $arm64Dst = Join-Path $ReleaseDir 'AgentMCP-v2.5.2-android-arm64-v8a.apk'
+    $arm64Dst = Join-Path $ReleaseDir 'AgentMCP-v2.5.3-android-arm64-v8a.apk'
     if (Test-Path $arm64Src) {
       Copy-Item -Force $arm64Src $arm64Dst
     }
   }
 
-  Get-ChildItem $ReleaseDir -Filter 'AgentMCP-v2.5.2-android-*.apk' | ForEach-Object {
+  Get-ChildItem $ReleaseDir -Filter 'AgentMCP-v2.5.3-android-*.apk' | ForEach-Object {
     $mb = [Math]::Round($_.Length / 1MB, 2)
     Write-Host "[OK] $($_.FullName) ($mb MB)"
   }

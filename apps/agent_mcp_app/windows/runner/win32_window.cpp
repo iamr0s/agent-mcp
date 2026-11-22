@@ -920,43 +920,36 @@ void Win32Window::ApplyFramelessStyle() {
     }
   }
 
-  // Exact flutter_acrylic Win11 Acrylic pipeline:
-  // 1) ALWAYS reset ACCENT_DISABLED first so WCA never conflicts with DWMWA_SYSTEMBACKDROP_TYPE (which causes solid grey!)
-  SetWin32AccentPolicy(window_handle_, 0, 0);
+  if (use_mica) {
+    // 1) Extend DWM glass sheet across entire client area
+    MARGINS margins{-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(window_handle_, &margins);
 
-  if (IsWindows11BackdropAvailable()) {
-    if (use_mica) {
-      // 2) Extend glass sheet across entire client area FIRST
-      MARGINS margins{-1, -1, -1, -1};
-      DwmExtendFrameIntoClientArea(window_handle_, &margins);
-      // 3) Sync dark mode + clear native caption color (DWMWA_CAPTION_COLOR = 35, COLOR_NONE = 0xFFFFFFFE)
-      BOOL dark_bool = is_dark_mode_ ? TRUE : FALSE;
-      DwmSetWindowAttribute(window_handle_, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                            &dark_bool, sizeof(dark_bool));
+    // 2) Sync dark mode + clear native caption color
+    BOOL dark_bool = is_dark_mode_ ? TRUE : FALSE;
+    DwmSetWindowAttribute(window_handle_, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                          &dark_bool, sizeof(dark_bool));
+    if (IsWindows11BackdropAvailable()) {
       COLORREF color_none = 0xFFFFFFFE;
       DwmSetWindowAttribute(window_handle_, 35, &color_none, sizeof(color_none));
-      // 4) Enable Win11 Native Acrylic (DWMSBT_TRANSIENTWINDOW = 3)
-      const int acrylic = kDwmBackdropTransient;
-      HRESULT hr = DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                                         &acrylic, sizeof(acrylic));
-      if (FAILED(hr)) {
-        const int tabbed = kDwmBackdropTabbed;
-        DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
-                              &tabbed, sizeof(tabbed));
-      }
-    } else {
-      MARGINS margins{0, 0, 0, 0};
-      DwmExtendFrameIntoClientArea(window_handle_, &margins);
       const int none = kDwmBackdropNone;
       DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
                             &none, sizeof(none));
     }
-  } else if (use_mica) {
-    // Windows 10 / Early Win11 fallback via SetWindowCompositionAttribute Acrylic
-    MARGINS margins{-1, -1, -1, -1};
-    DwmExtendFrameIntoClientArea(window_handle_, &margins);
-    SetWin32AccentPolicy(window_handle_, 4, is_dark_mode_ ? 0xB416100Eu : 0x99F8F5F4u);
+
+    // 3) Enable true real-time Acrylic blur via SetWindowCompositionAttribute (ACCENT_ENABLE_ACRYLICBLURBEHIND = 4).
+    // Unlike DWMSBT_TRANSIENTWINDOW (which turns flat opaque grey whenever the window loses focus),
+    // WCA Acrylic stays genuinely frosted & translucent at all times!
+    // ABGR format (0xAABBGGRR): ~33% alpha light frost / ~50% alpha dark obsidian frost
+    const DWORD tint_abgr = is_dark_mode_ ? 0x8018110Eu : 0x55FAF6F4u;
+    SetWin32AccentPolicy(window_handle_, 4, tint_abgr);
   } else {
+    SetWin32AccentPolicy(window_handle_, 0, 0);
+    if (IsWindows11BackdropAvailable()) {
+      const int none = kDwmBackdropNone;
+      DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE,
+                            &none, sizeof(none));
+    }
     MARGINS margins{0, 0, 0, 0};
     if (!IsWindows11OrGreater()) {
       const RECT frame = ComputeFrameInsets(window_handle_, WS_OVERLAPPEDWINDOW, 0);
@@ -1195,7 +1188,9 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_NCACTIVATE:
-      return 1;
+      // Pass lParam = -1 to DefWindowProc so DWM updates active/inactive backdrop state
+      // without painting classic Win95 non-client titlebar chrome!
+      return DefWindowProc(hwnd, message, wparam, -1);
 
     case WM_GETMINMAXINFO: {
       auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
