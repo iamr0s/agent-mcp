@@ -182,8 +182,88 @@ class ClaudePalette {
     termFg: Color(0xFFECEFF4),
   );
 
+  static bool _dynamicEnabled = false;
+  static Color? _dynamicLightAccent;
+  static Color? _dynamicDarkAccent;
+
+  static bool get isDynamicColorEnabled => _dynamicEnabled;
+
+  static void configureDynamicColor({
+    required bool enabled,
+    Color? lightAccent,
+    Color? darkAccent,
+  }) {
+    _dynamicEnabled = enabled;
+    if (lightAccent != null) _dynamicLightAccent = lightAccent;
+    if (darkAccent != null) _dynamicDarkAccent = darkAccent;
+  }
+
+  static ClaudePalette get activeLight {
+    if (!_dynamicEnabled || _dynamicLightAccent == null) return light;
+    final a = _dynamicLightAccent!;
+    final hover = Color.lerp(a, Colors.black, 0.14)!;
+    return ClaudePalette(
+      isDark: false,
+      paper: light.paper,
+      paper2: light.paper2,
+      paper3: light.paper3,
+      sidebar: light.sidebar,
+      recessed: light.recessed,
+      ink: light.ink,
+      inkSoft: light.inkSoft,
+      muted: light.muted,
+      meta: light.meta,
+      hairline: light.hairline,
+      ringHover: a.withValues(alpha: 0.45),
+      clay: a,
+      clayHover: hover,
+      focusRing: a,
+      sage: light.sage,
+      sageBg: light.sageBg,
+      danger: light.danger,
+      dangerBg: light.dangerBg,
+      purple: a,
+      purpleBg: a.withValues(alpha: 0.12),
+      termBg: light.termBg,
+      termFg: light.termFg,
+    );
+  }
+
+  static ClaudePalette get activeDark {
+    if (!_dynamicEnabled || _dynamicDarkAccent == null) return dark;
+    final a = _dynamicDarkAccent!;
+    final hover = Color.lerp(a, Colors.white, 0.14)!;
+    return ClaudePalette(
+      isDark: true,
+      paper: dark.paper,
+      paper2: dark.paper2,
+      paper3: dark.paper3,
+      sidebar: dark.sidebar,
+      recessed: dark.recessed,
+      ink: dark.ink,
+      inkSoft: dark.inkSoft,
+      muted: dark.muted,
+      meta: dark.meta,
+      hairline: dark.hairline,
+      ringHover: a.withValues(alpha: 0.48),
+      clay: a,
+      clayHover: hover,
+      focusRing: a,
+      sage: dark.sage,
+      sageBg: dark.sageBg,
+      danger: dark.danger,
+      dangerBg: dark.dangerBg,
+      purple: a,
+      purpleBg: a.withValues(alpha: 0.18),
+      termBg: dark.termBg,
+      termFg: dark.termFg,
+    );
+  }
+
   static ClaudePalette of(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark ? dark : light;
+    return Theme.of(context).brightness == Brightness.dark
+        ? activeDark
+        : activeLight;
   }
 
   /// Translucent frosted glass tint for fixed bars & floating surfaces.

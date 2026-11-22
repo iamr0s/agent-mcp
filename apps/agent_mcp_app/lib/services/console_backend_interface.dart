@@ -187,6 +187,8 @@ abstract class ConsoleBackend {
   ValueListenable<DesktopWindowState> get windowState;
 
   bool get isAndroidPlatform => false;
+
+  Future<Map<String, dynamic>> getAndroidDynamicColors() async => const {'supported': false};
   bool get isWindowsPlatform => false;
   bool get isLinuxPlatform => false;
   String get currentAppVersion => '2.4.3';

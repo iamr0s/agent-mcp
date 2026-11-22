@@ -234,6 +234,25 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "getDynamicColors" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        try {
+                            val lightAccent = getColor(android.R.color.system_accent1_600)
+                            val darkAccent = getColor(android.R.color.system_accent1_300)
+                            result.success(
+                                mapOf(
+                                    "supported" to true,
+                                    "accentLight" to lightAccent,
+                                    "accentDark" to darkAccent,
+                                )
+                            )
+                        } catch (_: Throwable) {
+                            result.success(mapOf("supported" to false))
+                        }
+                    } else {
+                        result.success(mapOf("supported" to false))
+                    }
+                }
                 "setSystemBarsDark" -> {
                     val isDark = (call.arguments as? Boolean) ?: false
                     applySystemBarIconBrightness(isDark)

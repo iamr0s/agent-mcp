@@ -46,6 +46,18 @@ class _IoConsoleBackend extends ConsoleBackend {
   bool get isAndroidPlatform => Platform.isAndroid;
 
   @override
+  Future<Map<String, dynamic>> getAndroidDynamicColors() async {
+    if (!Platform.isAndroid) return const {'supported': false};
+    try {
+      final raw = await _androidChannel.invokeMethod<dynamic>('getDynamicColors');
+      if (raw is Map) {
+        return raw.map((k, v) => MapEntry('$k', v));
+      }
+    } catch (_) {}
+    return const {'supported': false};
+  }
+
+  @override
   bool get isWindowsPlatform => Platform.isWindows;
 
   @override
