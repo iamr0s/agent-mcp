@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v2.4.3)'
+        description: 'Release tag to publish (e.g. v2.4.4)'
         required: true
-        default: 'v2.4.3'
+        default: 'v2.4.4'
 
 permissions:
   contents: write
@@ -171,8 +171,16 @@ jobs:
           path: release/AgentMCP-v*-linux-x64-cli.tar.gz
           if-no-files-found: error
 
+      - name: Upload Reusable Web Dashboard Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dashboard-bundle
+          path: apps/agent_mcp_app/build/web
+          if-no-files-found: error
+
   build-linux-arm64:
     name: Build Linux ARM64 Server & CLI Bundle (with Web Dashboard)
+    needs: [build-linux-x64]
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout Repository
@@ -184,22 +192,23 @@ jobs:
           VER="${RAW_TAG#v}"
           echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
 
-      - name: Setup Flutter & Dart SDK
-        uses: subosito/flutter-action@v2
+      - name: Setup Dart SDK (Native ARM64)
+        uses: dart-lang/setup-dart@v1
         with:
-          channel: 'stable'
-          cache: true
+          sdk: stable
 
-      - name: Compile Native Linux ARM64 Server Binary & Web Dashboard
+      - name: Download Reusable Web Dashboard Bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dashboard-bundle
+          path: stage_linux/web_dashboard
+
+      - name: Compile Native Linux ARM64 Server Binary
         run: |
-          (cd apps/agent_mcp_app && flutter pub get)
-          pushd apps/agent_mcp_app
-          flutter build web --release --base-href /dashboard/ --no-pub
-          popd
+          (cd packages/agent_mcp_core && dart pub get)
           mkdir -p release stage_linux/web_dashboard
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_linux/agent-mcp
           chmod +x stage_linux/agent-mcp
-          cp -r apps/agent_mcp_app/build/web/. stage_linux/web_dashboard/
           cp LICENSE README.md README.en.md stage_linux/
           tar -czf "release/AgentMCP-v${APP_VERSION}-linux-arm64-cli.tar.gz" -C stage_linux .
 
@@ -252,11 +261,13 @@ jobs:
   publish-release:
     name: Publish Multi-Arch GitHub Release & version.json
     needs: [build-windows, build-android, build-linux-x64, build-linux-arm64, build-macos-arm64]
+    if: always() && needs.build-windows.result == 'success' && needs.build-android.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Download All Build Artifacts
+      - name: Download All Release Artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: '*-artifact'
           path: dist_artifacts
           merge-multiple: true
 

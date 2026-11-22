@@ -35,7 +35,7 @@
 
 ```bash
 # 1. 下载并解压（内置 agent-mcp 单文件与 web_dashboard 网页前端）
-curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.4.3/AgentMCP-v2.4.3-linux-x64-cli.tar.gz | tar -xzf -
+curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.4.4/AgentMCP-v2.4.4-linux-x64-cli.tar.gz | tar -xzf -
 
 # 2. 一行初始化：监听全网卡、自动识别局域网与 Tailscale IP、生成高强 Bearer Key
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
@@ -162,11 +162,11 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 
 | 目标设备平台 | 发行包文件名 | 适用场景说明 |
 | :--- | :--- | :--- |
-| **Linux 服务器 / GPU 机 / NAS (x64)** | `AgentMCP-v2.4.3-linux-x64-cli.tar.gz` | **远程服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `init` 与 `systemd` 一键常驻 |
-| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v2.4.3-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
-| **Android 全架构通用版** | `AgentMCP-v2.4.3-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
-| **Windows 10 / 11 桌面与工作站 (x64)** | `AgentMCP-v2.4.3-windows-x64-sfx.exe` | 自解压图形化安装向导，含 Windows 11 云母桌面控制台、网页端与 `agent-mcp.exe` CLI |
-| **Windows 10 / 11 免安装便携版 (x64)** | `AgentMCP-v2.4.3-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
+| **Linux 服务器 / GPU 机 / NAS (x64)** | `AgentMCP-v2.4.4-linux-x64-cli.tar.gz` | **远程服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `init` 与 `systemd` 一键常驻 |
+| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v2.4.4-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
+| **Android 全架构通用版** | `AgentMCP-v2.4.4-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
+| **Windows 10 / 11 桌面与工作站 (x64)** | `AgentMCP-v2.4.4-windows-x64-sfx.exe` | 自解压图形化安装向导，含 Windows 11 云母桌面控制台、网页端与 `agent-mcp.exe` CLI |
+| **Windows 10 / 11 免安装便携版 (x64)** | `AgentMCP-v2.4.4-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
 
 ## 内置工具矩阵（20 项）
 

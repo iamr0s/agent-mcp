@@ -17,6 +17,9 @@ class ServiceSetupPage extends StatefulWidget {
   final bool isRunning;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
+  final bool dynamicColor;
+  final bool dynamicColorSupported;
+  final ValueChanged<bool>? onDynamicColorChanged;
   final Future<void> Function() onRefreshStatus;
   final Future<void> Function() onRefreshStorage;
   final Future<void> Function() onRestartService;
@@ -39,6 +42,9 @@ class ServiceSetupPage extends StatefulWidget {
     required this.isRunning,
     required this.themeMode,
     required this.onThemeChanged,
+    this.dynamicColor = false,
+    this.dynamicColorSupported = false,
+    this.onDynamicColorChanged,
     required this.onRefreshStatus,
     required this.onRefreshStorage,
     required this.onRestartService,
@@ -1203,6 +1209,31 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (isAndroidHost) ...[
+                                _StartupSwitchRow(
+                                  palette: c,
+                                  title: '动态配色 (Android Material You)',
+                                  subtitle: widget.dynamicColorSupported
+                                      ? '跟随系统壁纸动态提取主题强调色（支持 Android 12+ 莫奈取色与桌面动态图标）'
+                                      : '当前系统版本不支持莫奈壁纸取色（需 Android 12 及以上）',
+                                  value: widget.dynamicColor,
+                                  onChanged: (v) {
+                                    if (!widget.dynamicColorSupported && v) {
+                                      widget.onToast('当前系统暂不支持 Android 12+ 动态配色');
+                                      return;
+                                    }
+                                    widget.onDynamicColorChanged?.call(v);
+                                    widget.onToast(
+                                      v ? '已开启动态壁纸配色' : '已恢复默认 Indigo 配色',
+                                    );
+                                  },
+                                ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  child: Divider(color: c.hairline, height: 1),
+                                ),
+                              ],
                               _StartupSwitchRow(
                                 palette: c,
                                 title: showDesktopWindowToggle

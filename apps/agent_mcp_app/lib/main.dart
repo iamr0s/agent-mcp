@@ -56,9 +56,43 @@ class AgentMcpConsoleApp extends StatefulWidget {
 
 class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
   ThemeMode _themeMode = ThemeMode.system;
+  bool _dynamicColor = false;
+  bool _dynamicColorSupported = false;
   final ValueNotifier<({String? message, int tick})> _toastNotifier =
       ValueNotifier((message: null, tick: 0));
   Timer? _globalToastTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAndroidDynamicColor();
+  }
+
+  Future<void> _initAndroidDynamicColor() async {
+    if (!widget.backend.isAndroidPlatform) return;
+    final dyn = await widget.backend.getAndroidDynamicColors();
+    if (dyn['supported'] == true) {
+      final lVal = dyn['accentLight'];
+      final dVal = dyn['accentDark'];
+      if (lVal is int && dVal is int) {
+        ClaudePalette.configureDynamicColor(
+          enabled: _dynamicColor,
+          lightAccent: Color(lVal),
+          darkAccent: Color(dVal),
+        );
+        if (mounted) {
+          setState(() => _dynamicColorSupported = true);
+        }
+      }
+    }
+  }
+
+  void _setDynamicColor(bool enabled) {
+    ClaudePalette.configureDynamicColor(enabled: enabled);
+    if (_dynamicColor != enabled) {
+      setState(() => _dynamicColor = enabled);
+    }
+  }
 
   @override
   void dispose() {
@@ -94,8 +128,8 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const _ConsoleScrollBehavior(),
         themeAnimationDuration: Duration.zero,
-        theme: buildClaudeTheme(ClaudePalette.light),
-        darkTheme: buildClaudeTheme(ClaudePalette.dark),
+        theme: buildClaudeTheme(ClaudePalette.activeLight),
+        darkTheme: buildClaudeTheme(ClaudePalette.activeDark),
         themeMode: _themeMode,
         builder: (ctx, navChild) {
           return Stack(
@@ -108,6 +142,9 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         home: ConsoleShellScreen(
           backend: widget.backend,
           themeMode: _themeMode,
+          dynamicColor: _dynamicColor,
+          dynamicColorSupported: _dynamicColorSupported,
+          onDynamicColorChanged: _setDynamicColor,
           onGlobalToast: _showTopLevelToast,
           onThemeChanged: (m) {
             if (_themeMode != m) {
@@ -232,6 +269,9 @@ class _TopLevelToastLayer extends StatelessWidget {
 class ConsoleShellScreen extends StatefulWidget {
   final ConsoleBackend backend;
   final ThemeMode themeMode;
+  final bool dynamicColor;
+  final bool dynamicColorSupported;
+  final ValueChanged<bool>? onDynamicColorChanged;
   final ValueChanged<ThemeMode> onThemeChanged;
   final ValueChanged<String>? onGlobalToast;
 
@@ -239,6 +279,9 @@ class ConsoleShellScreen extends StatefulWidget {
     super.key,
     required this.backend,
     required this.themeMode,
+    this.dynamicColor = false,
+    this.dynamicColorSupported = false,
+    this.onDynamicColorChanged,
     required this.onThemeChanged,
     this.onGlobalToast,
   });
@@ -252,7 +295,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.4.3';
+  String _version = '2.4.4';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -435,7 +478,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.4.3').toString();
+      _version = (auth['version'] ?? '2.4.4').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -733,6 +776,13 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         if (st['config'] is Map) {
           _config = Map<String, dynamic>.from(st['config'] as Map);
           _serverName = (_config['server_name'] ?? _serverName).toString();
+          if (_config['dynamic_color'] is bool &&
+              _config['dynamic_color'] != widget.dynamicColor) {
+            final nextDyn = _config['dynamic_color'] == true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onDynamicColorChanged?.call(nextDyn);
+            });
+          }
         }
         if (st['tunnels'] is Map) {
           _tunnelInfo = Map<String, dynamic>.from(st['tunnels'] as Map);
@@ -1335,6 +1385,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         topPadding: pageTopInset,
         extraBottomPadding: pageExtraBottom,
         onThemeChanged: _applyThemeWithSnapshot,
+        dynamicColor: widget.dynamicColor,
+        dynamicColorSupported: widget.dynamicColorSupported,
+        onDynamicColorChanged: (v) async {
+          widget.onDynamicColorChanged?.call(v);
+          try {
+            await widget.backend.saveConfig({'dynamic_color': v});
+          } catch (_) {}
+        },
         onRefreshStatus: () async {
           _lastStatusSignature = '';
           await _refreshStatus();

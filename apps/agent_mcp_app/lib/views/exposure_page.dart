@@ -282,7 +282,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     Text('外网映射与链接分享', style: serifTitleStyle(c, size: 24)),
                     const SizedBox(height: 4),
                     Text(
-                      '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态（桌面端可直接拖入文件或文件夹秒建分享）。',
+                      widget.backend.isAndroidPlatform ? '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态，轻点下方卡片快速创建分享。' : '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态（桌面端可直接拖入文件或文件夹秒建分享）。',
                       style: sansStyle(
                         c,
                         size: 13,
@@ -459,6 +459,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             ),
             const SizedBox(height: 12),
           ] else if (_enabled) ...[
+            if (!widget.backend.isAndroidPlatform) ...[
             _DashedDropZone(
               borderColor: c.clay.withValues(alpha: c.isDark ? 0.58 : 0.48),
               fillColor: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.045),
@@ -511,6 +512,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
               ),
             ),
             const SizedBox(height: 12),
+            ],
             LayoutBuilder(
               builder: (ctx, qbox) {
                 final cols = qbox.maxWidth < 520
@@ -2189,7 +2191,7 @@ class _DashedDropZone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _DashedRRectPainter(
+      foregroundPainter: _DashedRRectPainter(
         color: borderColor,
         radius: radius,
         strokeWidth: 1.5,
@@ -2229,8 +2231,13 @@ class _DashedRRectPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
+    final inset = strokeWidth / 2 + 0.5;
+    final rrect = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(inset),
+      Radius.circular((radius - inset).clamp(0.0, radius)),
+    );
     final path = Path()..addRRect(rrect);
     for (final metric in path.computeMetrics()) {
       var dist = 0.0;
