@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
-/// Physics-backed & editorial motion primitives inspired by FlClash (`prism_ui`)
+/// Physics-backed & editorial motion primitives built on native spring physics
 /// and Anthropic's calm, tactile design language.
 class SpringCurve extends Curve {
   SpringCurve(SpringDescription spring, {required this.seconds})
@@ -294,7 +296,7 @@ Future<T> runWithMinDuration<T>(
   return results[0] as T;
 }
 
-/// FlClash-modeled Keep-Alive Tab Container:
+/// Keep-Alive Tab Container:
 /// - Lazily mounts each tab on first visit and preserves its state, scroll
 ///   offset, text inputs, and expanded drawers across tab switches.
 /// - Disables tickers (`TickerMode(enabled: false)`) and hit-testing on
@@ -619,6 +621,66 @@ class ClaudeFadeBox extends StatelessWidget {
 ///   (eliminating the 8dp row jump when services or tunnels toggle!).
 /// - Isolated inside its own `RepaintBoundary` + `CustomPaint` so breathing
 ///   ripples never dirty ancestor layouts or list cards.
+/// Global shared 120Hz phase clock driving all pulsing [ClaudeStatusDot]s from
+/// a single synchronized [Ticker], automatically stopping and disposing the
+/// ticker when zero pulsing dots are mounted or when the window is minimized/hidden.
+class ClaudePulseClock extends ChangeNotifier implements ValueListenable<double> {
+  static final ClaudePulseClock instance = ClaudePulseClock._();
+  ClaudePulseClock._();
+
+  static const int _periodUs = 2200000;
+  Ticker? _ticker;
+  int _subscribers = 0;
+  bool _paused = false;
+  double _phase = 0.0;
+
+  @override
+  double get value => _phase;
+
+  int get activeSubscriberCount => _subscribers;
+  bool get isPaused => _paused;
+  bool get isTickerRunning => _ticker != null && _ticker!.isActive;
+
+  void subscribe() {
+    _subscribers++;
+    _syncTicker();
+  }
+
+  void unsubscribe() {
+    if (_subscribers > 0) _subscribers--;
+    _syncTicker();
+  }
+
+  void setPaused(bool paused) {
+    if (_paused == paused) return;
+    _paused = paused;
+    _syncTicker();
+  }
+
+  void _onTick(Duration elapsed) {
+    _phase = (elapsed.inMicroseconds % _periodUs) / _periodUs;
+    notifyListeners();
+  }
+
+  void _syncTicker() {
+    final shouldRun = _subscribers > 0 && !_paused;
+    if (shouldRun) {
+      if (_ticker == null) {
+        _ticker = Ticker(_onTick)..start();
+      } else if (!_ticker!.isActive) {
+        _ticker!.start();
+      }
+    } else {
+      if (_ticker != null) {
+        _ticker!.stop();
+        _ticker!.dispose();
+        _ticker = null;
+      }
+      _phase = 0.0;
+    }
+  }
+}
+
 class ClaudeStatusDot extends StatefulWidget {
   final Color color;
   final bool pulsing;
@@ -635,55 +697,55 @@ class ClaudeStatusDot extends StatefulWidget {
   State<ClaudeStatusDot> createState() => _ClaudeStatusDotState();
 }
 
-class _ClaudeStatusDotState extends State<ClaudeStatusDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  );
+class _ClaudeStatusDotState extends State<ClaudeStatusDot> {
+  bool _subscribed = false;
+
+  void _updateSubscription(bool wantPulse) {
+    if (wantPulse && !_subscribed) {
+      _subscribed = true;
+      ClaudePulseClock.instance.subscribe();
+    } else if (!wantPulse && _subscribed) {
+      _subscribed = false;
+      ClaudePulseClock.instance.unsubscribe();
+    }
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _syncAnimation();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _updateSubscription(widget.pulsing && !reducedMotion);
   }
 
   @override
   void didUpdateWidget(covariant ClaudeStatusDot oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pulsing != widget.pulsing) {
-      _syncAnimation();
-    }
-  }
-
-  void _syncAnimation() {
-    if (widget.pulsing) {
-      unawaited(_ctrl.repeat());
-    } else {
-      _ctrl.stop();
-      _ctrl.value = 0.0;
-    }
+    final reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _updateSubscription(widget.pulsing && !reducedMotion);
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _updateSubscription(false);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final boxExtent = widget.size + 8.0;
+    final reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final effectivePulsing = widget.pulsing && !reducedMotion;
     return RepaintBoundary(
       child: SizedBox(
         width: boxExtent,
         height: boxExtent,
         child: CustomPaint(
           painter: _StatusDotPainter(
-            animation: _ctrl,
+            phaseListenable:
+                effectivePulsing ? ClaudePulseClock.instance : null,
             color: widget.color,
             dotSize: widget.size,
-            pulsing: widget.pulsing,
+            pulsing: effectivePulsing,
           ),
         ),
       ),
@@ -692,23 +754,23 @@ class _ClaudeStatusDotState extends State<ClaudeStatusDot>
 }
 
 class _StatusDotPainter extends CustomPainter {
-  final Animation<double> animation;
+  final ValueListenable<double>? phaseListenable;
   final Color color;
   final double dotSize;
   final bool pulsing;
 
   _StatusDotPainter({
-    required this.animation,
+    required this.phaseListenable,
     required this.color,
     required this.dotSize,
     required this.pulsing,
-  }) : super(repaint: animation);
+  }) : super(repaint: phaseListenable);
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    if (pulsing) {
-      final wave = Curves.easeOutCubic.transform(animation.value);
+    if (pulsing && phaseListenable != null) {
+      final wave = Curves.easeOutCubic.transform(phaseListenable!.value);
       final haloRadius = (dotSize + 8.0 * wave) / 2.0;
       final haloPaint = Paint()
         ..color = color.withValues(alpha: (1.0 - wave) * 0.28)

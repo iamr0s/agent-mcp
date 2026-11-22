@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-// High-DPI frameless Win32 Window modeled after FlClash / Windows Terminal:
+// High-DPI frameless Win32 Window modeled after modern Windows 11 desktop apps:
 // - Keeps native Aero Snap, Win+Arrows, shadow, and resize borders while
 //   stripping the white non-client titlebar via WM_NCCALCSIZE.
 // - Hosts the Windows System Tray icon natively on the main STA UI thread

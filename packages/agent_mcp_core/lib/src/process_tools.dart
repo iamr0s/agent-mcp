@@ -149,12 +149,40 @@ class ProcessManager {
     }
   }
 
+  void _pruneExitedProcs({
+    Duration maxExitedAge = const Duration(minutes: 30),
+    int maxExitedKeep = 24,
+  }) {
+    final now = DateTime.now();
+    final exited = <ManagedProcess>[];
+    for (final mp in _procs.values.toList()) {
+      if (!mp.isRunning) {
+        final ended = mp.endedAt ?? mp.startedAt;
+        if (now.difference(ended) > maxExitedAge) {
+          _procs.remove(mp.processId);
+        } else {
+          exited.add(mp);
+        }
+      }
+    }
+    if (exited.length > maxExitedKeep) {
+      exited.sort(
+        (a, b) => (a.endedAt ?? a.startedAt).compareTo(b.endedAt ?? b.startedAt),
+      );
+      final excess = exited.length - maxExitedKeep;
+      for (var i = 0; i < excess; i++) {
+        _procs.remove(exited[i].processId);
+      }
+    }
+  }
+
   Future<ManagedProcess> start({
     required String command,
     required String cwd,
     String shell = 'auto',
     Map<String, String>? env,
   }) async {
+    _pruneExitedProcs();
     if (Platform.isAndroid &&
         await PrivilegedExecutor.instance.ensureActiveIfRequested()) {
       final res = await PrivilegedExecutor.instance.procStart(

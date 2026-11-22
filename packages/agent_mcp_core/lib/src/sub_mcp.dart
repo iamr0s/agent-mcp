@@ -144,36 +144,419 @@ List<Map<String, dynamic>> parseMcpServersJson(String rawText) {
   return entries;
 }
 
+Map<String, dynamic> _mcpInitParams() => {
+      'protocolVersion': '2025-03-26',
+      'capabilities': const <String, dynamic>{},
+      'clientInfo': {'name': 'agent-mcp-gateway', 'version': agentMcpVersion},
+    };
+
+List<Map<String, dynamic>> _extractMcpTools(Map<String, dynamic> res) {
+  final raw = (res['tools'] as List?) ?? const [];
+  return raw.whereType<Map>().map((t) {
+    return <String, dynamic>{
+      'name': (t['name'] ?? '').toString(),
+      'description': (t['description'] ?? '').toString(),
+      'inputSchema': t['inputSchema'] ??
+          t['input_schema'] ??
+          const {'type': 'object', 'properties': <String, dynamic>{}},
+      if (t['annotations'] != null) 'annotations': t['annotations'],
+    };
+  }).toList();
+}
+
+Future<Process> _spawnStdioProcess(Map<String, dynamic> entry) async {
+  final cmd = (entry['command'] ?? '').toString();
+  final args = ((entry['args'] as List?) ?? const [])
+      .map((e) => e.toString())
+      .toList();
+  final cwd = (entry['cwd'] ?? '').toString().trim();
+  final env = Map<String, String>.from(Platform.environment)
+    ..addAll(Map<String, String>.from((entry['env'] as Map?) ?? const {}));
+
+  final Process proc;
+  if (Platform.isWindows &&
+      !cmd.toLowerCase().endsWith('.exe') &&
+      !File(cmd).existsSync()) {
+    proc = await Process.start(
+      'cmd.exe',
+      ['/c', cmd, ...args],
+      workingDirectory: cwd.isEmpty ? null : cwd,
+      environment: env,
+    );
+  } else {
+    proc = await Process.start(
+      cmd,
+      args,
+      workingDirectory: cwd.isEmpty ? null : cwd,
+      environment: env,
+    );
+  }
+  Win32ProcessJobGuard.instance.attachPid(proc.pid);
+  return proc;
+}
+
+/// Persistent initialized stdio session kept warm across consecutive Sub-MCP
+/// tool calls (`call_sub_mcp` / `inspect_sub_mcp`) to eliminate 1–2.5s cold
+/// starts from `npx` / `uvx` / `python` subprocesses.
+class _PooledStdioSession {
+  final String serverName;
+  final String fingerprint;
+  final Process proc;
+  final void Function() _onClosed;
+
+  final Map<int, Completer<Map<String, dynamic>>> _pending = {};
+  String _stderrTail = '';
+  int _nextId = 1;
+  bool _closed = false;
+  Timer? _idleTimer;
+  late final StreamSubscription<String> _outSub;
+  late final StreamSubscription<String> _errSub;
+  Map<String, dynamic> initResult = const {};
+
+  _PooledStdioSession._({
+    required this.serverName,
+    required this.fingerprint,
+    required this.proc,
+    required void Function() onClosed,
+  }) : _onClosed = onClosed {
+    _errSub = proc.stderr.transform(utf8.decoder).listen(
+      (chunk) {
+        _stderrTail = '$_stderrTail$chunk';
+        if (_stderrTail.length > 8192) {
+          _stderrTail = _stderrTail.substring(_stderrTail.length - 8192);
+        }
+      },
+      onError: (_) {},
+    );
+
+    _outSub = proc.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+      (line) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) return;
+        try {
+          final msg = jsonDecode(trimmed);
+          if (msg is Map && msg['id'] != null) {
+            final id = int.tryParse('${msg['id']}');
+            final comp = id != null ? _pending.remove(id) : null;
+            if (comp != null && !comp.isCompleted) {
+              if (msg['error'] != null) {
+                comp.completeError(
+                  StateError('RPC Error: ${jsonEncode(msg['error'])}'),
+                );
+              } else {
+                comp.complete(
+                  Map<String, dynamic>.from(
+                    (msg['result'] as Map?) ?? const {},
+                  ),
+                );
+              }
+            }
+          }
+        } catch (_) {}
+      },
+      onError: (_) {},
+    );
+
+    unawaited(
+      proc.exitCode.then((rc) {
+        if (_closed) return;
+        _closed = true;
+        _idleTimer?.cancel();
+        _idleTimer = null;
+        final errTxt = _stderrTail.trim();
+        final err = StateError(
+          'Sub-MCP stdio process exited (code $rc)'
+          '${errTxt.isNotEmpty ? ': $errTxt' : ''}',
+        );
+        final waiters = _pending.values.toList();
+        _pending.clear();
+        for (final c in waiters) {
+          if (!c.isCompleted) c.completeError(err);
+        }
+        _onClosed();
+      }),
+    );
+  }
+
+  bool get isAlive => !_closed;
+  int get pid => proc.pid;
+
+  void touchIdleTimer(Duration ttl) {
+    if (_closed) return;
+    _idleTimer?.cancel();
+    _idleTimer = Timer(ttl, () {
+      unawaited(close());
+    });
+  }
+
+  static Future<_PooledStdioSession> spawnAndInitialize(
+    Map<String, dynamic> entry, {
+    required String fingerprint,
+    required Duration timeout,
+    required Duration idleTtl,
+    required void Function() onClosed,
+  }) async {
+    final proc = await _spawnStdioProcess(entry);
+    final session = _PooledStdioSession._(
+      serverName: (entry['name'] ?? '').toString(),
+      fingerprint: fingerprint,
+      proc: proc,
+      onClosed: onClosed,
+    );
+    try {
+      session.initResult = await session.sendRpc(
+        'initialize',
+        _mcpInitParams(),
+        timeout: timeout,
+      );
+      await session.sendNotification('notifications/initialized', null);
+      session.touchIdleTimer(idleTtl);
+      return session;
+    } catch (_) {
+      await session.close();
+      rethrow;
+    }
+  }
+
+  Future<void> sendNotification(
+    String method,
+    Map<String, dynamic>? params,
+  ) async {
+    if (_closed) {
+      throw StateError('Sub-MCP stdio session is closed ($serverName)');
+    }
+    final payload = <String, dynamic>{
+      'jsonrpc': '2.0',
+      'method': method,
+      if (params != null) 'params': params,
+    };
+    proc.stdin.writeln(jsonEncode(payload));
+    await proc.stdin.flush();
+  }
+
+  Future<Map<String, dynamic>> sendRpc(
+    String method,
+    Map<String, dynamic>? params, {
+    required Duration timeout,
+  }) async {
+    if (_closed) {
+      throw StateError('Sub-MCP stdio session is closed ($serverName)');
+    }
+    final id = _nextId++;
+    final comp = Completer<Map<String, dynamic>>();
+    _pending[id] = comp;
+    final payload = <String, dynamic>{
+      'jsonrpc': '2.0',
+      'id': id,
+      'method': method,
+      'params': params ?? const <String, dynamic>{},
+    };
+    try {
+      proc.stdin.writeln(jsonEncode(payload));
+      await proc.stdin.flush();
+    } catch (e) {
+      _pending.remove(id);
+      await close();
+      throw StateError('Failed writing to Sub-MCP stdin ($serverName): $e');
+    }
+    return comp.future.timeout(
+      timeout,
+      onTimeout: () {
+        _pending.remove(id);
+        final errTxt = _stderrTail.trim();
+        throw TimeoutException(
+          'Sub-MCP stdio timeout ($method)${errTxt.isNotEmpty ? ': $errTxt' : ''}',
+        );
+      },
+    );
+  }
+
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    final waiters = _pending.values.toList();
+    _pending.clear();
+    for (final c in waiters) {
+      if (!c.isCompleted) {
+        c.completeError(StateError('Sub-MCP session closed ($serverName)'));
+      }
+    }
+    await _outSub.cancel();
+    await _errSub.cancel();
+    try {
+      await proc.stdin.close();
+    } catch (_) {}
+    try {
+      proc.kill();
+    } catch (_) {}
+    _onClosed();
+  }
+}
+
+class _WarmStdioSessionPool {
+  final Map<String, _PooledStdioSession> _sessions = {};
+  final Map<String, Future<_PooledStdioSession>> _inflightSpawns = {};
+  Duration idleTtl;
+
+  _WarmStdioSessionPool({this.idleTtl = const Duration(minutes: 5)});
+
+  int get activeCount =>
+      _sessions.values.where((s) => s.isAlive).length;
+
+  bool isServerWarm(String name) {
+    final s = _sessions[name];
+    return s != null && s.isAlive;
+  }
+
+  int? serverPid(String name) {
+    final s = _sessions[name];
+    return (s != null && s.isAlive) ? s.pid : null;
+  }
+
+  static String _fingerprint(Map<String, dynamic> entry) => jsonEncode({
+        'command': entry['command'],
+        'args': entry['args'],
+        'cwd': entry['cwd'],
+        'env': entry['env'],
+      });
+
+  Future<_PooledStdioSession> acquire(
+    Map<String, dynamic> entry, {
+    required Duration timeout,
+  }) async {
+    final name = (entry['name'] ?? '').toString();
+    final fp = _fingerprint(entry);
+    final existing = _sessions[name];
+    if (existing != null) {
+      if (existing.isAlive && existing.fingerprint == fp) {
+        existing.touchIdleTimer(idleTtl);
+        return existing;
+      }
+      await existing.close();
+      _sessions.remove(name);
+    }
+
+    final pendingSpawn = _inflightSpawns[name];
+    if (pendingSpawn != null) {
+      final spawned = await pendingSpawn;
+      if (spawned.isAlive && spawned.fingerprint == fp) {
+        spawned.touchIdleTimer(idleTtl);
+        return spawned;
+      }
+    }
+
+    final fut = _PooledStdioSession.spawnAndInitialize(
+      entry,
+      fingerprint: fp,
+      timeout: timeout,
+      idleTtl: idleTtl,
+      onClosed: () {
+        final cur = _sessions[name];
+        if (cur != null && !cur.isAlive) {
+          _sessions.remove(name);
+        }
+      },
+    );
+    _inflightSpawns[name] = fut;
+    try {
+      final session = await fut;
+      _sessions[name] = session;
+      return session;
+    } finally {
+      if (identical(_inflightSpawns[name], fut)) {
+        final _ = _inflightSpawns.remove(name);
+      }
+    }
+  }
+
+  Future<T> runWithWarmSession<T>(
+    Map<String, dynamic> entry, {
+    required Duration timeout,
+    required Future<T> Function(_PooledStdioSession session) action,
+  }) async {
+    var session = await acquire(entry, timeout: timeout);
+    try {
+      final out = await action(session);
+      session.touchIdleTimer(idleTtl);
+      return out;
+    } on StateError catch (e) {
+      // Only auto-retry if the underlying stdio pipe broke / exited, NOT on normal JSON-RPC errors.
+      if (e.message.startsWith('RPC Error:')) rethrow;
+      await evict((entry['name'] ?? '').toString());
+      session = await acquire(entry, timeout: timeout);
+      final out = await action(session);
+      session.touchIdleTimer(idleTtl);
+      return out;
+    }
+  }
+
+  Future<void> evict(String name) async {
+    final s = _sessions.remove(name);
+    if (s != null) {
+      await s.close();
+    }
+  }
+
+  Future<void> closeAll() async {
+    final all = _sessions.values.toList();
+    _sessions.clear();
+    _inflightSpawns.clear();
+    for (final s in all) {
+      await s.close();
+    }
+  }
+}
+
 class _McpClientSession {
   final Map<String, dynamic> entry;
   final Duration timeout;
+  final _WarmStdioSessionPool? stdioPool;
 
-  _McpClientSession(this.entry)
+  _McpClientSession(this.entry, {this.stdioPool})
       : timeout = Duration(seconds: (entry['timeout'] as int?) ?? 30);
 
   Future<(Map<String, dynamic>, List<Map<String, dynamic>>)>
       initializeAndListTools() async {
     final tr = entry['transport'] as String;
     if (tr == 'stdio') {
-      return _runStdio((send) async {
-        final initRes = await send('initialize', _initParams());
+      if (stdioPool != null) {
+        return stdioPool!.runWithWarmSession(
+          entry,
+          timeout: timeout,
+          action: (session) async {
+            final listRes = await session.sendRpc(
+              'tools/list',
+              const <String, dynamic>{},
+              timeout: timeout,
+            );
+            return (session.initResult, _extractMcpTools(listRes));
+          },
+        );
+      }
+      return _runEphemeralStdio((send) async {
+        final initRes = await send('initialize', _mcpInitParams());
         await send('notifications/initialized', null, isNotification: true);
         final listRes = await send('tools/list', const <String, dynamic>{});
-        return (initRes, _extractTools(listRes));
+        return (initRes, _extractMcpTools(listRes));
       });
     } else if (tr == 'sse') {
       return _runSse((send) async {
-        final initRes = await send('initialize', _initParams());
+        final initRes = await send('initialize', _mcpInitParams());
         await send('notifications/initialized', null, isNotification: true);
         final listRes = await send('tools/list', const <String, dynamic>{});
-        return (initRes, _extractTools(listRes));
+        return (initRes, _extractMcpTools(listRes));
       });
     } else {
       return _runHttp((send) async {
-        final initRes = await send('initialize', _initParams());
+        final initRes = await send('initialize', _mcpInitParams());
         await send('notifications/initialized', null, isNotification: true);
         final listRes = await send('tools/list', const <String, dynamic>{});
-        return (initRes, _extractTools(listRes));
+        return (initRes, _extractMcpTools(listRes));
       });
     }
   }
@@ -192,7 +575,7 @@ class _McpClientSession {
         bool isNotification,
       }) send,
     ) async {
-      await send('initialize', _initParams());
+      await send('initialize', _mcpInitParams());
       await send('notifications/initialized', null, isNotification: true);
       return send('tools/call', {
         'name': toolName,
@@ -202,7 +585,19 @@ class _McpClientSession {
 
     final Map<String, dynamic> res;
     if (tr == 'stdio') {
-      res = await _runStdio(invoke, overrideTimeout: effTimeout);
+      if (stdioPool != null) {
+        res = await stdioPool!.runWithWarmSession(
+          entry,
+          timeout: effTimeout,
+          action: (session) => session.sendRpc(
+            'tools/call',
+            {'name': toolName, 'arguments': arguments},
+            timeout: effTimeout,
+          ),
+        );
+      } else {
+        res = await _runEphemeralStdio(invoke, overrideTimeout: effTimeout);
+      }
     } else if (tr == 'sse') {
       res = await _runSse(invoke, overrideTimeout: effTimeout);
     } else {
@@ -211,27 +606,7 @@ class _McpClientSession {
     return _formatCallToolResult(res);
   }
 
-  Map<String, dynamic> _initParams() => {
-        'protocolVersion': '2025-03-26',
-        'capabilities': const <String, dynamic>{},
-        'clientInfo': {'name': 'agent-mcp-gateway', 'version': agentMcpVersion},
-      };
-
-  List<Map<String, dynamic>> _extractTools(Map<String, dynamic> res) {
-    final raw = (res['tools'] as List?) ?? const [];
-    return raw.whereType<Map>().map((t) {
-      return <String, dynamic>{
-        'name': (t['name'] ?? '').toString(),
-        'description': (t['description'] ?? '').toString(),
-        'inputSchema': t['inputSchema'] ??
-            t['input_schema'] ??
-            const {'type': 'object', 'properties': <String, dynamic>{}},
-        if (t['annotations'] != null) 'annotations': t['annotations'],
-      };
-    }).toList();
-  }
-
-  Future<T> _runStdio<T>(
+  Future<T> _runEphemeralStdio<T>(
     Future<T> Function(
       Future<Map<String, dynamic>> Function(
         String method,
@@ -242,33 +617,7 @@ class _McpClientSession {
     Duration? overrideTimeout,
   }) async {
     final effTimeout = overrideTimeout ?? timeout;
-    final cmd = (entry['command'] ?? '').toString();
-    final args = ((entry['args'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .toList();
-    final cwd = (entry['cwd'] ?? '').toString().trim();
-    final env = Map<String, String>.from(Platform.environment)
-      ..addAll(Map<String, String>.from((entry['env'] as Map?) ?? const {}));
-
-    Process proc;
-    if (Platform.isWindows &&
-        !cmd.toLowerCase().endsWith('.exe') &&
-        !File(cmd).existsSync()) {
-      proc = await Process.start(
-        'cmd.exe',
-        ['/c', cmd, ...args],
-        workingDirectory: cwd.isEmpty ? null : cwd,
-        environment: env,
-      );
-    } else {
-      proc = await Process.start(
-        cmd,
-        args,
-        workingDirectory: cwd.isEmpty ? null : cwd,
-        environment: env,
-      );
-    }
-    Win32ProcessJobGuard.instance.attachPid(proc.pid);
+    final proc = await _spawnStdioProcess(entry);
 
     final pending = <int, Completer<Map<String, dynamic>>>{};
     var nextId = 1;
@@ -621,11 +970,21 @@ class SubMcpManager {
 
   final File? _customConfigFile;
   final Map<String, Map<String, dynamic>> _cache = {};
+  final _WarmStdioSessionPool _stdioPool;
 
-  SubMcpManager([this._customConfigFile]);
+  SubMcpManager([
+    this._customConfigFile,
+    Duration stdioIdleTtl = const Duration(minutes: 5),
+  ]) : _stdioPool = _WarmStdioSessionPool(idleTtl: stdioIdleTtl);
 
   File get configFile =>
       _customConfigFile ?? StoragePaths.instance.subMcpConfigFile;
+
+  int get warmSessionCount => _stdioPool.activeCount;
+
+  int? warmSessionPid(String serverName) => _stdioPool.serverPid(serverName);
+
+  Future<void> closeAllSessions() => _stdioPool.closeAll();
 
   List<Map<String, dynamic>> loadEntries() {
     StoragePaths.instance.ensureLayout();
@@ -671,11 +1030,15 @@ class SubMcpManager {
   List<Map<String, dynamic>> listWithStatus() {
     final entries = loadEntries();
     return entries.map((e) {
-      final c = _cache[e['name']] ?? const <String, dynamic>{};
+      final name = e['name'] as String;
+      final c = _cache[name] ?? const <String, dynamic>{};
       final tools = (c['tools'] as List?) ?? const [];
       return <String, dynamic>{
         ...e,
         'status': c['status'] ?? 'idle',
+        'warm': _stdioPool.isServerWarm(name),
+        if (_stdioPool.serverPid(name) != null)
+          'warm_pid': _stdioPool.serverPid(name),
         'tool_count': c.containsKey('tools') ? tools.length : null,
         'tools': tools
             .whereType<Map>()
@@ -718,8 +1081,13 @@ class SubMcpManager {
     }
     if (!updated) next.add(entry);
     saveEntries(next);
-    if (oldName != null) _cache.remove(oldName);
-    _cache.remove(entry['name']);
+    if (oldName != null) {
+      _cache.remove(oldName);
+      unawaited(_stdioPool.evict(oldName));
+    }
+    final newName = entry['name'] as String;
+    _cache.remove(newName);
+    unawaited(_stdioPool.evict(newName));
     return entry;
   }
 
@@ -735,6 +1103,7 @@ class SubMcpManager {
       if (!byName.containsKey(n)) order.add(n);
       byName[n] = item;
       _cache.remove(n);
+      unawaited(_stdioPool.evict(n));
     }
     saveEntries([for (final n in order) byName[n]!]);
     return parsed;
@@ -746,6 +1115,9 @@ class SubMcpManager {
       if (e['name'] == name) {
         e['enabled'] = enabled;
         saveEntries(entries);
+        if (!enabled) {
+          unawaited(_stdioPool.evict(name));
+        }
         return e;
       }
     }
@@ -758,6 +1130,7 @@ class SubMcpManager {
     if (next.length == entries.length) return false;
     saveEntries(next);
     _cache.remove(name);
+    unawaited(_stdioPool.evict(name));
     return true;
   }
 
@@ -775,10 +1148,12 @@ class SubMcpManager {
 
     final sw = Stopwatch()..start();
     try {
+      // Ephemeral probe (no stdioPool) so unsaved drafts don't linger in memory.
       final (initRes, tools) =
           await _McpClientSession(entry).initializeAndListTools();
       sw.stop();
-      final elapsed = double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      final elapsed =
+          double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
       final serverInfo = (initRes['serverInfo'] as Map?) ?? const {};
       final rawName = (serverInfo['name'] ?? '').toString().trim();
       final version = (serverInfo['version'] ?? '').toString().trim();
@@ -811,7 +1186,8 @@ class SubMcpManager {
       };
     } catch (e) {
       sw.stop();
-      final elapsed = double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      final elapsed =
+          double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
       return {'ok': false, 'error': '$e', 'ms': elapsed};
     }
   }
@@ -839,10 +1215,14 @@ class SubMcpManager {
 
     final sw = Stopwatch()..start();
     try {
-      final (_, tools) =
-          await _McpClientSession(entry).initializeAndListTools();
+      final usePool = entry['enabled'] != false ? _stdioPool : null;
+      final (_, tools) = await _McpClientSession(
+        entry,
+        stdioPool: usePool,
+      ).initializeAndListTools();
       sw.stop();
-      final elapsed = double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      final elapsed =
+          double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
       _cache[name] = {
         'status': 'ok',
         'tools': tools,
@@ -852,7 +1232,8 @@ class SubMcpManager {
       return {'ok': true, 'tools': tools, 'ms': elapsed, 'cached': false};
     } catch (e) {
       sw.stop();
-      final elapsed = double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      final elapsed =
+          double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
       final errMsg = '$e';
       _cache[name] = {
         'status': 'error',
@@ -882,7 +1263,7 @@ class SubMcpManager {
       return "Error: Sub-MCP '$serverName' is currently disabled.";
     }
     try {
-      final res = await _McpClientSession(entry).callTool(
+      final res = await _McpClientSession(entry, stdioPool: _stdioPool).callTool(
         toolName,
         arguments ?? const <String, dynamic>{},
         overrideTimeout:
@@ -944,6 +1325,7 @@ void registerSubMcpTools(
                         : it['description'],
                 'transport': it['transport'],
                 'status': it['status'] ?? 'idle',
+                'warm': it['warm'] == true,
                 'cached_tool_count': it['tool_count'],
               })
           .toList();

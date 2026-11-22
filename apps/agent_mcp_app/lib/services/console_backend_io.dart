@@ -507,12 +507,21 @@ class _IoConsoleBackend extends ConsoleBackend {
       isPinned: raw['isPinned'] == true,
       isBackdropSupported: raw['isBackdropSupported'] == true,
       windowEffect: raw['windowEffect'] == true,
+      isVisible: raw['isVisible'] != false,
     );
   }
 
   Future<dynamic> _handleNativeWindowEvent(MethodCall call) async {
     if (call.method == 'onStateChanged' && call.arguments is Map) {
       _windowState.value = _parseWindowStateMap(call.arguments as Map);
+      return null;
+    }
+    if (call.method == 'onFilesDropped' && call.arguments is List) {
+      final paths = (call.arguments as List)
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      emitDroppedFiles(paths);
       return null;
     }
     if (call.method == 'onTrayAction') {
@@ -1225,6 +1234,8 @@ class _IoConsoleBackend extends ConsoleBackend {
     String scope = 'auto',
     String? label,
     int? ttlMinutes,
+    String? pinCode,
+    int? maxDownloads,
     bool spa = false,
   }) async {
     if (isRemoteNodeActive) {
@@ -1236,6 +1247,8 @@ class _IoConsoleBackend extends ConsoleBackend {
           scope: scope,
           label: label,
           ttlMinutes: ttlMinutes,
+          pinCode: pinCode,
+          maxDownloads: maxDownloads,
           spa: spa,
         ),
       );
@@ -1252,6 +1265,8 @@ class _IoConsoleBackend extends ConsoleBackend {
         scope: scope,
         label: label,
         ttlMinutes: ttlMinutes,
+        pinCode: pinCode,
+        maxDownloads: maxDownloads,
         spa: spa,
         validateWithPolicy: false,
       );

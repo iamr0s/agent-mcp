@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agent_mcp_app/main.dart';
 import 'package:agent_mcp_app/services/console_backend_interface.dart';
 import 'package:agent_mcp_app/theme/claude_theme.dart';
+import 'package:agent_mcp_app/views/profile_endpoints_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -92,7 +93,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
         'ok': true,
         'authenticated': true,
         'server_name': 'Omen Desktop Mcp',
-        'version': '2.1.0',
+        'version': '2.2.0',
         'dashboard_mode': false,
       };
 
@@ -105,7 +106,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
   @override
   Future<Map<String, dynamic>> getStatus() async => {
         'running': true,
-        'version': '2.1.0',
+        'version': '2.2.0',
         'dashboard_mode': false,
         'tunnels': {
           'installed': true,
@@ -371,7 +372,7 @@ void main() {
   });
 
   testWidgets(
-      'FlClash-style custom Windows caption controls toggle pin, maximize, minimize, and hide-to-tray',
+      'Custom Windows 11 caption controls toggle pin, maximize, minimize, and hide-to-tray',
       (tester) async {
     var pinned = false;
     var maximized = false;
@@ -486,7 +487,7 @@ void main() {
     expect(find.textContaining('max_depth'), findsNothing);
     expect(find.textContaining('深度 2'), findsOneWidget);
 
-    // Manual collapse button on FlClash floating bottom capsule
+    // Manual collapse button on floating bottom capsule
     expect(find.byTooltip('收起底栏'), findsOneWidget);
     expect(tester.getCenter(find.byTooltip('收起底栏')).dy, lessThan(760));
 
@@ -665,7 +666,6 @@ void main() {
 
     // Verify redundant FGS IP copy buttons were removed while profile multi-endpoint copy button exists under 接入入口
     expect(find.text('通知栏常驻保活与快捷启停'), findsOneWidget);
-    expect(find.textContaining('InstallerX'), findsNothing);
 
     await tester.tap(find.text('接入入口 (1)'));
     await tester.pump(const Duration(milliseconds: 350));
@@ -782,5 +782,86 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     expect(find.textContaining('lib/'), findsOneWidget);
+  });
+
+  testWidgets(
+      'v2.2 P0-6: Shared ClaudePulseClock multiplexes pulsing status dots and auto-sleeps when window hidden',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 860);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+
+    expect(ClaudePulseClock.instance.activeSubscriberCount, greaterThanOrEqualTo(1));
+    expect(ClaudePulseClock.instance.isTickerRunning, isTrue);
+
+    // Hide window to system tray -> shared 120Hz ticker stops immediately (0% idle GPU)
+    backend._win.value = backend._win.value.copyWith(isVisible: false);
+    await tester.pump();
+    expect(ClaudePulseClock.instance.isPaused, isTrue);
+    expect(ClaudePulseClock.instance.isTickerRunning, isFalse);
+
+    // Restore window -> shared ticker resumes smoothly
+    backend._win.value = backend._win.value.copyWith(isVisible: true);
+    await tester.pump();
+    expect(ClaudePulseClock.instance.isPaused, isFalse);
+    expect(ClaudePulseClock.instance.isTickerRunning, isTrue);
+  });
+
+  testWidgets(
+      'v2.2 P1-2 & P1-4: Drag-and-drop opens pre-filled Share dialog with PIN/burn-after-download & Tailscale/LAN endpoint priority',
+      (tester) async {
+    // 1. Verify HTTPS -> Tailscale 100.x -> Primary LAN 192.168.x -> Loopback priority sorting
+    final sorted = buildProfileEndpointCopyOptions(
+      const {
+        'id': 'p-sort',
+        'name': '多网卡排序测试',
+        'transport': 'dual',
+      },
+      const [
+        'http://127.0.0.1:8778',
+        'http://192.168.1.20:8778',
+        'http://100.88.10.5:8778',
+        'https://edge.example.com',
+      ],
+    );
+    expect(sorted.first.url, equals('https://edge.example.com/mcp'));
+    expect(sorted[1].url, equals('http://100.88.10.5:8778/mcp'));
+    expect(sorted[2].url, equals('http://192.168.1.20:8778/mcp'));
+    expect(sorted[sorted.length - 2].url, equals('http://127.0.0.1:8778/mcp'));
+    expect(sorted.last.isCopyAll, isTrue);
+
+    // 2. Verify desktop/web file drop switches to Share tab and pre-fills mode + PIN/quota controls
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 960);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+
+    backend.emitDroppedFiles([r'D:\demo\optics_lab.html']);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Dialog auto-opens on Exposure tab with dropped HTML path and PIN control
+    expect(find.text('新建外网映射与分享'), findsOneWidget);
+    expect(find.text(r'D:\demo\optics_lab.html'), findsOneWidget);
+    expect(find.text('安全提取码与限次保护（可选）'), findsOneWidget);
+
+    // Switch mode to single file to verify burn-after-download ("1次即焚") segmented option
+    await tester.tap(find.text('单个视频 / 文件'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('1次即焚'), findsOneWidget);
   });
 }

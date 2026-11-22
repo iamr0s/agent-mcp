@@ -43,6 +43,11 @@ for ($i = 0; $i -lt 30; $i++) {
         try {
             $fs = [System.IO.File]::Open($targetExe, 'Open', 'ReadWrite', 'None')
             $fs.Close()
+            $dllPath = Join-Path $dist "flutter_windows.dll"
+            if (Test-Path $dllPath) {
+                $fsDll = [System.IO.File]::Open($dllPath, 'Open', 'ReadWrite', 'None')
+                $fsDll.Close()
+            }
             break
         } catch {
             # File handle still releasing

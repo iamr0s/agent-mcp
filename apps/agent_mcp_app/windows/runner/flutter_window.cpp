@@ -5,6 +5,7 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -18,6 +19,18 @@ std::wstring Utf8ToWide(const std::string& str) {
   std::wstring out(static_cast<size_t>(needed), L'\0');
   ::MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.size()),
                         &out[0], needed);
+  return out;
+}
+
+std::string WideToUtf8(const std::wstring& wstr) {
+  if (wstr.empty()) return "";
+  int needed = ::WideCharToMultiByte(CP_UTF8, 0, wstr.data(),
+                                     static_cast<int>(wstr.size()), nullptr, 0,
+                                     nullptr, nullptr);
+  if (needed <= 0) return "";
+  std::string out(static_cast<size_t>(needed), '\0');
+  ::WideCharToMultiByte(CP_UTF8, 0, wstr.data(), static_cast<int>(wstr.size()),
+                        &out[0], needed, nullptr, nullptr);
   return out;
 }
 
@@ -48,6 +61,11 @@ bool FlutterWindow::OnCreate() {
   SetupWindowChannel();
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // Enable native Win32 drag-and-drop for 1-step file/folder external sharing
+  if (GetHandle() != nullptr) {
+    ::DragAcceptFiles(GetHandle(), TRUE);
+  }
+
   if (!start_hidden_) {
     flutter_controller_->engine()->SetNextFrameCallback([this]() {
       this->Show();
@@ -60,6 +78,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 flutter::EncodableMap FlutterWindow::BuildStateMap() const {
+  HWND hwnd = const_cast<FlutterWindow*>(this)->GetHandle();
+  const bool visible = hwnd != nullptr && ::IsWindowVisible(hwnd) != FALSE &&
+                       ::IsIconic(hwnd) == FALSE;
   return flutter::EncodableMap{
       {flutter::EncodableValue("isMaximized"),
        flutter::EncodableValue(IsMaximized())},
@@ -69,6 +90,8 @@ flutter::EncodableMap FlutterWindow::BuildStateMap() const {
        flutter::EncodableValue(IsBackdropSupported())},
       {flutter::EncodableValue("windowEffect"),
        flutter::EncodableValue(IsBackdropEffectEnabled())},
+      {flutter::EncodableValue("isVisible"),
+       flutter::EncodableValue(visible)},
   };
 }
 
@@ -90,6 +113,7 @@ void FlutterWindow::SetupWindowChannel() {
         }
         if (method == "minimize") {
           this->Minimize();
+          this->OnWindowStateChanged();
           result->Success();
           return;
         }
@@ -106,11 +130,13 @@ void FlutterWindow::SetupWindowChannel() {
         }
         if (method == "hideToTray") {
           this->HideToTray();
+          this->OnWindowStateChanged();
           result->Success();
           return;
         }
         if (method == "showAndFocus") {
           this->ShowAndFocus();
+          this->OnWindowStateChanged();
           if (flutter_controller_) {
             flutter_controller_->ForceRedraw();
           }
@@ -215,6 +241,7 @@ void FlutterWindow::OnWindowStateChanged() {
 void FlutterWindow::OnTrayAction(const char* action) {
   if (action == nullptr) return;
   if (std::strcmp(action, "open") == 0) {
+    OnWindowStateChanged();
     if (flutter_controller_) {
       flutter_controller_->ForceRedraw();
     }
@@ -245,6 +272,28 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_DROPFILES) {
+    HDROP hdrop = reinterpret_cast<HDROP>(wparam);
+    UINT count = ::DragQueryFileW(hdrop, 0xFFFFFFFF, nullptr, 0);
+    flutter::EncodableList paths;
+    for (UINT i = 0; i < count; ++i) {
+      UINT len = ::DragQueryFileW(hdrop, i, nullptr, 0);
+      if (len > 0) {
+        std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
+        ::DragQueryFileW(hdrop, i, &buf[0], len + 1);
+        buf.resize(len);
+        paths.emplace_back(WideToUtf8(buf));
+      }
+    }
+    ::DragFinish(hdrop);
+    if (!paths.empty() && window_channel_) {
+      window_channel_->InvokeMethod(
+          "onFilesDropped",
+          std::make_unique<flutter::EncodableValue>(paths));
+    }
+    return 0;
+  }
+
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
@@ -259,9 +308,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
     case WM_SHOWWINDOW:
+      OnWindowStateChanged();
       if (wparam == TRUE && flutter_controller_) {
         flutter_controller_->ForceRedraw();
       }
+      break;
+    case WM_SIZE:
+      OnWindowStateChanged();
       break;
   }
 

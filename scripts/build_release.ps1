@@ -19,6 +19,8 @@ if (-not (Test-Path $flutter)) {
 
 Write-Host "[1/4] Building Flutter Web (/dashboard/ bundle)..." -ForegroundColor Cyan
 Push-Location (Join-Path $root "apps\agent_mcp_app")
+& $flutter pub get
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 & $flutter build web --release --base-href /dashboard/ --no-pub
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 

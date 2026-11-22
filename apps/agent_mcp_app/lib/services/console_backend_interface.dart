@@ -133,12 +133,14 @@ class DesktopWindowState {
   final bool isPinned;
   final bool isBackdropSupported;
   final bool windowEffect;
+  final bool isVisible;
 
   const DesktopWindowState({
     this.isMaximized = false,
     this.isPinned = false,
     this.isBackdropSupported = false,
     this.windowEffect = false,
+    this.isVisible = true,
   });
 
   DesktopWindowState copyWith({
@@ -146,12 +148,14 @@ class DesktopWindowState {
     bool? isPinned,
     bool? isBackdropSupported,
     bool? windowEffect,
+    bool? isVisible,
   }) {
     return DesktopWindowState(
       isMaximized: isMaximized ?? this.isMaximized,
       isPinned: isPinned ?? this.isPinned,
       isBackdropSupported: isBackdropSupported ?? this.isBackdropSupported,
       windowEffect: windowEffect ?? this.windowEffect,
+      isVisible: isVisible ?? this.isVisible,
     );
   }
 
@@ -161,11 +165,17 @@ class DesktopWindowState {
       other.isMaximized == isMaximized &&
       other.isPinned == isPinned &&
       other.isBackdropSupported == isBackdropSupported &&
-      other.windowEffect == windowEffect;
+      other.windowEffect == windowEffect &&
+      other.isVisible == isVisible;
 
   @override
-  int get hashCode =>
-      Object.hash(isMaximized, isPinned, isBackdropSupported, windowEffect);
+  int get hashCode => Object.hash(
+        isMaximized,
+        isPinned,
+        isBackdropSupported,
+        windowEffect,
+        isVisible,
+      );
 }
 
 abstract class ConsoleBackend {
@@ -179,6 +189,17 @@ abstract class ConsoleBackend {
   List<String> get deviceLanIps => const [];
   ValueListenable<int> get externalRefreshSignal => _defaultRefreshSignal;
   static final ValueNotifier<int> _defaultRefreshSignal = ValueNotifier<int>(0);
+
+  final StreamController<List<String>> _droppedFilesCtrl =
+      StreamController<List<String>>.broadcast();
+  Stream<List<String>> get droppedFilesStream => _droppedFilesCtrl.stream;
+
+  void emitDroppedFiles(List<String> paths) {
+    final cleaned = paths.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (cleaned.isNotEmpty && !_droppedFilesCtrl.isClosed) {
+      _droppedFilesCtrl.add(cleaned);
+    }
+  }
 
   ConsoleNodeProfile get activeNode => const ConsoleNodeProfile(
         id: 'local',
@@ -278,6 +299,8 @@ abstract class ConsoleBackend {
     String scope = 'auto',
     String? label,
     int? ttlMinutes,
+    String? pinCode,
+    int? maxDownloads,
     bool spa = false,
   }) async =>
       const {'ok': false, 'error': 'Unsupported'};

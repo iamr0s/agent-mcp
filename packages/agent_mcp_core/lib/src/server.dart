@@ -535,10 +535,19 @@ class McpServerEngine {
       Map<String, dynamic>? matchedProfile;
       var tokenAuthenticated = false;
 
-      if (bearerTok.isNotEmpty && st.apiKeyMap.containsKey(bearerTok)) {
-        matchedProfile = st.apiKeyMap[bearerTok];
-        tokenAuthenticated = true;
-      } else if (bearerTok.isNotEmpty) {
+      if (bearerTok.isNotEmpty && st.apiKeyMap.isNotEmpty) {
+        Map<String, dynamic>? hit;
+        for (final entry in st.apiKeyMap.entries) {
+          if (constantTimeEquals(bearerTok, entry.key)) {
+            hit = entry.value;
+          }
+        }
+        if (hit != null) {
+          matchedProfile = hit;
+          tokenAuthenticated = true;
+        }
+      }
+      if (!tokenAuthenticated && bearerTok.isNotEmpty) {
         final cid = oauthProvider.resolveTokenClientId(bearerTok);
         if (cid != null) {
           tokenAuthenticated = true;
@@ -585,6 +594,32 @@ class McpServerEngine {
             },
           ),
         );
+      }
+
+      // 5b. MCP Streamable HTTP Origin & DNS Rebinding Guard (MCP 2025-11-25 Spec)
+      if (!tokenAuthenticated) {
+        final savedCfg = loadSavedConfig(config.configFile);
+        final allowedOrigins = ((savedCfg['allowed_origins'] as List?) ?? const [])
+            .map((e) => e.toString().trim().toLowerCase())
+            .where((s) => s.isNotEmpty)
+            .toSet();
+        final guardErr = _checkMcpDnsRebindingAndOrigin(
+          request: request,
+          rawHost: rawHost,
+          hostNoPort: hostNoPort,
+          routingState: st,
+          allowedOrigins: allowedOrigins,
+        );
+        if (guardErr != null) {
+          McpLogger.instance
+              .warning('[SECURITY 403] $guardErr (${request.method} $path)');
+          return _withCors(
+            Response.forbidden(
+              jsonEncode({'error': guardErr}),
+              headers: const {'content-type': 'application/json; charset=utf-8'},
+            ),
+          );
+        }
       }
 
       final policy = matchedProfile != null
@@ -1068,6 +1103,73 @@ class _LiveRoutingState {
   }
 }
 
+bool _isTrustedLocalOrConfiguredHost(
+  String rawHost,
+  String hostNoPort,
+  _LiveRoutingState st,
+) {
+  if (hostNoPort.isEmpty ||
+      hostNoPort == 'localhost' ||
+      hostNoPort == '127.0.0.1' ||
+      hostNoPort == '::1' ||
+      hostNoPort == '[::1]') {
+    return true;
+  }
+  if (InternetAddress.tryParse(hostNoPort) != null) {
+    return true;
+  }
+  if (hostNoPort.endsWith('.ts.net') ||
+      hostNoPort.endsWith('.trycloudflare.com') ||
+      hostNoPort == Platform.localHostname.toLowerCase()) {
+    return true;
+  }
+  if (st.hostBaseMap.containsKey(rawHost) ||
+      st.hostBaseMap.containsKey(hostNoPort) ||
+      st.hostProfileMap.containsKey(rawHost) ||
+      st.hostProfileMap.containsKey(hostNoPort)) {
+    return true;
+  }
+  return false;
+}
+
+bool _isLoopbackHostName(String h) =>
+    h == 'localhost' || h == '127.0.0.1' || h == '::1' || h == '[::1]';
+
+String? _checkMcpDnsRebindingAndOrigin({
+  required Request request,
+  required String rawHost,
+  required String hostNoPort,
+  required _LiveRoutingState routingState,
+  required Set<String> allowedOrigins,
+}) {
+  if (!_isTrustedLocalOrConfiguredHost(rawHost, hostNoPort, routingState)) {
+    return "Blocked untrusted Host '$rawHost' (MCP DNS rebinding protection).";
+  }
+
+  final rawOrigin = (request.headers['origin'] ?? '').trim();
+  if (rawOrigin.isEmpty) {
+    return null;
+  }
+
+  final originLower = rawOrigin.toLowerCase().replaceAll(RegExp(r'/+$'), '');
+  if (allowedOrigins.contains('*') || allowedOrigins.contains(originLower)) {
+    return null;
+  }
+
+  final originUri = Uri.tryParse(rawOrigin);
+  if (originUri == null || originUri.host.isEmpty) {
+    return "Blocked malformed Origin header '$rawOrigin'.";
+  }
+
+  final originHost = originUri.host.toLowerCase();
+  final sameHost = originHost == hostNoPort ||
+      (_isLoopbackHostName(originHost) && _isLoopbackHostName(hostNoPort));
+  if (!sameHost) {
+    return "Cross-origin browser request from '$rawOrigin' to unauthenticated MCP endpoint blocked (Origin guard).";
+  }
+  return null;
+}
+
 Response _withCors(Response r) {
   return r.change(
     headers: const {
@@ -1144,6 +1246,7 @@ class McpServiceController {
     if (eng != null) {
       await eng.processManager.stopAll();
     }
+    await SubMcpManager.instance.closeAllSessions();
     if (srvs.isNotEmpty) {
       for (final srv in srvs) {
         await srv.close(force: true);

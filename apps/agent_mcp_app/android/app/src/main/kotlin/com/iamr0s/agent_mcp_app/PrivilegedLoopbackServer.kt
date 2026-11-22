@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -193,6 +194,7 @@ class PrivilegedLoopbackServer {
                 "/fs/stat" -> writeJson(outs, 200, handleFsStat(reqJson))
                 "/fs/list" -> writeJson(outs, 200, handleFsList(reqJson))
                 "/fs/read" -> handleFsRead(reqJson, outs)
+                "/fs/read_range" -> handleFsReadRange(reqJson, outs)
                 "/fs/op" -> writeJson(outs, 200, handleFsOp(reqJson))
                 "/proc/start" -> writeJson(outs, 200, handleProcStart(reqJson))
                 "/proc/wait" -> writeJson(outs, 200, handleProcWait(reqJson))
@@ -300,6 +302,53 @@ class PrivilegedLoopbackServer {
         }
         val data = FileInputStream(f).use { it.readBytes() }
         writeRawResponse(outs, 200, "application/octet-stream", data)
+    }
+
+    /**
+     * Streams arbitrary byte ranges of large files (>32MB videos, APKs, archives)
+     * in 64KB chunks via RandomAccessFile with near-zero heap allocation.
+     */
+    private fun handleFsReadRange(req: JSONObject, outs: BufferedOutputStream) {
+        val target = req.optString("path", "")
+        val f = File(target)
+        if (!f.exists() || !f.isFile) {
+            writeJson(outs, 404, JSONObject().put("ok", false).put("error", "Not a file or does not exist: $target"))
+            return
+        }
+        val totalLen = f.length()
+        val rawOffset = req.optLong("offset", 0L).coerceAtLeast(0L)
+        if (rawOffset > totalLen) {
+            writeJson(outs, 416, JSONObject().put("ok", false).put("error", "Range offset out of bounds ($rawOffset > $totalLen)"))
+            return
+        }
+        val reqLen = req.optLong("length", -1L)
+        val toSend = if (reqLen < 0L) {
+            totalLen - rawOffset
+        } else {
+            reqLen.coerceAtMost(totalLen - rawOffset)
+        }
+
+        val header = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: application/octet-stream\r\n" +
+            "Content-Length: $toSend\r\n" +
+            "Connection: close\r\n\r\n"
+        outs.write(header.toByteArray(StandardCharsets.US_ASCII))
+
+        if (toSend > 0L) {
+            RandomAccessFile(f, "r").use { raf ->
+                raf.seek(rawOffset)
+                val buf = ByteArray(65536)
+                var remaining = toSend
+                while (remaining > 0L) {
+                    val want = if (remaining > buf.size) buf.size else remaining.toInt()
+                    val n = raf.read(buf, 0, want)
+                    if (n <= 0) break
+                    outs.write(buf, 0, n)
+                    remaining -= n
+                }
+            }
+        }
+        outs.flush()
     }
 
     private fun handleFsWrite(
@@ -433,7 +482,31 @@ class PrivilegedLoopbackServer {
         return -1
     }
 
+    private fun pruneExitedProcesses() {
+        val now = System.currentTimeMillis()
+        val maxAgeMs = 30L * 60L * 1000L
+        val exited = ArrayList<ManagedChild>()
+        for (ch in procs.values) {
+            val ended = ch.endedAtMs
+            if (ended != null) {
+                if (now - ended > maxAgeMs) {
+                    procs.remove(ch.id)
+                } else {
+                    exited.add(ch)
+                }
+            }
+        }
+        if (exited.size > 24) {
+            exited.sortBy { it.endedAtMs ?: 0L }
+            val excess = exited.size - 24
+            for (i in 0 until excess) {
+                procs.remove(exited[i].id)
+            }
+        }
+    }
+
     private fun handleProcStart(req: JSONObject): JSONObject {
+        pruneExitedProcesses()
         val command = req.optString("command", "")
         var workDir = req.optString("cwd", "").trim()
         val shell = req.optString("shell", "auto")
@@ -560,6 +633,7 @@ class PrivilegedLoopbackServer {
     }
 
     private fun handleProcManage(req: JSONObject): JSONObject {
+        pruneExitedProcesses()
         val action = req.optString("action", "list")
         if (action == "list") {
             val now = System.currentTimeMillis()
@@ -703,6 +777,7 @@ class PrivilegedLoopbackServer {
                 403 -> "Forbidden"
                 404 -> "Not Found"
                 413 -> "Payload Too Large"
+                416 -> "Range Not Satisfiable"
                 else -> "Internal Server Error"
             }
             val header = "HTTP/1.1 $code $reason\r\n" +

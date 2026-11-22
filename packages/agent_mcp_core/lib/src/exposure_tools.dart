@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
+import 'package:stream_channel/stream_channel.dart';
 
+import 'auth.dart';
 import 'config.dart';
 import 'logging_utils.dart';
 import 'privileged_exec.dart';
@@ -97,19 +100,252 @@ bool _isTextPreviewExt(String ext) => const {
       '.css',
     }.contains(ext);
 
-bool _isSensitiveShareFile(String filePath) {
-  final base = p.basename(filePath).toLowerCase();
-  if (base == '.env' ||
-      (base.startsWith('.env.') && base != '.env.example') ||
-      base == 'id_rsa' ||
-      base == 'id_ed25519' ||
-      base == 'mcp_config.json' ||
-      base == 'oauth_state.json' ||
-      base.endsWith('.pem') ||
-      base.endsWith('.key')) {
-    return true;
+/// Unified sensitive file & directory check shared with `config.dart` (`isBlockedSecretPath`).
+bool _isSensitiveShareFile(String filePath, {ServerConfig? config}) {
+  return isBlockedSecretPath(filePath, config: config);
+}
+
+/// Resolves real physical paths (following filesystem symlinks) and verifies
+/// that [relSegments] remains strictly inside [rootDir] with no symlink escape.
+/// Returns `null` if traversal/symlink escape or secret path is detected.
+Future<String?> _resolveSafeSharePath(
+  String rootDir,
+  List<String> relSegments, {
+  ServerConfig? config,
+  bool allowMissingLeaf = false,
+}) async {
+  for (final seg in relSegments) {
+    if (seg == '..' || seg.contains('/') || seg.contains(r'\')) {
+      return null;
+    }
   }
-  return false;
+
+  final useBridge = await PrivFs.useBridgeForPath(rootDir);
+  String rootReal;
+  if (!useBridge) {
+    try {
+      final d = Directory(rootDir);
+      rootReal = d.existsSync()
+          ? d.resolveSymbolicLinksSync()
+          : p.canonicalize(rootDir);
+    } catch (_) {
+      rootReal = p.canonicalize(rootDir);
+    }
+  } else {
+    rootReal = p.normalize(p.absolute(rootDir));
+  }
+
+  final candidateLexical = relSegments.isEmpty
+      ? rootReal
+      : p.normalize(p.joinAll([rootReal, ...relSegments]));
+
+  if (!isWithin(candidateLexical, rootReal)) {
+    return null;
+  }
+  if (_isSensitiveShareFile(candidateLexical, config: config)) {
+    return null;
+  }
+
+  if (!useBridge) {
+    // Check every ancestor segment for symlinks escaping rootReal
+    var cur = rootReal;
+    for (var i = 0; i < relSegments.length; i++) {
+      cur = p.join(cur, relSegments[i]);
+      final linkType = FileSystemEntity.typeSync(cur, followLinks: false);
+      if (linkType == FileSystemEntityType.notFound) {
+        if (allowMissingLeaf && i == relSegments.length - 1) {
+          return candidateLexical;
+        }
+        return candidateLexical;
+      }
+      try {
+        final resolvedStep = linkType == FileSystemEntityType.directory
+            ? Directory(cur).resolveSymbolicLinksSync()
+            : (linkType == FileSystemEntityType.file
+                ? File(cur).resolveSymbolicLinksSync()
+                : FileSystemEntity.typeSync(cur, followLinks: true) ==
+                        FileSystemEntityType.directory
+                    ? Directory(cur).resolveSymbolicLinksSync()
+                    : File(cur).resolveSymbolicLinksSync());
+        if (!isWithin(resolvedStep, rootReal)) {
+          return null; // Symlink points outside shared root!
+        }
+        if (_isSensitiveShareFile(resolvedStep, config: config)) {
+          return null;
+        }
+        if (i == relSegments.length - 1) {
+          return resolvedStep;
+        }
+      } catch (_) {
+        // Broken symlink or unreadable target -> block safely
+        if (linkType == FileSystemEntityType.link) return null;
+      }
+    }
+  }
+
+  return candidateLexical;
+}
+
+final Uint32List _crc32Table = (() {
+  final table = Uint32List(256);
+  for (var i = 0; i < 256; i++) {
+    var c = i;
+    for (var k = 0; k < 8; k++) {
+      c = (c & 1) != 0 ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c;
+  }
+  return table;
+})();
+
+int _updateCrc32(int crc, List<int> chunk) {
+  var c = crc;
+  for (var i = 0; i < chunk.length; i++) {
+    c = _crc32Table[(c ^ chunk[i]) & 0xFF] ^ (c >>> 8);
+  }
+  return c;
+}
+
+class _ZipCdEntry {
+  final Uint8List nameBytes;
+  final int dosTime;
+  final int dosDate;
+  final int crc32;
+  final int compressedSize;
+  final int uncompressedSize;
+  final int localHeaderOffset;
+
+  const _ZipCdEntry({
+    required this.nameBytes,
+    required this.dosTime,
+    required this.dosDate,
+    required this.crc32,
+    required this.compressedSize,
+    required this.uncompressedSize,
+    required this.localHeaderOffset,
+  });
+}
+
+/// Streams a PKZIP archive (DEFLATE + Data Descriptor + UTF-8 flags) in 64KB
+/// chunks directly over HTTP with <2MB constant memory footprint.
+Stream<List<int>> _streamPkZipEntries(
+  List<({String fullPath, String relPath, DateTime modified})> files, {
+  required void Function(int deltaBytes) onBytesEmitted,
+}) async* {
+  final cdEntries = <_ZipCdEntry>[];
+  var offset = 0;
+
+  Uint8List emitBytes(Uint8List b) {
+    offset += b.length;
+    onBytesEmitted(b.length);
+    return b;
+  }
+
+  for (final f in files) {
+    final nameBytes = Uint8List.fromList(utf8.encode(f.relPath));
+    final dt = f.modified.toLocal();
+    final dosTime = ((dt.hour & 0x1F) << 11) |
+        ((dt.minute & 0x3F) << 5) |
+        ((dt.second ~/ 2) & 0x1F);
+    final year = dt.year < 1980 ? 1980 : (dt.year > 2107 ? 2107 : dt.year);
+    final dosDate =
+        (((year - 1980) & 0x7F) << 9) | ((dt.month & 0x0F) << 5) | (dt.day & 0x1F);
+
+    final localHeaderOffset = offset;
+    final lfh = ByteData(30 + nameBytes.length);
+    lfh.setUint32(0, 0x04034b50, Endian.little);
+    lfh.setUint16(4, 20, Endian.little); // version 2.0
+    lfh.setUint16(6, 0x0808, Endian.little); // data descriptor + UTF-8
+    lfh.setUint16(8, 8, Endian.little); // DEFLATE
+    lfh.setUint16(10, dosTime, Endian.little);
+    lfh.setUint16(12, dosDate, Endian.little);
+    lfh.setUint32(14, 0, Endian.little);
+    lfh.setUint32(18, 0, Endian.little);
+    lfh.setUint32(22, 0, Endian.little);
+    lfh.setUint16(26, nameBytes.length, Endian.little);
+    lfh.setUint16(28, 0, Endian.little);
+    final lfhBytes = lfh.buffer.asUint8List();
+    lfhBytes.setRange(30, 30 + nameBytes.length, nameBytes);
+    yield emitBytes(lfhBytes);
+
+    var crc = 0xFFFFFFFF;
+    var uncompSize = 0;
+    var compSize = 0;
+
+    final rawStream = await PrivFs.openRead(f.fullPath);
+    final trackedRaw = rawStream.map((chunk) {
+      crc = _updateCrc32(crc, chunk);
+      uncompSize += chunk.length;
+      return chunk;
+    });
+
+    final deflatedStream = ZLibCodec(raw: true, level: 6).encoder.bind(trackedRaw);
+    await for (final compChunk in deflatedStream) {
+      if (compChunk.isNotEmpty) {
+        compSize += compChunk.length;
+        offset += compChunk.length;
+        onBytesEmitted(compChunk.length);
+        yield compChunk;
+      }
+    }
+
+    final finalCrc = (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
+    final dd = ByteData(16);
+    dd.setUint32(0, 0x08074b50, Endian.little);
+    dd.setUint32(4, finalCrc, Endian.little);
+    dd.setUint32(8, compSize, Endian.little);
+    dd.setUint32(12, uncompSize, Endian.little);
+    yield emitBytes(dd.buffer.asUint8List());
+
+    cdEntries.add(
+      _ZipCdEntry(
+        nameBytes: nameBytes,
+        dosTime: dosTime,
+        dosDate: dosDate,
+        crc32: finalCrc,
+        compressedSize: compSize,
+        uncompressedSize: uncompSize,
+        localHeaderOffset: localHeaderOffset,
+      ),
+    );
+  }
+
+  final cdStartOffset = offset;
+  for (final e in cdEntries) {
+    final cdh = ByteData(46 + e.nameBytes.length);
+    cdh.setUint32(0, 0x02014b50, Endian.little);
+    cdh.setUint16(4, 20, Endian.little);
+    cdh.setUint16(6, 20, Endian.little);
+    cdh.setUint16(8, 0x0808, Endian.little);
+    cdh.setUint16(10, 8, Endian.little);
+    cdh.setUint16(12, e.dosTime, Endian.little);
+    cdh.setUint16(14, e.dosDate, Endian.little);
+    cdh.setUint32(16, e.crc32, Endian.little);
+    cdh.setUint32(20, e.compressedSize, Endian.little);
+    cdh.setUint32(24, e.uncompressedSize, Endian.little);
+    cdh.setUint16(28, e.nameBytes.length, Endian.little);
+    cdh.setUint16(30, 0, Endian.little);
+    cdh.setUint16(32, 0, Endian.little);
+    cdh.setUint16(34, 0, Endian.little);
+    cdh.setUint16(36, 0, Endian.little);
+    cdh.setUint32(38, 0, Endian.little);
+    cdh.setUint32(42, e.localHeaderOffset, Endian.little);
+    final cdhBytes = cdh.buffer.asUint8List();
+    cdhBytes.setRange(46, 46 + e.nameBytes.length, e.nameBytes);
+    yield emitBytes(cdhBytes);
+  }
+
+  final cdByteLen = offset - cdStartOffset;
+  final eocd = ByteData(22);
+  eocd.setUint32(0, 0x06054b50, Endian.little);
+  eocd.setUint16(4, 0, Endian.little);
+  eocd.setUint16(6, 0, Endian.little);
+  eocd.setUint16(8, cdEntries.length, Endian.little);
+  eocd.setUint16(10, cdEntries.length, Endian.little);
+  eocd.setUint32(12, cdByteLen, Endian.little);
+  eocd.setUint32(16, cdStartOffset, Endian.little);
+  eocd.setUint16(20, 0, Endian.little);
+  yield emitBytes(eocd.buffer.asUint8List());
 }
 
 String _htmlEscape(String s) => const HtmlEscape().convert(s);
@@ -128,8 +364,47 @@ String _generateShareId() {
   return 'sh_$body';
 }
 
-/// Probes common local web/dev ports on loopback to power 1-click port chips.
-Future<List<int>> scanActiveLocalDevPorts({int? excludePort}) async {
+final String _sharePinHmacSecret = randomHex(32);
+
+String _computeSharePinToken(ExposureItem item) {
+  final mac = Hmac(sha256, utf8.encode(_sharePinHmacSecret));
+  return mac
+      .convert(utf8.encode('${item.id}|${item.createdAtMs}|${item.pinCode ?? ''}'))
+      .toString()
+      .substring(0, 32);
+}
+
+String? _extractCookieValue(Request req, String name) {
+  final raw = req.headers['cookie'] ?? '';
+  if (raw.isEmpty) return null;
+  for (final part in raw.split(';')) {
+    final idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    final k = part.substring(0, idx).trim();
+    if (k == name) {
+      return part.substring(idx + 1).trim();
+    }
+  }
+  return null;
+}
+
+List<int> _cachedDevPorts = const [];
+int _cachedDevPortsAtMs = 0;
+int? _cachedDevPortsExclude;
+
+/// Probes common local web/dev ports on loopback to power 1-click port chips,
+/// with a 15-second cache so status polling never causes background socket churn.
+Future<List<int>> scanActiveLocalDevPorts({
+  int? excludePort,
+  bool forceRefresh = false,
+}) async {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  if (!forceRefresh &&
+      _cachedDevPortsAtMs > 0 &&
+      _cachedDevPortsExclude == excludePort &&
+      (now - _cachedDevPortsAtMs) < 15000) {
+    return _cachedDevPorts;
+  }
   const candidates = <int>[3000, 4173, 5000, 5173, 7860, 8000, 8080, 8888];
   final checks = candidates.where((pt) => pt != excludePort).map((pt) async {
     try {
@@ -144,8 +419,11 @@ Future<List<int>> scanActiveLocalDevPorts({int? excludePort}) async {
       return null;
     }
   });
-  final resolved = await Future.wait(checks);
-  return resolved.whereType<int>().toList();
+  final resolved = (await Future.wait(checks)).whereType<int>().toList();
+  _cachedDevPorts = resolved;
+  _cachedDevPortsAtMs = now;
+  _cachedDevPortsExclude = excludePort;
+  return resolved;
 }
 
 /// Opens a native OS file or folder dialog on Desktop (Windows/macOS/Linux)
@@ -262,7 +540,7 @@ class ExposureItem {
   /// - `'file'`   : Single File Share (opens rich single-file preview/download card)
   /// - `'folder'` : Folder Directory Explorer (breadcrumbs + subfolders + click file -> single-file preview)
   /// - `'site'`   : Static Website / HTML Share (renders single `.html` or static website folder directly)
-  /// - `'port'`   : Local Port Forwarding (`127.0.0.1:<port>` reverse proxy)
+  /// - `'port'`   : Local Port Forwarding (`127.0.0.1:<port>` reverse proxy + WebSocket HMR)
   final String kind;
   final String target;
   final bool targetIsDirectory;
@@ -270,10 +548,13 @@ class ExposureItem {
   final String label;
   final String scope; // 'auto' | 'tailscale' | 'public' | 'lan'
   final bool spa;
+  final String? pinCode;
+  final int? maxDownloads;
   final int createdAtMs;
   final int? expiresAtMs;
 
   int hitCount = 0;
+  int downloadCount = 0;
   int bytesSent = 0;
   int? lastAccessAtMs;
 
@@ -293,15 +574,29 @@ class ExposureItem {
     required this.label,
     required this.scope,
     this.spa = false,
+    this.pinCode,
+    this.maxDownloads,
     required this.createdAtMs,
     this.expiresAtMs,
   });
 
   bool get needsTrailingSlash => kind == 'folder' || kind == 'site';
 
+  bool get hasPin => pinCode != null && pinCode!.isNotEmpty;
+
+  bool get isDownloadExhausted =>
+      maxDownloads != null && maxDownloads! > 0 && downloadCount >= maxDownloads!;
+
+  int? get remainingDownloads {
+    if (maxDownloads == null || maxDownloads! <= 0) return null;
+    final rem = maxDownloads! - downloadCount;
+    return rem < 0 ? 0 : rem;
+  }
+
   bool get isExpired =>
-      expiresAtMs != null &&
-      DateTime.now().millisecondsSinceEpoch >= expiresAtMs!;
+      (expiresAtMs != null &&
+          DateTime.now().millisecondsSinceEpoch >= expiresAtMs!) ||
+      isDownloadExhausted;
 
   int? get remainingSeconds {
     if (expiresAtMs == null) return null;
@@ -747,6 +1042,13 @@ class ExposureManager {
       if (item.targetPort != null) 'port': item.targetPort,
       'scope': item.scope,
       'spa': item.spa,
+      'has_pin': item.hasPin,
+      if (item.hasPin) 'pin_code': item.pinCode,
+      if (item.maxDownloads != null && item.maxDownloads! > 0) ...{
+        'max_downloads': item.maxDownloads,
+        'download_count': item.downloadCount,
+        'remaining_downloads': item.remainingDownloads,
+      },
       'primary_url': primaryUrl,
       if (directMediaUrl != null) 'direct_file_url': directMediaUrl,
       'public_urls': publicUrls,
@@ -774,6 +1076,8 @@ class ExposureManager {
     String? label,
     int? ttlMinutes,
     bool spa = false,
+    String? pinCode,
+    int? maxDownloads,
     bool validateWithPolicy = true,
   }) async {
     _ensureSweepTimer();
@@ -789,6 +1093,13 @@ class ExposureManager {
         const {'auto', 'tailscale', 'public', 'lan'}.contains(normScope)
             ? normScope
             : 'auto';
+
+    final cleanPin = pinCode?.trim() ?? '';
+    if (cleanPin.isNotEmpty && (cleanPin.length < 4 || cleanPin.length > 16)) {
+      throw ArgumentError('提取码长度需在 4 到 16 位之间（留空则免密直接打开）。');
+    }
+    final effMaxDl =
+        (maxDownloads != null && maxDownloads > 0) ? maxDownloads.clamp(1, 100000) : null;
 
     final reqMode = mode.trim().toLowerCase();
     final effTtl = ttlMinutes ?? defaultTtlMinutesInSaved(saved);
@@ -827,6 +1138,8 @@ class ExposureManager {
       if (validateWithPolicy) {
         final deny = checkAccess(checkedPath, config);
         if (deny != null) throw FileSystemException(deny, checkedPath);
+      } else if (_isSensitiveShareFile(checkedPath, config: config)) {
+        throw FileSystemException('出于安全保护，禁止直接外链分享敏感密钥或系统配置文件', checkedPath);
       }
       final st = await PrivFs.stat(checkedPath);
       if (!st.exists) {
@@ -840,7 +1153,7 @@ class ExposureManager {
             (await PrivFs.stat(p.join(checkedPath, 'index.html'))).isFile;
         if (reqMode == 'folder') {
           kind = 'folder';
-        } else if (reqMode == 'site' || reqMode == 'dir' && (spa || hasIndex)) {
+        } else if (reqMode == 'site' || (reqMode == 'dir' && (spa || hasIndex))) {
           kind = 'site';
         } else if (reqMode == 'dir') {
           kind = 'folder';
@@ -875,6 +1188,8 @@ class ExposureManager {
           (label != null && label.trim().isNotEmpty) ? label.trim() : defaultLabel,
       scope: effectiveScope,
       spa: spa,
+      pinCode: cleanPin.isEmpty ? null : cleanPin,
+      maxDownloads: effMaxDl,
       createdAtMs: nowMs,
       expiresAtMs: expMs,
     );
@@ -938,7 +1253,8 @@ class ExposureManager {
       'kind': 'info',
       'badge': '随手分享',
       'level': 'INFO',
-      'summary': '已开启分享 [${item.label}] -> ${serialized['primary_url']}',
+      'summary':
+          '已开启分享 [${item.label}]${item.hasPin ? " (已设提取码)" : ""} -> ${serialized['primary_url']}',
     });
 
     return serialized;
@@ -966,12 +1282,17 @@ class ExposureManager {
       }
     }
 
+    final reasonText = switch (reason) {
+      'expired' => '到期自动收起',
+      'max_downloads' => '达到下载次数上限自动收起',
+      _ => '手动收起',
+    };
+
     StructuredEventBus.instance.emit({
       'kind': 'info',
       'badge': '随手分享',
       'level': 'INFO',
-      'summary':
-          '已收起分享 [${item.label}] (${reason == 'expired' ? '到期自动收起' : '手动收起'})',
+      'summary': '已收起分享 [${item.label}] ($reasonText)',
     });
     return true;
   }
@@ -985,7 +1306,10 @@ class ExposureManager {
     return count;
   }
 
-  Future<Map<String, dynamic>> getDashboardSummary(ServerConfig config) async {
+  Future<Map<String, dynamic>> getDashboardSummary(
+    ServerConfig config, {
+    bool forcePortScan = false,
+  }) async {
     await purgeExpired();
     final saved = loadSavedConfig(config.configFile);
     final livePort =
@@ -994,7 +1318,10 @@ class ExposureManager {
     final ifaces = await listHostNetworkInterfaces();
     final pubBases = _discoverActivePublicGatewayBases(saved);
     final cfInstalled = findCloudflared() != null;
-    final activePorts = await scanActiveLocalDevPorts(excludePort: livePort);
+    final activePorts = await scanActiveLocalDevPorts(
+      excludePort: livePort,
+      forceRefresh: forcePortScan,
+    );
 
     final list = <Map<String, dynamic>>[];
     final sorted = _items.values.toList()
@@ -1052,7 +1379,12 @@ class ExposureManager {
     final item = _items[id];
     if (item == null || item.isExpired) {
       if (item != null && item.isExpired) {
-        unawaited(closeExposure(id, reason: 'expired'));
+        unawaited(
+          closeExposure(
+            id,
+            reason: item.isDownloadExhausted ? 'max_downloads' : 'expired',
+          ),
+        );
       }
       return Response.notFound(
         _renderExpiredHtml(),
@@ -1074,35 +1406,144 @@ class ExposureManager {
       }
     }
 
+    // Optional PIN lock enforcement (supports HTML form POST, HttpOnly cookie,
+    // ?pin=<code> query param, and X-Share-Pin header for CLI/SDK tools)
+    String? setPinCookieHeader;
+    if (item.hasPin) {
+      final expectedToken = _computeSharePinToken(item);
+      final cookieName = 'mcp_share_${item.id}';
+      final cookieVal = _extractCookieValue(req, cookieName) ?? '';
+      final headerPin = (req.headers['x-share-pin'] ?? '').trim();
+      final queryPin = (req.url.queryParameters['pin'] ?? '').trim();
+
+      if (req.method == 'POST' &&
+          req.url.queryParameters['__pin_unlock'] == '1') {
+        final formBody = await req.readAsString();
+        var submittedPin = '';
+        for (final pair in formBody.split('&')) {
+          final kv = pair.split('=');
+          if (kv.isNotEmpty && kv[0] == 'pin' && kv.length > 1) {
+            submittedPin = Uri.decodeQueryComponent(kv[1]).trim();
+          }
+        }
+        if (constantTimeEquals(submittedPin, item.pinCode!)) {
+          final redirectTarget = req.requestedUri.path;
+          return Response.seeOther(
+            redirectTarget,
+            headers: {
+              'set-cookie':
+                  '$cookieName=$expectedToken; Path=/share/${item.id}; HttpOnly; SameSite=Lax; Max-Age=86400',
+            },
+          );
+        }
+        return Response(
+          401,
+          body: _renderPinPromptHtml(item, req.requestedUri.path, error: '提取码不正确，请重新输入'),
+          headers: const {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        );
+      }
+
+      var authorized = false;
+      if (cookieVal.isNotEmpty &&
+          constantTimeEquals(cookieVal, expectedToken)) {
+        authorized = true;
+      } else if (headerPin.isNotEmpty &&
+          constantTimeEquals(headerPin, item.pinCode!)) {
+        authorized = true;
+      } else if (queryPin.isNotEmpty &&
+          constantTimeEquals(queryPin, item.pinCode!)) {
+        authorized = true;
+        setPinCookieHeader =
+            '$cookieName=$expectedToken; Path=/share/${item.id}; HttpOnly; SameSite=Lax; Max-Age=86400';
+      }
+
+      if (!authorized) {
+        final acceptsHtml = (req.headers['accept'] ?? '').contains('text/html');
+        if (acceptsHtml) {
+          return Response(
+            401,
+            body: _renderPinPromptHtml(item, req.requestedUri.path),
+            headers: const {
+              'content-type': 'text/html; charset=utf-8',
+              'cache-control': 'no-store',
+            },
+          );
+        }
+        return Response(
+          401,
+          body: 'Share PIN required. Pass ?pin=<code> or X-Share-Pin header.',
+          headers: const {'content-type': 'text/plain; charset=utf-8'},
+        );
+      }
+    }
+
     item.hitCount++;
     item.lastAccessAtMs = DateTime.now().millisecondsSinceEpoch;
 
     final subSegments = segments.sublist(2);
 
+    Response attachPinCookie(Response res) {
+      if (setPinCookieHeader == null) return res;
+      return res.change(headers: {'set-cookie': setPinCookieHeader});
+    }
+
     if (item.kind == 'file') {
-      return _serveSingleFile(req, item, subSegments);
+      return attachPinCookie(await _serveSingleFile(req, item, subSegments));
     }
     if (item.kind == 'folder') {
       final rawReqPath = req.requestedUri.path;
       if (subSegments.isEmpty && !rawReqPath.endsWith('/')) {
         final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
-        return Response.found('$rawReqPath/$q');
+        return attachPinCookie(Response.found('$rawReqPath/$q'));
       }
-      return _serveFolderExplorer(req, item, subSegments);
+      return attachPinCookie(
+        await _serveFolderExplorer(req, item, subSegments, config: config),
+      );
     }
     if (item.kind == 'site') {
       final rawReqPath = req.requestedUri.path;
       if (subSegments.isEmpty && !rawReqPath.endsWith('/')) {
         final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
-        return Response.found('$rawReqPath/$q');
+        return attachPinCookie(Response.found('$rawReqPath/$q'));
       }
-      return _serveStaticWebsite(req, item, subSegments);
+      return attachPinCookie(
+        await _serveStaticWebsite(req, item, subSegments, config: config),
+      );
     }
     if (item.kind == 'port' && item.targetPort != null) {
-      return _proxyLocalPort(req, item, subSegments);
+      return attachPinCookie(await _proxyLocalPort(req, item, subSegments));
     }
 
     return Response.notFound('Unsupported share item.');
+  }
+
+  bool _consumeDownloadQuotaOrReject(ExposureItem item, Request req) {
+    if (item.maxDownloads == null || item.maxDownloads! <= 0) return true;
+    if (req.method == 'HEAD') return !item.isDownloadExhausted;
+    // Do not charge multiple downloads when an HTML5 <video>/<audio> player scrubs non-zero byte ranges
+    final rangeHdr = req.headers['range'] ?? '';
+    final isMidStreamSeek =
+        rangeHdr.startsWith('bytes=') && !rangeHdr.startsWith('bytes=0-');
+    if (isMidStreamSeek) {
+      return item.downloadCount <= item.maxDownloads!;
+    }
+    if (item.downloadCount >= item.maxDownloads!) {
+      unawaited(closeExposure(item.id, reason: 'max_downloads'));
+      return false;
+    }
+    item.downloadCount++;
+    if (item.downloadCount >= item.maxDownloads!) {
+      // Schedule graceful cleanup once the final allowed download finishes starting
+      Future<void>.delayed(const Duration(seconds: 3), () {
+        if (_items.containsKey(item.id) && item.isDownloadExhausted) {
+          unawaited(closeExposure(item.id, reason: 'max_downloads'));
+        }
+      });
+    }
+    return true;
   }
 
   /// Mode 1: Single File Share -> Rich Unified Single-File Preview Card
@@ -1133,6 +1574,13 @@ class ExposureManager {
       );
     }
 
+    if (!_consumeDownloadQuotaOrReject(item, req)) {
+      return Response.notFound(
+        _renderExpiredHtml(),
+        headers: const {'content-type': 'text/html; charset=utf-8'},
+      );
+    }
+
     return _streamFileWithRange(
       req,
       item,
@@ -1145,22 +1593,20 @@ class ExposureManager {
   Future<Response> _serveFolderExplorer(
     Request req,
     ExposureItem item,
-    List<String> subSegments,
-  ) async {
-    final rootPath = p.canonicalize(item.target);
+    List<String> subSegments, {
+    required ServerConfig config,
+  }) async {
     final relParts = subSegments.where((s) => s.isNotEmpty).toList();
-    final candidatePath = relParts.isEmpty
-        ? rootPath
-        : p.normalize(p.joinAll([rootPath, ...relParts]));
-
-    if (candidatePath != rootPath && !p.isWithin(rootPath, candidatePath)) {
-      return Response.forbidden('Forbidden path traversal.');
-    }
-    if (_isSensitiveShareFile(candidatePath)) {
-      return Response.forbidden('Sensitive file hidden.');
+    final safePath = await _resolveSafeSharePath(
+      item.target,
+      relParts,
+      config: config,
+    );
+    if (safePath == null) {
+      return Response.forbidden('Forbidden path or symlink traversal.');
     }
 
-    final candStat = await PrivFs.stat(candidatePath);
+    final candStat = await PrivFs.stat(safePath);
     if (candStat.isDirectory) {
       final rawReqPath = req.requestedUri.path;
       if (!rawReqPath.endsWith('/')) {
@@ -1168,9 +1614,15 @@ class ExposureManager {
         return Response.found('$rawReqPath/$q');
       }
       if (req.url.queryParameters['zip'] == '1') {
-        return _serveDirectoryAsZip(item, candidatePath, relParts);
+        if (!_consumeDownloadQuotaOrReject(item, req)) {
+          return Response.notFound(
+            _renderExpiredHtml(),
+            headers: const {'content-type': 'text/html; charset=utf-8'},
+          );
+        }
+        return _serveDirectoryAsZip(item, safePath, relParts, config: config);
       }
-      return _renderDirectoryListing(item, candidatePath, relParts);
+      return _renderDirectoryListing(item, safePath, relParts, config: config);
     }
 
     if (!candStat.isFile) {
@@ -1185,23 +1637,85 @@ class ExposureManager {
     if (!wantRaw) {
       final encodedRel = relParts.map(Uri.encodeComponent).join('/');
       final baseFileHref = '/share/${item.id}/$encodedRel';
-      final parentHref = relParts.length <= 1
+      final parentParts =
+          relParts.length <= 1 ? const <String>[] : relParts.sublist(0, relParts.length - 1);
+      final parentHref = parentParts.isEmpty
           ? '/share/${item.id}/'
-          : '/share/${item.id}/${relParts.sublist(0, relParts.length - 1).map(Uri.encodeComponent).join('/')}/';
+          : '/share/${item.id}/${parentParts.map(Uri.encodeComponent).join('/')}/';
+      final parentLabel = parentParts.isEmpty ? '全部文件' : parentParts.last;
+
+      // Build clickable breadcrumb bar & previous/next sibling file navigation
+      final crumbs = StringBuffer('<a href="/share/${item.id}/">全部文件</a>');
+      for (var i = 0; i < parentParts.length; i++) {
+        final h =
+            '/share/${item.id}/${parentParts.sublist(0, i + 1).map(Uri.encodeComponent).join('/')}/';
+        crumbs.write(
+          ' <span class="sep">/</span> <a href="$h">${_htmlEscape(parentParts[i])}</a>',
+        );
+      }
+      crumbs.write(
+        ' <span class="sep">/</span> <span>${_htmlEscape(p.basename(safePath))}</span>',
+      );
+
+      String? prevHref;
+      String? prevName;
+      String? nextHref;
+      String? nextName;
+      String? siblingPosLabel;
+      try {
+        final parentDir = p.dirname(safePath);
+        final rawSiblings = await PrivFs.listDir(parentDir);
+        final fileSiblings = rawSiblings
+            .where((e) =>
+                !e.isDirectory &&
+                !e.name.startsWith('.') &&
+                !_isSensitiveShareFile(p.join(parentDir, e.name), config: config))
+            .toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        final curName = p.basename(safePath);
+        final curIdx = fileSiblings.indexWhere((e) => e.name == curName);
+        if (curIdx >= 0 && fileSiblings.length > 1) {
+          siblingPosLabel = '${curIdx + 1} / ${fileSiblings.length}';
+          final prefixHref = parentHref;
+          if (curIdx > 0) {
+            prevName = fileSiblings[curIdx - 1].name;
+            prevHref = '$prefixHref${Uri.encodeComponent(prevName)}';
+          }
+          if (curIdx + 1 < fileSiblings.length) {
+            nextName = fileSiblings[curIdx + 1].name;
+            nextHref = '$prefixHref${Uri.encodeComponent(nextName)}';
+          }
+        }
+      } catch (_) {}
+
       return _renderUnifiedSingleFilePage(
         item: item,
-        filePath: candidatePath,
-        displayTitle: p.basename(candidatePath),
+        filePath: safePath,
+        displayTitle: p.basename(safePath),
         rawHref: '$baseFileHref?raw=1',
         dlHref: '$baseFileHref?download=1',
         backToFolderHref: parentHref,
+        backToFolderLabel: parentLabel,
+        breadcrumbHtml: crumbs.toString(),
+        prevFileHref: prevHref,
+        prevFileName: prevName,
+        nextFileHref: nextHref,
+        nextFileName: nextName,
+        siblingPosLabel: siblingPosLabel,
+      );
+    }
+
+    if (!_consumeDownloadQuotaOrReject(item, req)) {
+      return Response.notFound(
+        _renderExpiredHtml(),
+        headers: const {'content-type': 'text/html; charset=utf-8'},
       );
     }
 
     return _streamFileWithRange(
       req,
       item,
-      candidatePath,
+      safePath,
       forceDownload: forceDownload,
     );
   }
@@ -1210,8 +1724,9 @@ class ExposureManager {
   Future<Response> _serveStaticWebsite(
     Request req,
     ExposureItem item,
-    List<String> subSegments,
-  ) async {
+    List<String> subSegments, {
+    required ServerConfig config,
+  }) async {
     final relParts = subSegments.where((s) => s.isNotEmpty).toList();
 
     // Case 3A: Single `.html` file shared as a live webpage (+ safe sibling asset resolution)
@@ -1219,11 +1734,13 @@ class ExposureManager {
       if (relParts.isEmpty) {
         return _streamFileWithRange(req, item, item.target);
       }
-      final parentRoot = p.canonicalize(p.dirname(item.target));
-      final assetPath = p.normalize(p.joinAll([parentRoot, ...relParts]));
-      if (assetPath == parentRoot ||
-          !p.isWithin(parentRoot, assetPath) ||
-          _isSensitiveShareFile(assetPath)) {
+      final parentRoot = p.dirname(item.target);
+      final assetPath = await _resolveSafeSharePath(
+        parentRoot,
+        relParts,
+        config: config,
+      );
+      if (assetPath == null || assetPath == p.canonicalize(parentRoot)) {
         return Response.forbidden('Forbidden asset path.');
       }
       final assetStat = await PrivFs.stat(assetPath);
@@ -1234,29 +1751,35 @@ class ExposureManager {
     }
 
     // Case 3B: Website Directory (`index.html` + static assets + optional SPA fallback)
-    final rootPath = p.canonicalize(item.target);
-    final candidatePath = relParts.isEmpty
-        ? rootPath
-        : p.normalize(p.joinAll([rootPath, ...relParts]));
-
-    if (candidatePath != rootPath && !p.isWithin(rootPath, candidatePath)) {
-      return Response.forbidden('Forbidden path traversal.');
-    }
-    if (_isSensitiveShareFile(candidatePath)) {
-      return Response.forbidden('Forbidden.');
+    final safePath = await _resolveSafeSharePath(
+      item.target,
+      relParts,
+      config: config,
+      allowMissingLeaf: item.spa,
+    );
+    if (safePath == null) {
+      return Response.forbidden('Forbidden path or symlink traversal.');
     }
 
-    final candStat = await PrivFs.stat(candidatePath);
+    final candStat = await PrivFs.stat(safePath);
     if (candStat.isDirectory) {
       for (final idxName in const ['index.html', 'index.htm']) {
-        final idxFile = p.join(candidatePath, idxName);
-        if ((await PrivFs.stat(idxFile)).isFile) {
-          return _streamFileWithRange(req, item, idxFile);
+        final idxSafe = await _resolveSafeSharePath(
+          safePath,
+          [idxName],
+          config: config,
+        );
+        if (idxSafe != null && (await PrivFs.stat(idxSafe)).isFile) {
+          return _streamFileWithRange(req, item, idxSafe);
         }
       }
       if (item.spa) {
-        final spaIndex = p.join(rootPath, 'index.html');
-        if ((await PrivFs.stat(spaIndex)).isFile) {
+        final spaIndex = await _resolveSafeSharePath(
+          item.target,
+          const ['index.html'],
+          config: config,
+        );
+        if (spaIndex != null && (await PrivFs.stat(spaIndex)).isFile) {
           return _streamFileWithRange(req, item, spaIndex);
         }
       }
@@ -1272,8 +1795,12 @@ class ExposureManager {
     }
 
     if (!candStat.exists && item.spa) {
-      final spaIndex = p.join(rootPath, 'index.html');
-      if ((await PrivFs.stat(spaIndex)).isFile) {
+      final spaIndex = await _resolveSafeSharePath(
+        item.target,
+        const ['index.html'],
+        config: config,
+      );
+      if (spaIndex != null && (await PrivFs.stat(spaIndex)).isFile) {
         return _streamFileWithRange(req, item, spaIndex);
       }
     }
@@ -1282,62 +1809,122 @@ class ExposureManager {
       return Response.notFound('File not found.');
     }
 
-    return _streamFileWithRange(req, item, candidatePath);
+    return _streamFileWithRange(req, item, safePath);
   }
 
+  /// Streams a folder as a standard `.zip` archive in 64KB chunks without
+  /// loading file contents into heap memory.
   Future<Response> _serveDirectoryAsZip(
     ExposureItem item,
     String dirPath,
-    List<String> relParts,
-  ) async {
-    final archive = Archive();
+    List<String> relParts, {
+    required ServerConfig config,
+  }) async {
+    final filesToPack = <({String fullPath, String relPath, DateTime modified})>[];
     var accumulatedBytes = 0;
-    const maxZipBytes = 120 * 1024 * 1024; // 120 MB safety cap
+    const maxZipBytes = 512 * 1024 * 1024; // 512 MB streaming cap
+    final useBridge = await PrivFs.useBridgeForPath(dirPath);
+    final rootReal = !useBridge
+        ? Directory(dirPath).resolveSymbolicLinksSync()
+        : p.normalize(p.absolute(dirPath));
 
     Future<void> walk(String currentDir, String relPrefix) async {
       final entries = await PrivFs.listDir(currentDir);
+      entries.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       for (final e in entries) {
         if (e.name.startsWith('.') || defaultIgnoreDirs.contains(e.name)) {
           continue;
         }
         final full = p.join(currentDir, e.name);
-        if (_isSensitiveShareFile(full)) continue;
+        if (!useBridge) {
+          final linkType = FileSystemEntity.typeSync(full, followLinks: false);
+          if (linkType == FileSystemEntityType.link) {
+            try {
+              final resolved = e.isDirectory
+                  ? Directory(full).resolveSymbolicLinksSync()
+                  : File(full).resolveSymbolicLinksSync();
+              if (!isWithin(resolved, rootReal)) continue;
+            } catch (_) {
+              continue;
+            }
+          }
+        }
+        if (_isSensitiveShareFile(full, config: config)) continue;
         final nextRel = relPrefix.isEmpty ? e.name : '$relPrefix/${e.name}';
         if (e.isDirectory) {
           await walk(full, nextRel);
-        } else if (!e.isDirectory) {
+        } else {
           if (accumulatedBytes + e.size > maxZipBytes) continue;
-          final data = await PrivFs.readBytes(full);
-          accumulatedBytes += data.length;
-          archive.addFile(ArchiveFile(nextRel, data.length, data));
+          accumulatedBytes += e.size;
+          final st = await PrivFs.stat(full);
+          if (st.isFile) {
+            filesToPack.add((
+              fullPath: full,
+              relPath: nextRel,
+              modified: st.modified,
+            ));
+          }
         }
       }
     }
 
     await walk(dirPath, '');
-    final zipped = ZipEncoder().encode(archive);
     final zipName = relParts.isEmpty ? item.label : relParts.last;
     final encodedZip = Uri.encodeComponent('$zipName.zip');
-    item.bytesSent += zipped.length;
+    final bodyStream = _streamPkZipEntries(
+      filesToPack,
+      onBytesEmitted: (delta) {
+        item.bytesSent += delta;
+      },
+    );
+
     return Response.ok(
-      zipped,
+      bodyStream,
       headers: {
         'content-type': 'application/zip',
-        'content-length': '${zipped.length}',
         'content-disposition': "attachment; filename*=UTF-8''$encodedZip",
+        'cache-control': 'no-store',
       },
+      context: const {'shelf.io.buffer_output': false},
     );
   }
 
   Future<Response> _renderDirectoryListing(
     ExposureItem item,
     String dirPath,
-    List<String> relParts,
-  ) async {
+    List<String> relParts, {
+    required ServerConfig config,
+  }) async {
     final rawEntries = await PrivFs.listDir(dirPath);
-    final entries = rawEntries
-        .where((e) => !e.name.startsWith('.') && !_isSensitiveShareFile(p.join(dirPath, e.name)))
-        .toList()
+    final useBridge = await PrivFs.useBridgeForPath(item.target);
+    final rootReal = !useBridge
+        ? Directory(item.target).resolveSymbolicLinksSync()
+        : p.normalize(p.absolute(item.target));
+
+    final entries = rawEntries.where((e) {
+      if (e.name.startsWith('.')) return false;
+      final full = p.join(dirPath, e.name);
+      if (_isSensitiveShareFile(full, config: config)) return false;
+      if (!useBridge) {
+        final t = FileSystemEntity.typeSync(full, followLinks: false);
+        if (t == FileSystemEntityType.link) {
+          try {
+            final targetType = FileSystemEntity.typeSync(full, followLinks: true);
+            if (targetType == FileSystemEntityType.notFound) return false;
+            final resolved = targetType == FileSystemEntityType.directory
+                ? Directory(full).resolveSymbolicLinksSync()
+                : File(full).resolveSymbolicLinksSync();
+            if (!isWithin(resolved, rootReal) ||
+                _isSensitiveShareFile(resolved, config: config)) {
+              return false;
+            }
+          } catch (_) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }).toList()
       ..sort((a, b) {
         if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
@@ -1423,6 +2010,13 @@ class ExposureManager {
     required String rawHref,
     required String dlHref,
     required String? backToFolderHref,
+    String? backToFolderLabel,
+    String? breadcrumbHtml,
+    String? prevFileHref,
+    String? prevFileName,
+    String? nextFileHref,
+    String? nextFileName,
+    String? siblingPosLabel,
   }) async {
     final fileName = p.basename(filePath);
     final ext = p.extension(fileName).toLowerCase();
@@ -1457,24 +2051,54 @@ class ExposureManager {
           '</div>';
     }
 
+    final backLabel = (backToFolderLabel != null &&
+            backToFolderLabel.isNotEmpty &&
+            backToFolderLabel != '全部文件')
+        ? '← 返回所在文件夹 (${_htmlEscape(backToFolderLabel)})'
+        : '← 返回所在文件夹';
     final backLink = backToFolderHref != null
-        ? '<a class="btn ghost" href="$backToFolderHref">← 返回所在文件夹</a>'
+        ? '<a class="btn ghost" href="$backToFolderHref">$backLabel</a>'
+        : '';
+
+    final crumbBar = breadcrumbHtml != null
+        ? '<div class="crumbs">$breadcrumbHtml</div>'
+        : '';
+
+    final siblingNav = (prevFileHref != null || nextFileHref != null)
+        ? '<div class="sib-bar">'
+            '<div>${prevFileHref != null ? '<a class="sib-btn" id="prevLink" href="$prevFileHref" title="${_htmlEscape(prevFileName ?? '')}">← 上一文件: ${_htmlEscape(prevFileName ?? '')}</a>' : '<span class="sib-muted">已是第一个文件</span>'}</div>'
+            '${siblingPosLabel != null ? '<div class="sib-pos">$siblingPosLabel</div>' : ''}'
+            '<div>${nextFileHref != null ? '<a class="sib-btn" id="nextLink" href="$nextFileHref" title="${_htmlEscape(nextFileName ?? '')}">下一文件: ${_htmlEscape(nextFileName ?? '')} →</a>' : '<span class="sib-muted">已是最后一个文件</span>'}</div>'
+            '</div>'
+        : '';
+
+    final keyNavScript = (prevFileHref != null || nextFileHref != null)
+        ? '<script>document.addEventListener("keydown",function(e){if(e.target&&(e.target.tagName==="INPUT"||e.target.tagName==="VIDEO"||e.target.tagName==="AUDIO"))return;if(e.key==="ArrowLeft"){var p=document.getElementById("prevLink");if(p)p.click();}else if(e.key==="ArrowRight"){var n=document.getElementById("nextLink");if(n)n.click();}});</script>'
+        : '';
+
+    final quotaMeta = item.remainingDownloads != null
+        ? ' · 剩余可下载 ${item.remainingDownloads} 次'
         : '';
 
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(displayTitle)} · 在线预览</title>'
         '<style>'
-        ':root{--bg:#F6F4EC;--card:#FFFFFF;--soft:#EFECE2;--ink:#1F1E1B;--muted:#6E6A61;--accent:#C96442}'
-        '@media(prefers-color-scheme:dark){:root{--bg:#141413;--card:#1F1E1B;--soft:#2B2924;--ink:#FAF9F5;--muted:#A4A096;--accent:#D97757}}'
+        ':root{--bg:#F6F4EC;--card:#FFFFFF;--soft:#EFECE2;--hover:#E6E2D5;--ink:#1F1E1B;--muted:#6E6A61;--accent:#C96442}'
+        '@media(prefers-color-scheme:dark){:root{--bg:#141413;--card:#1F1E1B;--soft:#2B2924;--hover:#35332C;--ink:#FAF9F5;--muted:#A4A096;--accent:#D97757}}'
         '*{box-sizing:border-box}body{margin:0;padding:24px 14px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;display:flex;justify-content:center}'
         '.card{width:100%;max-width:940px;background:var(--card);border-radius:24px;padding:22px 24px;box-shadow:0 14px 44px rgba(0,0,0,.08)}'
+        '.crumbs{font-size:13px;color:var(--muted);margin-bottom:10px;word-break:break-all}.crumbs a{color:var(--accent);text-decoration:none;font-weight:600}.sep{margin:0 4px;opacity:.5}'
         '.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}'
         '.title{font-size:18px;font-weight:700;word-break:break-all}.meta{font-size:12.5px;color:var(--muted);margin-top:4px;font-family:ui-monospace,monospace}'
         '.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
-        '.btn{padding:8px 15px;border-radius:99px;text-decoration:none;font-size:13px;font-weight:600;background:var(--soft);color:var(--ink)}'
+        '.btn{padding:8px 15px;border-radius:99px;text-decoration:none;font-size:13px;font-weight:600;background:var(--soft);color:var(--ink);transition:background .15s}'
+        '.btn:hover{background:var(--hover)}'
         '.btn.pri{background:var(--accent);color:#FFF}.btn.big{padding:11px 22px;font-size:14px;margin-top:8px;display:inline-block}'
         '.btn.ghost{color:var(--accent)}'
+        '.sib-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--soft);font-size:13px}'
+        '.sib-btn{color:var(--ink);text-decoration:none;background:var(--soft);padding:7px 14px;border-radius:99px;font-weight:500;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}'
+        '.sib-btn:hover{background:var(--hover)}.sib-pos{font-family:ui-monospace,monospace;color:var(--muted);font-size:12px}.sib-muted{color:var(--muted);font-size:12.5px;opacity:.7}'
         'video{width:100%;max-height:74vh;border-radius:16px;background:#000;display:block}'
         '.img-box{background:var(--soft);border-radius:16px;padding:16px;text-align:center}img{max-width:100%;max-height:72vh;border-radius:10px}'
         '.pad-box{background:var(--soft);border-radius:16px;padding:28px}audio{width:100%}'
@@ -1482,13 +2106,13 @@ class ExposureManager {
         '.code-box{margin:0;padding:18px;border-radius:16px;background:#191816;color:#EDEAE2;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6;overflow:auto;max-height:70vh;white-space:pre-wrap;word-break:break-word}'
         '.dl-stage{background:var(--soft);border-radius:18px;padding:42px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}'
         '.dl-name{font-size:17px;font-weight:700}.dl-sub{font-size:13.5px;color:var(--muted)}'
-        '</style></head><body><div class="card"><div class="top"><div>'
+        '</style></head><body><div class="card">$crumbBar<div class="top"><div>'
         '<div class="title">${_htmlEscape(displayTitle)}</div>'
-        '<div class="meta">${_htmlEscape(fileName)} · $sizeHuman</div>'
+        '<div class="meta">${_htmlEscape(fileName)} · $sizeHuman$quotaMeta</div>'
         '</div><div class="btns">$backLink'
         '<a class="btn" href="$rawHref" target="_blank">原始直链</a>'
         '<a class="btn pri" href="$dlHref">下载文件</a>'
-        '</div></div>$stageHtml</div></body></html>';
+        '</div></div>$stageHtml$siblingNav</div>$keyNavScript</body></html>';
 
     final bytes = utf8.encode(html);
     item.bytesSent += bytes.length;
@@ -1512,33 +2136,11 @@ class ExposureManager {
     final encodedName = Uri.encodeComponent(fileName);
     final dispType = forceDownload ? 'attachment' : 'inline';
 
-    final localFile = File(filePath);
-    var directReadable = false;
-    int totalLen = 0;
-    try {
-      if (await localFile.exists()) {
-        totalLen = await localFile.length();
-        directReadable = true;
-      }
-    } catch (_) {
-      directReadable = false;
+    final stat = await PrivFs.stat(filePath);
+    if (!stat.isFile) {
+      return Response.notFound('File not found.');
     }
-
-    if (!directReadable) {
-      final bytes = await PrivFs.readBytes(filePath);
-      totalLen = bytes.length;
-      item.bytesSent += totalLen;
-      return Response.ok(
-        bytes,
-        headers: {
-          'content-type': mime,
-          'content-length': '$totalLen',
-          'accept-ranges': 'bytes',
-          'content-disposition': "$dispType; filename*=UTF-8''$encodedName",
-          'access-control-allow-origin': '*',
-        },
-      );
-    }
+    final totalLen = stat.size;
 
     final baseHeaders = <String, String>{
       'content-type': mime,
@@ -1584,9 +2186,10 @@ class ExposureManager {
         final chunkLen = end - start + 1;
         item.bytesSent += chunkLen;
 
+        final rangeStream = await PrivFs.openRead(filePath, start, end + 1);
         return Response(
           206,
-          body: localFile.openRead(start, end + 1),
+          body: rangeStream,
           headers: {
             ...baseHeaders,
             'content-range': 'bytes $start-$end/$totalLen',
@@ -1598,13 +2201,17 @@ class ExposureManager {
     }
 
     item.bytesSent += totalLen;
+    final fullStream = await PrivFs.openRead(filePath);
     return Response.ok(
-      localFile.openRead(),
+      fullStream,
       headers: {...baseHeaders, 'content-length': '$totalLen'},
       context: const {'shelf.io.buffer_output': false},
     );
   }
 
+  /// Mode 4: Reverse proxy local port (`127.0.0.1:<port>`) with full-duplex
+  /// WebSocket upgrade tunneling (supporting Vite/Next.js HMR, Gradio, Jupyter)
+  /// and unbuffered SSE streaming.
   Future<Response> _proxyLocalPort(
     Request req,
     ExposureItem item,
@@ -1613,8 +2220,87 @@ class ExposureManager {
     final port = item.targetPort!;
     final subPath = '/${subSegments.join('/')}';
     final query = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
-    final upstreamUri = Uri.parse('http://127.0.0.1:$port$subPath$query');
+    final targetPathAndQuery = '$subPath$query';
 
+    // Full-duplex WebSocket / protocol Upgrade tunneling via raw TCP socket
+    final upgradeHeader = (req.headers['upgrade'] ?? '').trim();
+    final connHeader = (req.headers['connection'] ?? '').toLowerCase();
+    final isWsUpgrade = upgradeHeader.toLowerCase() == 'websocket' ||
+        (upgradeHeader.isNotEmpty && connHeader.contains('upgrade'));
+
+    if (isWsUpgrade && req.canHijack) {
+      // Connect upstream BEFORE hijacking so we can still return a friendly 502 if closed
+      Socket upstream;
+      try {
+        upstream = await Socket.connect(
+          InternetAddress.loopbackIPv4,
+          port,
+          timeout: const Duration(seconds: 5),
+        );
+        upstream.setOption(SocketOption.tcpNoDelay, true);
+      } catch (e) {
+        return Response(
+          502,
+          body: '无法建立本地端口 WebSocket 连接 127.0.0.1:$port ($e)',
+          headers: const {'content-type': 'text/plain; charset=utf-8'},
+        );
+      }
+
+      // NOTE: req.hijack throws HijackException intentionally for shelf_io!
+      req.hijack((StreamChannel<List<int>> clientChannel) {
+        final reqBuf = StringBuffer()
+          ..write('${req.method} $targetPathAndQuery HTTP/1.1\r\n')
+          ..write('Host: 127.0.0.1:$port\r\n');
+        req.headers.forEach((k, v) {
+          final lower = k.toLowerCase();
+          if (lower == 'host') return;
+          reqBuf.write('$k: $v\r\n');
+        });
+        reqBuf.write('X-Forwarded-Prefix: /share/${item.id}\r\n\r\n');
+        upstream.add(utf8.encode(reqBuf.toString()));
+
+        var closedBoth = false;
+        void tearDown() {
+          if (closedBoth) return;
+          closedBoth = true;
+          try {
+            upstream.destroy();
+          } catch (_) {}
+          try {
+            clientChannel.sink.close();
+          } catch (_) {}
+        }
+
+        clientChannel.stream.listen(
+          (chunk) {
+            try {
+              upstream.add(chunk);
+            } catch (_) {
+              tearDown();
+            }
+          },
+          onDone: tearDown,
+          onError: (_) => tearDown(),
+          cancelOnError: true,
+        );
+
+        upstream.listen(
+          (chunk) {
+            item.bytesSent += chunk.length;
+            try {
+              clientChannel.sink.add(chunk);
+            } catch (_) {
+              tearDown();
+            }
+          },
+          onDone: tearDown,
+          onError: (_) => tearDown(),
+          cancelOnError: true,
+        );
+      });
+    }
+
+    final upstreamUri = Uri.parse('http://127.0.0.1:$port$targetPathAndQuery');
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 6)
       ..findProxy = (_) => 'DIRECT';
@@ -1631,6 +2317,14 @@ class ExposureManager {
         }
         upReq.headers.set(k, v);
       });
+      final origHost = req.headers['host'] ?? '';
+      if (origHost.isNotEmpty) {
+        upReq.headers.set('x-forwarded-host', origHost);
+      }
+      upReq.headers.set(
+        'x-forwarded-proto',
+        req.requestedUri.scheme.isNotEmpty ? req.requestedUri.scheme : 'http',
+      );
       upReq.headers.set('x-forwarded-prefix', '/share/${item.id}');
 
       if (req.method != 'GET' && req.method != 'HEAD') {
@@ -1692,6 +2386,30 @@ class ExposureManager {
     }
   }
 
+  String _renderPinPromptHtml(
+    ExposureItem item,
+    String actionPath, {
+    String? error,
+  }) =>
+      '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
+      '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      '<title>${_htmlEscape(item.label)} · 输入提取码</title>'
+      '<style>'
+      ':root{--bg:#F6F4EC;--card:#FFFFFF;--soft:#EFECE2;--ink:#1F1E1B;--muted:#6E6A61;--accent:#C96442;--err:#B42318}'
+      '@media(prefers-color-scheme:dark){:root{--bg:#141413;--card:#1F1E1B;--soft:#2B2924;--ink:#FAF9F5;--muted:#A4A096;--accent:#D97757;--err:#F97066}}'
+      '*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;padding:16px}'
+      '.box{width:100%;max-width:380px;padding:30px 28px;background:var(--card);border-radius:24px;box-shadow:0 14px 40px rgba(0,0,0,.07);text-align:center}'
+      'h2{margin:0 0 6px;font-size:19px;font-weight:700}p{margin:0 0 18px;color:var(--muted);font-size:13.5px;line-height:1.55}'
+      'input{width:100%;padding:12px 16px;border-radius:14px;border:none;background:var(--soft);color:var(--ink);font-size:16px;text-align:center;letter-spacing:.12em;outline:none;margin-bottom:12px}'
+      'button{width:100%;padding:12px;border-radius:99px;border:none;background:var(--accent);color:#FFF;font-size:14px;font-weight:600;cursor:pointer}'
+      '.err{color:var(--err);font-size:13px;margin-bottom:12px;font-weight:500}'
+      '</style></head><body><form class="box" method="POST" action="${_htmlEscape(actionPath)}?__pin_unlock=1">'
+      '<h2>${_htmlEscape(item.label)}</h2>'
+      '<p>这条分享已开启口令保护，请输入提取码继续访问。</p>'
+      '${error != null ? '<div class="err">${_htmlEscape(error)}</div>' : ''}'
+      '<input type="password" name="pin" placeholder="输入提取码" autofocus required autocomplete="off">'
+      '<button type="submit">解锁查看</button></form></body></html>';
+
   String _renderExpiredHtml() =>
       '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
       '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -1725,9 +2443,9 @@ void registerExposureTools(
   registerTool(
     name: 'manage_expose',
     description:
-        'Share a local single file (streaming video/PDF/APK preview), folder directory explorer (browse subfolders and click files to preview), '
-        'static website / single HTML page (renders directly as a live webpage), or local port (e.g. 3000/5173) via Tailscale, gateway domain, or temporary tunnel. '
-        'Actions: "open", "close", "close_all", "list".',
+        'Share a local single file (streaming video/PDF/APK preview), folder directory explorer (browse subfolders and click files to preview with breadcrumbs & sibling navigation), '
+        'static website / single HTML page (renders directly as a live webpage), or local port (e.g. 3000/5173 with full WebSocket HMR support) via Tailscale, gateway domain, or temporary tunnel. '
+        'Supports optional PIN code and max_downloads quota. Actions: "open", "close", "close_all", "list".',
     annotations: cmdAnn,
     inputSchema: {
       'type': 'object',
@@ -1748,7 +2466,7 @@ void registerExposureTools(
           'enum': ['auto', 'file', 'folder', 'site', 'port'],
           'default': 'auto',
           'description':
-              '"file" (single file preview/download), "folder" (directory browser with subfolder navigation -> single file preview), "site" (render single .html or website folder directly as live site), "port" (reverse proxy local port), or "auto".',
+              '"file" (single file preview/download), "folder" (directory browser with subfolder navigation -> single file preview), "site" (render single .html or website folder directly as live site), "port" (reverse proxy local port + WebSocket), or "auto".',
         },
         'port': {
           'type': 'integer',
@@ -1774,6 +2492,16 @@ void registerExposureTools(
           'type': 'integer',
           'description':
               'Auto-expire time in minutes (0 = keep open until manually closed). Defaults to server setting.',
+        },
+        'pin_code': {
+          'type': 'string',
+          'description':
+              'Optional 4-16 character access PIN required before viewing or downloading.',
+        },
+        'max_downloads': {
+          'type': 'integer',
+          'description':
+              'Optional maximum download count (e.g. 1 for burn-after-download) before automatically closing the share link.',
         },
         'spa': {
           'type': 'boolean',
@@ -1809,6 +2537,10 @@ void registerExposureTools(
         final ttl = args['ttl_minutes'] is int
             ? args['ttl_minutes'] as int
             : int.tryParse('${args['ttl_minutes'] ?? ''}');
+        final pinCode = (args['pin_code'] ?? args['pin'])?.toString();
+        final maxDl = args['max_downloads'] is int
+            ? args['max_downloads'] as int
+            : int.tryParse('${args['max_downloads'] ?? ''}');
         final spa = args['spa'] == true;
 
         final created = await ExposureManager.instance.openExposure(
@@ -1819,6 +2551,8 @@ void registerExposureTools(
           scope: scope,
           label: label,
           ttlMinutes: ttl,
+          pinCode: pinCode,
+          maxDownloads: maxDl,
           spa: spa,
           validateWithPolicy: true,
         );

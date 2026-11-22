@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,9 +8,22 @@ import '../services/console_backend.dart';
 import '../theme/claude_theme.dart';
 import 'profile_endpoints_helper.dart';
 
+String inferShareModeFromPath(String rawPath) {
+  final cleaned = rawPath.trim().replaceAll('"', '');
+  final lower = cleaned.toLowerCase();
+  if (int.tryParse(lower.replaceAll(':', '')) != null) return 'port';
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'site';
+  final base = cleaned.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).lastOrNull ?? '';
+  // Heuristic when stat isn't needed on UI side: paths without file extension default to folder
+  if (base.isNotEmpty && !base.contains('.')) return 'folder';
+  return 'file';
+}
+
 class ExposureSharePage extends StatefulWidget {
   final ConsoleBackend backend;
   final Map<String, dynamic> exposureSummary;
+  final ValueListenable<String?>? droppedPathSignal;
+  final VoidCallback? onConsumeDroppedPath;
   final double topPadding;
   final double extraBottomPadding;
   final Future<void> Function() onRefresh;
@@ -19,6 +33,8 @@ class ExposureSharePage extends StatefulWidget {
     super.key,
     required this.backend,
     required this.exposureSummary,
+    this.droppedPathSignal,
+    this.onConsumeDroppedPath,
     this.topPadding = 0.0,
     this.extraBottomPadding = 0.0,
     required this.onRefresh,
@@ -36,6 +52,43 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   bool _togglingMaster = false;
   bool _showChannelDetails = false;
   bool _showGuide = false;
+  bool _dialogOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.droppedPathSignal?.addListener(_handleDroppedSignal);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _handleDroppedSignal());
+  }
+
+  @override
+  void didUpdateWidget(covariant ExposureSharePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.droppedPathSignal != widget.droppedPathSignal) {
+      oldWidget.droppedPathSignal?.removeListener(_handleDroppedSignal);
+      widget.droppedPathSignal?.addListener(_handleDroppedSignal);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.droppedPathSignal?.removeListener(_handleDroppedSignal);
+    super.dispose();
+  }
+
+  void _handleDroppedSignal() {
+    final dropped = widget.droppedPathSignal?.value;
+    if (dropped == null || dropped.trim().isEmpty || !mounted || _dialogOpen) {
+      return;
+    }
+    widget.onConsumeDroppedPath?.call();
+    if (!_enabled) {
+      widget.onToast('请先开启外链分享后再拖入文件');
+      return;
+    }
+    final mode = inferShareModeFromPath(dropped);
+    _openCreateDialog(initialMode: mode, initialTarget: dropped);
+  }
 
   bool get _enabled => widget.exposureSummary['enabled'] != false;
   bool get _tsEnabled => widget.exposureSummary['tailscale_enabled'] != false;
@@ -133,16 +186,26 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     widget.onToast(tip);
   }
 
-  Future<void> _openCreateDialog({String initialMode = 'file'}) async {
-    final created = await showClaudeDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _CreateExposureDialog(
-        backend: widget.backend,
-        defaultTtlMinutes: _defaultTtl,
-        activeLocalPorts: _activePorts,
-        initialMode: initialMode,
-      ),
-    );
+  Future<void> _openCreateDialog({
+    String initialMode = 'file',
+    String? initialTarget,
+  }) async {
+    _dialogOpen = true;
+    Map<String, dynamic>? created;
+    try {
+      created = await showClaudeDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => _CreateExposureDialog(
+          backend: widget.backend,
+          defaultTtlMinutes: _defaultTtl,
+          activeLocalPorts: _activePorts,
+          initialMode: initialMode,
+          initialTarget: initialTarget,
+        ),
+      );
+    } finally {
+      _dialogOpen = false;
+    }
     if (created != null) {
       await widget.onRefresh();
       final url = (created['primary_url'] ?? '').toString();
@@ -219,7 +282,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     Text('外网映射与链接分享', style: serifTitleStyle(c, size: 24)),
                     const SizedBox(height: 4),
                     Text(
-                      '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态，发给手机或朋友点开即看。',
+                      '支持单个文件、文件夹目录浏览、静态网站/HTML 与本地端口四种形态（桌面端可直接拖入文件或文件夹秒建分享）。',
                       style: sansStyle(
                         c,
                         size: 13,
@@ -783,6 +846,11 @@ class _ActiveExposureCard extends StatelessWidget {
     final directFileUrl = (item['direct_file_url'] ?? '').toString();
     final hitCount = int.tryParse('${item['hit_count'] ?? 0}') ?? 0;
     final bytesHuman = (item['bytes_sent_human'] ?? '0 B').toString();
+    final hasPin = item['has_pin'] == true;
+    final pinCode = (item['pin_code'] ?? '').toString();
+    final remDl = item['remaining_downloads'] is int
+        ? item['remaining_downloads'] as int
+        : int.tryParse('${item['remaining_downloads'] ?? ''}');
     final remSec = item['remaining_seconds'] is int
         ? item['remaining_seconds'] as int
         : int.tryParse('${item['remaining_seconds'] ?? ''}');
@@ -879,10 +947,24 @@ class _ActiveExposureCard extends StatelessWidget {
                     fg: c.sage,
                     bg: c.sageBg,
                   ),
+                  if (hasPin) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: pinCode.isNotEmpty
+                          ? () => onCopy(pinCode, '已复制提取码：$pinCode')
+                          : null,
+                      child: ClaudePill(
+                        text: pinCode.isNotEmpty ? '提取码 $pinCode' : '口令保护',
+                        mono: false,
+                        fg: c.clay,
+                        bg: c.clay.withValues(alpha: 0.13),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               Text(
-                '$scopeText · $ttlText · 访问 $hitCount 次 ($bytesHuman)',
+                '$scopeText · $ttlText${remDl != null ? " · 剩余下载 $remDl 次" : ""} · 访问 $hitCount 次 ($bytesHuman)',
                 style: sansStyle(c, size: 12, color: c.muted),
               ),
             ],
@@ -972,12 +1054,14 @@ class _CreateExposureDialog extends StatefulWidget {
   final int defaultTtlMinutes;
   final List<int> activeLocalPorts;
   final String initialMode;
+  final String? initialTarget;
 
   const _CreateExposureDialog({
     required this.backend,
     required this.defaultTtlMinutes,
     this.activeLocalPorts = const <int>[],
     this.initialMode = 'port',
+    this.initialTarget,
   });
 
   @override
@@ -987,15 +1071,19 @@ class _CreateExposureDialog extends StatefulWidget {
 class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   late String _mode = widget.initialMode; // 'port' | 'file' | 'folder' | 'site'
   late final TextEditingController _targetCtrl = TextEditingController(
-    text: widget.initialMode == 'port'
-        ? (widget.activeLocalPorts.isNotEmpty
-            ? '${widget.activeLocalPorts.first}'
-            : '3000')
-        : '',
+    text: (widget.initialTarget != null && widget.initialTarget!.trim().isNotEmpty)
+        ? widget.initialTarget!.trim()
+        : (widget.initialMode == 'port'
+            ? (widget.activeLocalPorts.isNotEmpty
+                ? '${widget.activeLocalPorts.first}'
+                : '3000')
+            : ''),
   );
   final TextEditingController _labelCtrl = TextEditingController();
+  final TextEditingController _pinCtrl = TextEditingController();
   String _scope = 'auto';
   late int _ttlMinutes = widget.defaultTtlMinutes;
+  int _maxDownloads = 0; // 0 = unlimited
   bool _spa = false;
   bool _picking = false;
   bool _submitting = false;
@@ -1005,17 +1093,23 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   void dispose() {
     _targetCtrl.dispose();
     _labelCtrl.dispose();
+    _pinCtrl.dispose();
     super.dispose();
   }
 
   void _onTargetChanged(String val) {
-    final trimmed = val.trim().toLowerCase();
+    final cleaned = val.trim().replaceAll('"', '');
+    final trimmed = cleaned.toLowerCase();
     setState(() {
       _error = '';
-      // Smart hint auto-switch when user pastes an .html file into file mode
       if ((trimmed.endsWith('.html') || trimmed.endsWith('.htm')) &&
           _mode == 'port') {
         _mode = 'site';
+      } else if (_mode == 'port' &&
+          cleaned.isNotEmpty &&
+          int.tryParse(cleaned.replaceAll(':', '')) == null &&
+          !trimmed.startsWith('http://')) {
+        _mode = inferShareModeFromPath(cleaned);
       }
     });
   }
@@ -1055,15 +1149,26 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
       _error = '';
     });
     try {
+      final cleanRaw = raw.replaceAll('"', '').trim();
+      final pinText = _pinCtrl.text.trim();
+      if (pinText.isNotEmpty && (pinText.length < 4 || pinText.length > 16)) {
+        setState(() {
+          _error = '提取码长度建议为 4 到 16 位（留空则免口令直接打开）';
+          _submitting = false;
+        });
+        return;
+      }
       final res = await widget.backend.openExposure(
-        target: raw,
+        target: cleanRaw,
         mode: _mode,
         port: _mode == 'port'
-            ? int.tryParse(raw.replaceAll(':', '').trim())
+            ? int.tryParse(cleanRaw.replaceAll(':', '').trim())
             : null,
         scope: _scope,
         label: _labelCtrl.text.trim(),
         ttlMinutes: _ttlMinutes,
+        pinCode: pinText.isEmpty ? null : pinText,
+        maxDownloads: _maxDownloads > 0 ? _maxDownloads : null,
         spa: _mode == 'site' && _spa,
       );
       if (!mounted) return;
@@ -1311,6 +1416,45 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                Text(
+                  '安全提取码与限次保护（可选）',
+                  style: sansStyle(
+                    c,
+                    size: 12.6,
+                    weight: FontWeight.w600,
+                    color: c.ink,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 190,
+                      child: TextField(
+                        controller: _pinCtrl,
+                        style: monoStyle(c, size: 13, color: c.ink),
+                        decoration: const InputDecoration(
+                          hintText: '免口令（或填4-8位提取码）',
+                        ),
+                      ),
+                    ),
+                    if (_mode == 'file' || _mode == 'folder')
+                      ClaudeSegmented<int>(
+                        value: _maxDownloads,
+                        items: const [
+                          (0, '不限次数'),
+                          (1, '1次即焚'),
+                          (5, '限5次'),
+                          (20, '限20次'),
+                        ],
+                        onChanged: (v) => setState(() => _maxDownloads = v),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _labelCtrl,
                   style: sansStyle(c, size: 13, color: c.ink),

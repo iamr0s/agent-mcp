@@ -246,11 +246,11 @@ class ConsoleShellScreen extends StatefulWidget {
 }
 
 class _ConsoleShellScreenState extends State<ConsoleShellScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.1.0';
+  String _version = '2.2.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -282,6 +282,40 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     value: 1.0,
   );
 
+  StreamSubscription<List<String>>? _dropSub;
+  final ValueNotifier<String?> _droppedSharePath = ValueNotifier<String?>(null);
+  AppLifecycleState _appLifecycle = AppLifecycleState.resumed;
+
+  static String _computeSearchBlob(Map<String, dynamic> ev) {
+    final tool = (ev['tool'] ?? '').toString();
+    final source = (ev['source'] ?? '').toString();
+    final summary = (ev['summary'] ?? '').toString();
+    final result = (ev['result'] ?? '').toString();
+    final args = ev['args'] != null ? jsonEncode(ev['args']) : '';
+    return '$tool $source $summary $result $args'.toLowerCase();
+  }
+
+  void _syncAnimationActivityState() {
+    final winHidden = !widget.backend.windowState.value.isVisible;
+    final appBackgrounded = _appLifecycle == AppLifecycleState.paused ||
+        _appLifecycle == AppLifecycleState.hidden ||
+        _appLifecycle == AppLifecycleState.detached;
+    ClaudePulseClock.instance.setPaused(winHidden || appBackgrounded);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appLifecycle = state;
+    _syncAnimationActivityState();
+    if (state == AppLifecycleState.resumed && _authenticated && mounted) {
+      unawaited(_refreshStatus());
+    }
+  }
+
+  void _onWindowStateChanged() {
+    _syncAnimationActivityState();
+  }
+
   void _onExternalBackendSignal() {
     if (!mounted) return;
     _lastStatusSignature = '';
@@ -295,7 +329,18 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.backend.windowState.addListener(_onWindowStateChanged);
     widget.backend.externalRefreshSignal.addListener(_onExternalBackendSignal);
+    _dropSub = widget.backend.droppedFilesStream.listen((paths) {
+      if (!mounted || !_authenticated || paths.isEmpty) return;
+      setState(() {
+        _tabIndex = 2;
+        _chromeVisible = true;
+      });
+      _droppedSharePath.value = paths.first;
+    });
+    _syncAnimationActivityState();
     _bootstrap();
   }
 
@@ -333,6 +378,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.backend.windowState.removeListener(_onWindowStateChanged);
+    _dropSub?.cancel();
+    _droppedSharePath.dispose();
     _eventSub?.cancel();
     _pollTimer?.cancel();
     _toastTimer?.cancel();
@@ -362,7 +411,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.1.0').toString();
+      _version = (auth['version'] ?? '2.2.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -424,7 +473,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _eventSub = widget.backend.subscribeEvents().listen(_upsertEvent);
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _refreshStatus();
+      if (!ClaudePulseClock.instance.isPaused) {
+        _refreshStatus();
+      }
     });
   }
 
@@ -436,16 +487,20 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         final idx = _events.indexWhere((x) => x['call_id'] == callId);
         if (idx != -1) {
           final prev = _events[idx];
-          _events[idx] = {
+          final merged = <String, dynamic>{
             ...prev,
             ...rawEv,
             '_seq': prev['_seq'],
             'args': rawEv['args'] ?? prev['args'],
           };
+          merged['_search_blob'] = _computeSearchBlob(merged);
+          _events[idx] = merged;
           return;
         }
       }
-      _events.add({...rawEv, '_seq': ++_evSeq});
+      final added = <String, dynamic>{...rawEv, '_seq': ++_evSeq};
+      added['_search_blob'] = _computeSearchBlob(added);
+      _events.add(added);
       if (_events.length > 3000) {
         _events.removeAt(0);
       }
@@ -464,16 +519,20 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             final idx = _events.indexWhere((x) => x['call_id'] == callId);
             if (idx != -1) {
               final prev = _events[idx];
-              _events[idx] = {
+              final merged = <String, dynamic>{
                 ...prev,
                 ...item,
                 '_seq': prev['_seq'],
                 'args': item['args'] ?? prev['args'],
               };
+              merged['_search_blob'] = _computeSearchBlob(merged);
+              _events[idx] = merged;
               continue;
             }
           }
-          _events.add({...item, '_seq': ++_evSeq});
+          final added = <String, dynamic>{...item, '_seq': ++_evSeq};
+          added['_search_blob'] = _computeSearchBlob(added);
+          _events.add(added);
         }
       });
     } on UnauthorizedConsoleException {
@@ -1028,6 +1087,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         key: const ValueKey('page-exposure'),
         backend: widget.backend,
         exposureSummary: _exposureSummary,
+        droppedPathSignal: _droppedSharePath,
+        onConsumeDroppedPath: () => _droppedSharePath.value = null,
         topPadding: pageTopInset,
         extraBottomPadding: pageExtraBottom,
         onRefresh: () async {

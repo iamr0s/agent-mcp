@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -20,13 +21,49 @@ class UndoSnapshot {
     required this.bytes,
     required this.note,
   });
+
+  int get byteSize => bytes?.length ?? 0;
+}
+
+/// Per-file async mutex preventing lost updates when parallel Agent tool calls
+/// edit or patch the same file concurrently.
+class FileAsyncMutex {
+  final Map<String, Future<void>> _tails = {};
+
+  static String _normKey(String filePath) {
+    final norm = p.normalize(p.absolute(filePath));
+    return Platform.isWindows ? norm.toLowerCase() : norm;
+  }
+
+  Future<T> synchronized<T>(String filePath, Future<T> Function() action) {
+    final key = _normKey(filePath);
+    final prev = _tails[key] ?? Future<void>.value();
+    final done = Completer<void>();
+    final nextTail = prev.whenComplete(() => done.future);
+    _tails[key] = nextTail;
+
+    return prev.then((_) => action()).whenComplete(() {
+      if (!done.isCompleted) done.complete();
+      if (identical(_tails[key], nextTail)) {
+        _tails.remove(key);
+      }
+    });
+  }
 }
 
 class UndoStore {
   final int maxPerFile;
+  final int maxTotalBytes;
   final Map<String, ListQueue<UndoSnapshot>> _history = {};
+  final ListQueue<(String, UndoSnapshot)> _globalOrder = ListQueue();
+  int _totalBytes = 0;
 
-  UndoStore({this.maxPerFile = 10});
+  UndoStore({
+    this.maxPerFile = 10,
+    this.maxTotalBytes = 64 * 1024 * 1024,
+  });
+
+  int get totalBytes => _totalBytes;
 
   String _key(String filePath) {
     final norm = p.normalize(p.absolute(filePath));
@@ -36,7 +73,15 @@ class UndoStore {
   void save(File file, String note) {
     final k = _key(file.path);
     final existed = file.existsSync();
-    final data = existed ? file.readAsBytesSync() : null;
+    Uint8List? data;
+    if (existed) {
+      final len = file.lengthSync();
+      if (len <= maxTotalBytes) {
+        data = file.readAsBytesSync();
+      } else {
+        return;
+      }
+    }
     _pushSnapshot(k, UndoSnapshot(existed: existed, bytes: data, note: note));
   }
 
@@ -44,22 +89,57 @@ class UndoStore {
     final k = _key(filePath);
     final st = await PrivFs.stat(filePath);
     final existed = st.isFile;
-    final data = existed ? await PrivFs.readBytes(filePath) : null;
+    Uint8List? data;
+    if (existed) {
+      if (st.size > maxTotalBytes) return;
+      data = await PrivFs.readBytes(filePath);
+    }
     _pushSnapshot(k, UndoSnapshot(existed: existed, bytes: data, note: note));
   }
 
   void _pushSnapshot(String k, UndoSnapshot snap) {
     final q = _history.putIfAbsent(k, () => ListQueue<UndoSnapshot>());
-    if (q.length >= maxPerFile) {
-      q.removeFirst();
+    while (q.length >= maxPerFile) {
+      final evicted = q.removeFirst();
+      _removeFromGlobalOrder(k, evicted);
+    }
+    while (_totalBytes + snap.byteSize > maxTotalBytes &&
+        _globalOrder.isNotEmpty) {
+      final (oldKey, oldSnap) = _globalOrder.removeFirst();
+      final oldQ = _history[oldKey];
+      if (oldQ != null && oldQ.remove(oldSnap)) {
+        _totalBytes -= oldSnap.byteSize;
+        if (oldQ.isEmpty) _history.remove(oldKey);
+      }
     }
     q.addLast(snap);
+    _globalOrder.addLast((k, snap));
+    _totalBytes += snap.byteSize;
+  }
+
+  void _removeFromGlobalOrder(String k, UndoSnapshot snap) {
+    final kept = <(String, UndoSnapshot)>[];
+    var removed = false;
+    while (_globalOrder.isNotEmpty) {
+      final pair = _globalOrder.removeFirst();
+      if (!removed && pair.$1 == k && identical(pair.$2, snap)) {
+        _totalBytes -= snap.byteSize;
+        removed = true;
+      } else {
+        kept.add(pair);
+      }
+    }
+    _globalOrder.addAll(kept);
   }
 
   UndoSnapshot? popPath(String filePath) {
-    final q = _history[_key(filePath)];
+    final k = _key(filePath);
+    final q = _history[k];
     if (q == null || q.isEmpty) return null;
-    return q.removeLast();
+    final snap = q.removeLast();
+    _removeFromGlobalOrder(k, snap);
+    if (q.isEmpty) _history.remove(k);
+    return snap;
   }
 
   UndoSnapshot? pop(File file) => popPath(file.path);
@@ -126,6 +206,7 @@ void registerFileTools(
   UndoStore undoStore,
 ) {
   const jsonEncoder = JsonEncoder.withIndent('  ');
+  final fileMutex = FileAsyncMutex();
 
   String resolveTarget(String rawPath) {
     final roots = getEffectivePolicy(config).roots;
@@ -772,22 +853,24 @@ void registerFileTools(
       final err = checkAccess(targetPath, config);
       if (err != null) return 'Error: $err';
 
-      final st = await PrivFs.stat(targetPath);
-      if (st.isDirectory) {
-        return 'Error: Target is a directory: $targetPath';
-      }
-      if (st.exists) {
-        if (!overwrite) {
-          return 'Error: File already exists: $targetPath. Pass overwrite=True or use edit_file.';
+      return fileMutex.synchronized(targetPath, () async {
+        final st = await PrivFs.stat(targetPath);
+        if (st.isDirectory) {
+          return 'Error: Target is a directory: $targetPath';
         }
-        await undoStore.savePath(targetPath, 'create_file(overwrite=True)');
-      } else {
-        await undoStore.savePath(targetPath, 'create_file(new)');
-      }
+        if (st.exists) {
+          if (!overwrite) {
+            return 'Error: File already exists: $targetPath. Pass overwrite=True or use edit_file.';
+          }
+          await undoStore.savePath(targetPath, 'create_file(overwrite=True)');
+        } else {
+          await undoStore.savePath(targetPath, 'create_file(new)');
+        }
 
-      final written = await PrivFs.writeText(targetPath, content);
-      final lineCount = splitLinesNoEol(content).length;
-      return 'Written $written bytes ($lineCount lines) to $targetPath.';
+        final written = await PrivFs.writeText(targetPath, content);
+        final lineCount = splitLinesNoEol(content).length;
+        return 'Written $written bytes ($lineCount lines) to $targetPath.';
+      });
     },
   );
 
@@ -822,73 +905,95 @@ void registerFileTools(
       final targetPath = resolveTarget(rawPath);
       final err = checkAccess(targetPath, config);
       if (err != null) return 'Error: $err';
-      if (!await PrivFs.isFile(targetPath)) {
-        return 'Error: File does not exist: $targetPath';
-      }
-
-      final DecodedTextFile dec;
-      try {
-        dec = await PrivFs.readText(targetPath);
-      } on FormatException catch (e) {
-        return 'Error: ${e.message}';
-      }
-
-      var working = dec.text.replaceAll('\r\n', '\n');
-      for (var idx = 0; idx < rawEdits.length; idx++) {
-        final item = rawEdits[idx];
-        if (item is! Map) {
-          return "Error: Edit #${idx + 1} must be an object containing 'old_str' and 'new_str'.";
-        }
-        final oldStr = item['old_str'];
-        final newStr = item['new_str'];
-        final replaceAll = item['replace_all'] == true;
-        if (oldStr == null || newStr == null) {
-          return "Error: Edit #${idx + 1} must contain 'old_str' and 'new_str'.";
+      return fileMutex.synchronized(targetPath, () async {
+        if (!await PrivFs.isFile(targetPath)) {
+          return 'Error: File does not exist: $targetPath';
         }
 
-        final oldNorm = oldStr.toString().replaceAll('\r\n', '\n');
-        final newNorm = newStr.toString().replaceAll('\r\n', '\n');
-        final count = _countOccurrences(working, oldNorm);
+        final DecodedTextFile dec;
+        try {
+          dec = await PrivFs.readText(targetPath);
+        } on FormatException catch (e) {
+          return 'Error: ${e.message}';
+        }
 
-        if (count == 0) {
-          final oldLines = splitLinesNoEol(oldNorm);
-          final firstLine = oldLines.isNotEmpty ? oldLines.first : oldNorm;
-          final fileLines = splitLinesNoEol(working);
-          final close = findClosestLines(firstLine, fileLines);
-          var hint = '';
-          if (close.isNotEmpty) {
-            final hintLines =
-                close.map((e) => '  line ${e.$1}: ${e.$2}').join('\n');
-            hint = '\nClosest lines in file:\n$hintLines';
+        var working = dec.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+        for (var idx = 0; idx < rawEdits.length; idx++) {
+          final item = rawEdits[idx];
+          if (item is! Map) {
+            return "Error: Edit #${idx + 1} must be an object containing 'old_str' and 'new_str'.";
           }
-          return "Error: Edit #${idx + 1} 'old_str' not found in $targetPath.$hint";
+          final oldStr = item['old_str'];
+          final newStr = item['new_str'];
+          final replaceAll = item['replace_all'] == true;
+          if (oldStr == null || newStr == null) {
+            return "Error: Edit #${idx + 1} must contain 'old_str' and 'new_str'.";
+          }
+
+          final oldNorm =
+              oldStr.toString().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+          final newNorm =
+              newStr.toString().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+          final count = _countOccurrences(working, oldNorm);
+
+          if (count == 0) {
+            final trimmedMatch = _matchTrailingWhitespaceInsensitive(
+              working,
+              oldNorm,
+              newNorm,
+              replaceAll: replaceAll,
+            );
+            if (trimmedMatch.status == 'applied') {
+              working = trimmedMatch.updated!;
+              continue;
+            } else if (trimmedMatch.status == 'ambiguous') {
+              return "Error: Edit #${idx + 1} 'old_str' matched ${trimmedMatch.count} times (ignoring trailing spaces) in $targetPath. "
+                  'Include more surrounding context to make it unique, or set replace_all=True.';
+            }
+
+            final oldLines = splitLinesNoEol(oldNorm);
+            final firstLine = oldLines.isNotEmpty ? oldLines.first : oldNorm;
+            final fileLines = splitLinesNoEol(working);
+            final close = findClosestLines(firstLine, fileLines);
+            var hint = '';
+            if (close.isNotEmpty) {
+              final hintLines =
+                  close.map((e) => '  line ${e.$1}: ${e.$2}').join('\n');
+              hint = '\nClosest lines in file:\n$hintLines';
+            }
+            return "Error: Edit #${idx + 1} 'old_str' not found in $targetPath.$hint";
+          }
+
+          if (count > 1 && !replaceAll) {
+            return "Error: Edit #${idx + 1} 'old_str' matched $count times in $targetPath. "
+                'Include more surrounding context to make it unique, or set replace_all=True.';
+          }
+
+          working = replaceAll
+              ? working.replaceAll(oldNorm, newNorm)
+              : working.replaceFirst(oldNorm, newNorm);
         }
 
-        if (count > 1 && !replaceAll) {
-          return "Error: Edit #${idx + 1} 'old_str' matched $count times in $targetPath. "
-              'Include more surrounding context to make it unique, or set replace_all=True.';
+        final origNorm =
+            dec.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+        final diffPreview =
+            makeUnifiedDiff(origNorm, working, p.basename(targetPath));
+        if (dryRun) {
+          return '[DRY RUN] Diff for $targetPath:\n${diffPreview.isEmpty ? "(no changes)" : diffPreview}';
         }
 
-        working = replaceAll
-            ? working.replaceAll(oldNorm, newNorm)
-            : working.replaceFirst(oldNorm, newNorm);
-      }
-
-      final origNorm = dec.text.replaceAll('\r\n', '\n');
-      final diffPreview =
-          makeUnifiedDiff(origNorm, working, p.basename(targetPath));
-      if (dryRun) {
-        return '[DRY RUN] Diff for $targetPath:\n${diffPreview.isEmpty ? "(no changes)" : diffPreview}';
-      }
-
-      await undoStore.savePath(targetPath, 'edit_file(${rawEdits.length} edits)');
-      await PrivFs.writeText(
-        targetPath,
-        working,
-        encoding: dec.encoding,
-        newline: dec.newline,
-      );
-      return 'Successfully applied ${rawEdits.length} edit(s) to $targetPath.\n$diffPreview';
+        await undoStore.savePath(
+          targetPath,
+          'edit_file(${rawEdits.length} edits)',
+        );
+        await PrivFs.writeText(
+          targetPath,
+          working,
+          encoding: dec.encoding,
+          newline: dec.newline,
+        );
+        return 'Successfully applied ${rawEdits.length} edit(s) to $targetPath.\n$diffPreview';
+      });
     },
   );
 
@@ -921,37 +1026,40 @@ void registerFileTools(
       final targetPath = resolveTarget(rawPath);
       final err = checkAccess(targetPath, config);
       if (err != null) return 'Error: $err';
-      if (!await PrivFs.isFile(targetPath)) {
-        return 'Error: File does not exist: $targetPath';
-      }
+      return fileMutex.synchronized(targetPath, () async {
+        if (!await PrivFs.isFile(targetPath)) {
+          return 'Error: File does not exist: $targetPath';
+        }
 
-      final DecodedTextFile dec;
-      final String patched;
-      try {
-        dec = await PrivFs.readText(targetPath);
-        patched = applyUnifiedDiffText(
-          dec.text.replaceAll('\r\n', '\n'),
-          unifiedDiff,
+        final DecodedTextFile dec;
+        final String patched;
+        try {
+          dec = await PrivFs.readText(targetPath);
+          patched = applyUnifiedDiffText(
+            dec.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+            unifiedDiff,
+          );
+        } on FormatException catch (e) {
+          return 'Error: ${e.message}';
+        }
+
+        final origNorm =
+            dec.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+        final diffPreview =
+            makeUnifiedDiff(origNorm, patched, p.basename(targetPath));
+        if (dryRun) {
+          return '[DRY RUN] Patch preview for $targetPath:\n${diffPreview.isEmpty ? "(no changes)" : diffPreview}';
+        }
+
+        await undoStore.savePath(targetPath, 'apply_patch');
+        await PrivFs.writeText(
+          targetPath,
+          patched,
+          encoding: dec.encoding,
+          newline: dec.newline,
         );
-      } on FormatException catch (e) {
-        return 'Error: ${e.message}';
-      }
-
-      final origNorm = dec.text.replaceAll('\r\n', '\n');
-      final diffPreview =
-          makeUnifiedDiff(origNorm, patched, p.basename(targetPath));
-      if (dryRun) {
-        return '[DRY RUN] Patch preview for $targetPath:\n${diffPreview.isEmpty ? "(no changes)" : diffPreview}';
-      }
-
-      await undoStore.savePath(targetPath, 'apply_patch');
-      await PrivFs.writeText(
-        targetPath,
-        patched,
-        encoding: dec.encoding,
-        newline: dec.newline,
-      );
-      return 'Patch applied to $targetPath.\n$diffPreview';
+        return 'Patch applied to $targetPath.\n$diffPreview';
+      });
     },
   );
 
@@ -1218,17 +1326,19 @@ void registerFileTools(
       final err = checkAccess(targetPath, config);
       if (err != null) return 'Error: $err';
 
-      final snap = undoStore.popPath(targetPath);
-      if (snap == null) {
-        return 'Error: No undo history available for $targetPath.';
-      }
-      if (!snap.existed) {
-        final st = await PrivFs.stat(targetPath);
-        if (st.exists) await PrivFs.delete(targetPath);
-        return "Undid '${snap.note}': removed newly created $targetPath.";
-      }
-      await PrivFs.writeBytes(targetPath, snap.bytes!, createParents: true);
-      return "Undid '${snap.note}': restored $targetPath (${snap.bytes!.length} bytes).";
+      return fileMutex.synchronized(targetPath, () async {
+        final snap = undoStore.popPath(targetPath);
+        if (snap == null) {
+          return 'Error: No undo history available for $targetPath.';
+        }
+        if (!snap.existed) {
+          final st = await PrivFs.stat(targetPath);
+          if (st.exists) await PrivFs.delete(targetPath);
+          return "Undid '${snap.note}': removed newly created $targetPath.";
+        }
+        await PrivFs.writeBytes(targetPath, snap.bytes!, createParents: true);
+        return "Undid '${snap.note}': restored $targetPath (${snap.bytes!.length} bytes).";
+      });
     },
   );
 }
@@ -1244,4 +1354,57 @@ int _countOccurrences(String text, String needle) {
     idx = found + needle.length;
   }
   return count;
+}
+
+({String status, String? updated, int count}) _matchTrailingWhitespaceInsensitive(
+  String working,
+  String oldNorm,
+  String newNorm, {
+  required bool replaceAll,
+}) {
+  final oldLines = oldNorm.split('\n');
+  if (oldLines.isEmpty || (oldLines.length == 1 && oldLines.first.trim().isEmpty)) {
+    return (status: 'none', updated: null, count: 0);
+  }
+  final workLines = working.split('\n');
+  if (oldLines.length > workLines.length) {
+    return (status: 'none', updated: null, count: 0);
+  }
+
+  final matchStarts = <int>[];
+  var i = 0;
+  while (i <= workLines.length - oldLines.length) {
+    var ok = true;
+    for (var j = 0; j < oldLines.length; j++) {
+      if (workLines[i + j].trimRight() != oldLines[j].trimRight()) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      matchStarts.add(i);
+      i += oldLines.length;
+    } else {
+      i++;
+    }
+  }
+
+  if (matchStarts.isEmpty) {
+    return (status: 'none', updated: null, count: 0);
+  }
+  if (matchStarts.length > 1 && !replaceAll) {
+    return (status: 'ambiguous', updated: null, count: matchStarts.length);
+  }
+
+  final newLines = newNorm.split('\n');
+  final targets = replaceAll ? matchStarts : <int>[matchStarts.first];
+  final out = <String>[];
+  var cursor = 0;
+  for (final start in targets) {
+    out.addAll(workLines.sublist(cursor, start));
+    out.addAll(newLines);
+    cursor = start + oldLines.length;
+  }
+  out.addAll(workLines.sublist(cursor));
+  return (status: 'applied', updated: out.join('\n'), count: matchStarts.length);
 }

@@ -428,6 +428,8 @@ class RemoteHttpNodeClient {
     String scope = 'auto',
     String? label,
     int? ttlMinutes,
+    String? pinCode,
+    int? maxDownloads,
     bool spa = false,
   }) =>
       _requestJson(
@@ -440,6 +442,10 @@ class RemoteHttpNodeClient {
           'scope': scope,
           if (label != null && label.isNotEmpty) 'label': label,
           if (ttlMinutes != null) 'ttl_minutes': ttlMinutes,
+          if (pinCode != null && pinCode.trim().isNotEmpty)
+            'pin_code': pinCode.trim(),
+          if (maxDownloads != null && maxDownloads > 0)
+            'max_downloads': maxDownloads,
           'spa': spa,
         },
       );

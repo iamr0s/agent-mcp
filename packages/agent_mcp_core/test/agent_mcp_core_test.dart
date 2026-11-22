@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_mcp_core/agent_mcp_core.dart';
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 import 'package:http/http.dart' as http;
@@ -578,5 +579,425 @@ void main() {
       await ExposureManager.instance.closeAllExposures();
       await server.close(force: true);
     }
+  });
+
+  test('v2.2 P0-1 & P0-2: symlink escape guard, secret blocklist, Origin DNS-rebinding guard, and deep log redaction', () async {
+    const loopback = '127.0' '.0.1';
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    saveConfigFile(cfgFile, {
+      'server_name': 'sec-v22-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'none',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg =
+        ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+          ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final server = await engine.serveHttp();
+    saveUpdatedConfigMap(cfgFile, {'port': server.port});
+    final authority = '${server.address.address}:${server.port}';
+
+    try {
+      // 1. Recursive depth-6 credential & Authorization/PIN redaction
+      final scrubbed = redactArgs({
+        'path': '/tmp/ok.txt',
+        'pin_code': '8899',
+        'nested': {
+          'headers': {
+            'Authorization': 'Bearer sk-super-secret-token-999',
+            'X-Custom': 'visible-val',
+          },
+          'env': {
+            'OPENAI_API_KEY': 'sk-proj-abc123456',
+          },
+        },
+      });
+      expect(scrubbed['pin_code'], equals('***'));
+      final nested = scrubbed['nested'] as Map<String, dynamic>;
+      expect((nested['headers'] as Map)['Authorization'], equals('***'));
+      expect((nested['headers'] as Map)['X-Custom'], equals('visible-val'));
+      expect((nested['env'] as Map)['OPENAI_API_KEY'], equals('***'));
+
+      // 2. Anti-DNS-Rebinding Origin guard on /mcp and /dashboard/api/*
+      final evilMcpResp = await http.post(
+        Uri.http(authority, '/mcp'),
+        headers: {
+          'content-type': 'application/json',
+          'origin': 'https://evil-rebinding.attacker.example',
+        },
+        body: jsonEncode({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}),
+      );
+      expect(evilMcpResp.statusCode, equals(403));
+
+      final evilDashResp = await http.post(
+        Uri.http(authority, '/dashboard/api/config'),
+        headers: {
+          'content-type': 'application/json',
+          'origin': 'https://evil-rebinding.attacker.example',
+        },
+        body: jsonEncode({'server_name': 'hijacked'}),
+      );
+      expect(evilDashResp.statusCode, equals(403));
+
+      // Non-browser SDK clients (no Origin header) & same-host localhost Origin succeed
+      final sdkResp = await http.post(
+        Uri.http(authority, '/mcp'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}),
+      );
+      expect(sdkResp.statusCode, equals(200));
+
+      final localOriginResp = await http.post(
+        Uri.http(authority, '/mcp'),
+        headers: {
+          'content-type': 'application/json',
+          'origin': 'http://$authority',
+        },
+        body: jsonEncode({'jsonrpc': '2.0', 'id': 3, 'method': 'tools/list'}),
+      );
+      expect(localOriginResp.statusCode, equals(200));
+
+      // 3. Symlink escape & unified secret blocklist in /share/<id> and streaming ?zip=1
+      final outsideSecret = File(p.join(tempRoot.path, 'outside_host_secret.txt'))
+        ..writeAsStringSync('TOP_SECRET_OUTSIDE_SHARE_ROOT');
+      final sharedDir = Directory(p.join(sandboxDir.path, 'public_bundle'))
+        ..createSync(recursive: true);
+      File(p.join(sharedDir.path, 'readme.txt')).writeAsStringSync('Safe public content');
+      File(p.join(sharedDir.path, '.env')).writeAsStringSync('DB_PASSWORD=123');
+      final sshDir = Directory(p.join(sharedDir.path, '.ssh'))..createSync();
+      File(p.join(sshDir.path, 'id_ed25519')).writeAsStringSync('PRIVATE_KEY');
+      Link(p.join(sharedDir.path, 'escape_link.txt')).createSync(outsideSecret.path);
+
+      final rpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 301,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {
+            'action': 'open',
+            'target': sharedDir.path,
+            'mode': 'folder',
+            'scope': 'lan',
+          },
+        },
+      });
+      final shareId = ((jsonDecode(
+        ((rpc!['result'] as Map)['content'] as List).first['text'] as String,
+      ) as Map)['exposure'] as Map)['id'] as String;
+
+      final escapeResp = await http.get(
+        Uri.http(authority, '/share/$shareId/escape_link.txt'),
+      );
+      expect(escapeResp.statusCode, equals(403));
+
+      final envResp = await http.get(
+        Uri.http(authority, '/share/$shareId/.env'),
+      );
+      expect(envResp.statusCode, equals(403));
+
+      final sshResp = await http.get(
+        Uri.http(authority, '/share/$shareId/.ssh/id_ed25519'),
+      );
+      expect(sshResp.statusCode, equals(403));
+
+      // Streaming PKZIP (?zip=1) decodes cleanly and omits symlinks & blocked secrets
+      final zipResp = await http.get(
+        Uri.http(authority, '/share/$shareId/', {'zip': '1'}),
+      );
+      expect(zipResp.statusCode, equals(200));
+      final archive = ZipDecoder().decodeBytes(zipResp.bodyBytes);
+      final entryNames = archive.files.map((f) => f.name).toList();
+      expect(entryNames, contains('readme.txt'));
+      expect(entryNames.any((n) => n.contains('escape_link')), isFalse);
+      expect(entryNames.any((n) => n.contains('.env')), isFalse);
+      expect(entryNames.any((n) => n.contains('id_ed25519')), isFalse);
+    } finally {
+      await ExposureManager.instance.closeAllExposures();
+      await server.close(force: true);
+    }
+  });
+
+  test('v2.2 P0-3: SubMcpManager warm stdio session pool reuses child PID across calls and evicts cleanly', () async {
+    final mockSubMcpScript = File(p.join(tempRoot.path, 'mock_warm_submcp.dart'));
+    mockSubMcpScript.writeAsStringSync(r"""
+import 'dart:convert';
+import 'dart:io';
+
+void main() {
+  stdin
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) {
+    if (line.trim().isEmpty) return;
+    final msg = jsonDecode(line) as Map<String, dynamic>;
+    final method = (msg['method'] ?? '').toString();
+    final id = msg['id'];
+    if (id == null) return;
+    if (method == 'initialize') {
+      stdout.writeln(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': id,
+        'result': {
+          'protocolVersion': '2024-11-05',
+          'capabilities': {'tools': {}},
+          'serverInfo': {'name': 'mock-warm', 'version': '1.0.0'},
+        },
+      }));
+    } else if (method == 'tools/list') {
+      stdout.writeln(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': id,
+        'result': {
+          'tools': [
+            {
+              'name': 'get_worker_pid',
+              'description': 'Returns current worker OS PID',
+              'inputSchema': {'type': 'object', 'properties': {}},
+            },
+          ],
+        },
+      }));
+    } else if (method == 'tools/call') {
+      stdout.writeln(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': id,
+        'result': {
+          'content': [
+            {'type': 'text', 'text': 'PID=$pid'},
+          ],
+        },
+      }));
+    }
+  });
+}
+""");
+
+    SubMcpManager.instance.upsertEntry({
+      'name': 'warm-pid-check',
+      'enabled': true,
+      'transport': 'stdio',
+      'command': Platform.resolvedExecutable,
+      'args': ['run', mockSubMcpScript.path],
+      'timeout': 20,
+    });
+
+    try {
+      final out1 = await SubMcpManager.instance.callTool('warm-pid-check', 'get_worker_pid', arguments: const {});
+      final out2 = await SubMcpManager.instance.callTool('warm-pid-check', 'get_worker_pid', arguments: const {});
+      final out3 = await SubMcpManager.instance.callTool('warm-pid-check', 'get_worker_pid', arguments: const {});
+      expect(out1, startsWith('PID='));
+      expect(out2, equals(out1), reason: '2nd call must reuse warm stdio child process');
+      expect(out3, equals(out1), reason: '3rd call must reuse warm stdio child process');
+
+      // Evict warm pool and verify a fresh child PID is spawned cleanly on next call
+      await SubMcpManager.instance.closeAllSessions();
+      final outAfterEvict =
+          await SubMcpManager.instance.callTool('warm-pid-check', 'get_worker_pid', arguments: const {});
+      expect(outAfterEvict, startsWith('PID='));
+      expect(outAfterEvict, isNot(equals(out1)));
+    } finally {
+      SubMcpManager.instance.deleteEntry('warm-pid-check');
+      await SubMcpManager.instance.closeAllSessions();
+    }
+  });
+
+  test('v2.2 P0-4, P1-1 & P1-2: full-duplex WebSocket port proxy, folder sibling nav, PIN lock, and burn-after-download', () async {
+    const loopback = '127.0' '.0.1';
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    saveConfigFile(cfgFile, {
+      'server_name': 'ws-pin-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'none',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg =
+        ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+          ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final server = await engine.serveHttp();
+    saveUpdatedConfigMap(cfgFile, {'port': server.port});
+    final authority = '${server.address.address}:${server.port}';
+
+    // Spin up a local upstream HTTP + WebSocket HMR echo server
+    final upstream = await HttpServer.bind(loopback, 0);
+    upstream.listen((HttpRequest req) async {
+      if (WebSocketTransformer.isUpgradeRequest(req)) {
+        final ws = await WebSocketTransformer.upgrade(req);
+        ws.listen((msg) {
+          ws.add('hmr-echo:$msg');
+        });
+      } else {
+        req.response
+          ..statusCode = 200
+          ..write('upstream-http-ok');
+        await req.response.close();
+      }
+    });
+
+    try {
+      Future<Map<String, dynamic>> openShare(Map<String, dynamic> args) async {
+        final rpc = await engine.handleJsonRpcMessage({
+          'jsonrpc': '2.0',
+          'id': 401,
+          'method': 'tools/call',
+          'params': {
+            'name': 'manage_expose',
+            'arguments': {'action': 'open', 'scope': 'lan', ...args},
+          },
+        });
+        final txt =
+            ((rpc!['result'] as Map)['content'] as List).first['text'] as String;
+        return (jsonDecode(txt) as Map<String, dynamic>)['exposure']
+            as Map<String, dynamic>;
+      }
+
+      // 1. P0-4: Full-duplex WebSocket upgrade tunneling over /share/<id>/ws
+      final portExp = await openShare({'target': '${upstream.port}', 'mode': 'port'});
+      final portId = portExp['id'] as String;
+      final ws = await WebSocket.connect('ws://$authority/share/$portId/vite-hmr');
+      final received = <String>[];
+      final done = ws.listen((data) => received.add(data.toString()));
+      ws.add('ping-1');
+      ws.add('ping-2');
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(received, equals(['hmr-echo:ping-1', 'hmr-echo:ping-2']));
+      await done.cancel();
+      await ws.close();
+
+      // 2. P1-1: Folder subfolder -> single-file preview breadcrumbs + prev/next sibling links
+      final albumDir = Directory(p.join(sandboxDir.path, 'media_pack', '02_clips'))
+        ..createSync(recursive: true);
+      for (final name in ['01_intro.mp4', '02_main.mp4', '03_outro.mp4']) {
+        File(p.join(albumDir.path, name)).writeAsBytesSync([1, 2, 3, 4]);
+      }
+      final folderExp = await openShare({
+        'target': p.join(sandboxDir.path, 'media_pack'),
+        'mode': 'folder',
+      });
+      final folderId = folderExp['id'] as String;
+      final midPreview = await http.get(
+        Uri.http(authority, '/share/$folderId/02_clips/02_main.mp4'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(midPreview.statusCode, equals(200));
+      expect(midPreview.body, contains('返回所在文件夹 (02_clips)'));
+      expect(midPreview.body, contains('上一文件'));
+      expect(midPreview.body, contains('01_intro.mp4'));
+      expect(midPreview.body, contains('下一文件'));
+      expect(midPreview.body, contains('03_outro.mp4'));
+
+      // 3. P1-2: Optional PIN code + max_downloads=1 burn-after-download
+      final oneTimeFile = File(p.join(sandboxDir.path, 'burn_secret.txt'))
+        ..writeAsStringSync('One-time confidential delivery');
+      final pinExp = await openShare({
+        'target': oneTimeFile.path,
+        'mode': 'file',
+        'pin_code': '2580',
+        'max_downloads': 1,
+      });
+      final pinId = pinExp['id'] as String;
+      expect(pinExp['has_pin'], isTrue);
+      expect(pinExp['max_downloads'], equals(1));
+
+      // Without PIN -> 401 unlock prompt
+      final lockedHtml = await http.get(
+        Uri.http(authority, '/share/$pinId'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(lockedHtml.statusCode, equals(401));
+      expect(lockedHtml.body, contains('输入提取码'));
+
+      final lockedRaw = await http.get(
+        Uri.http(authority, '/share/$pinId/burn_secret.txt'),
+      );
+      expect(lockedRaw.statusCode, equals(401));
+
+      // Unlock with X-Share-Pin -> 200 payload on 1st download, then auto-closed (404 on 2nd)
+      final unlockedRaw = await http.get(
+        Uri.http(authority, '/share/$pinId/burn_secret.txt'),
+        headers: {'x-share-pin': '2580'},
+      );
+      expect(unlockedRaw.statusCode, equals(200));
+      expect(unlockedRaw.body, equals('One-time confidential delivery'));
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final secondTry = await http.get(
+        Uri.http(authority, '/share/$pinId/burn_secret.txt'),
+        headers: {'x-share-pin': '2580'},
+      );
+      expect(secondTry.statusCode, equals(404));
+    } finally {
+      await upstream.close(force: true);
+      await ExposureManager.instance.closeAllExposures();
+      await server.close(force: true);
+    }
+  });
+
+  test('v2.2 P0-5: concurrent edit_file mutex, CRLF/whitespace-tolerant matching, and UndoStore byte budget', () async {
+    final cfg = ServerConfig(
+      serverName: 'concurrency-mcp',
+      roots: [sandboxDir.path],
+      readOnly: false,
+    );
+    final engine = McpServerEngine(cfg);
+
+    final sharedFile = File(p.join(sandboxDir.path, 'concurrent.txt'))
+      ..writeAsStringSync('lineA = 1\r\nlineB = 2   \r\nlineC = 3\r\n');
+
+    Future<String> editCall(int id, String oldStr, String newStr) async {
+      final resp = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': id,
+        'method': 'tools/call',
+        'params': {
+          'name': 'edit_file',
+          'arguments': {
+            'path': sharedFile.path,
+            'edits': [
+              {'old_str': oldStr, 'new_str': newStr},
+            ],
+          },
+        },
+      });
+      return (((resp!['result'] as Map)['content'] as List).first as Map)['text']
+          as String;
+    }
+
+    // Fire 3 concurrent edits (including LF old_str against CRLF + trailing spaces!)
+    final results = await Future.wait([
+      editCall(1, 'lineA = 1', 'lineA = 100'),
+      editCall(2, 'lineB = 2\nlineC = 3', 'lineB = 200\nlineC = 300'),
+      editCall(3, 'lineA = 100', 'lineA = 999'),
+    ]);
+    for (final r in results) {
+      expect(r, contains('Successfully applied'));
+    }
+    final finalRaw = sharedFile.readAsStringSync();
+    expect(finalRaw, equals('lineA = 999\r\nlineB = 200\r\nlineC = 300\r\n'));
+
+    // Verify UndoStore global byte cap evicts oldest snapshots cleanly
+    final fA = File(p.join(sandboxDir.path, 'u_a.bin'))..writeAsBytesSync(List<int>.filled(20, 1));
+    final fB = File(p.join(sandboxDir.path, 'u_b.bin'))..writeAsBytesSync(List<int>.filled(20, 2));
+    final fC = File(p.join(sandboxDir.path, 'u_c.bin'))..writeAsBytesSync(List<int>.filled(20, 3));
+    final smallUndo = UndoStore(maxPerFile: 10, maxTotalBytes: 40);
+    smallUndo.save(fA, 'edit-1');
+    smallUndo.save(fB, 'edit-2');
+    expect(smallUndo.totalBytes, equals(40));
+    smallUndo.save(fC, 'edit-3');
+    expect(smallUndo.totalBytes, lessThanOrEqualTo(40));
+    expect(smallUndo.pop(fA), isNull, reason: 'Oldest entry evicted to stay under byte budget');
+    expect(smallUndo.pop(fC), isNotNull);
   });
 }

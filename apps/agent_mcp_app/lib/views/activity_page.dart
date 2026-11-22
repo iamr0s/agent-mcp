@@ -117,6 +117,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
   String _activeTool = 'ALL';
   String _activeSource = 'ALL';
   final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _listKeyFocusNode = FocusNode();
   final ScrollController _scrollCtrl = ScrollController();
   final Set<int> _expandedIds = <int>{};
   bool _splitView = true;
@@ -125,6 +127,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
+    _listKeyFocusNode.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -151,9 +155,15 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
 
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isNotEmpty) {
-      final hay =
-          '$tool $source ${ev['summary'] ?? ''} ${ev['result'] ?? ''} ${jsonEncode(ev['args'] ?? '')}'
-              .toLowerCase();
+      var hay = ev['_search_blob'] as String?;
+      if (hay == null) {
+        hay =
+            '$tool $source ${ev['summary'] ?? ''} ${ev['result'] ?? ''} ${jsonEncode(ev['args'] ?? '')}'
+                .toLowerCase();
+        try {
+          ev['_search_blob'] = hay;
+        } catch (_) {}
+      }
       if (!hay.contains(q)) return false;
     }
     return true;
@@ -249,6 +259,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                   height: 35,
                   child: TextField(
                     controller: _searchCtrl,
+                    focusNode: _searchFocusNode,
                     onChanged: (_) => setState(() {}),
                     style: sansStyle(c, size: 13, color: c.ink),
                     decoration: InputDecoration(
@@ -550,6 +561,9 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                       setState(() {
                         if (useSplit) {
                           _selectedSeq = seqId;
+                          if (!_searchFocusNode.hasFocus) {
+                            _listKeyFocusNode.requestFocus();
+                          }
                         } else if (open) {
                           _expandedIds.remove(seqId);
                         } else {
@@ -640,34 +654,66 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               ),
             ),
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 46,
-                    child: CustomScrollView(
-                      controller: _scrollCtrl,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: feedSlivers,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 54,
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        bottom: 24 + widget.extraBottomPadding,
+              child: Focus(
+                focusNode: _listKeyFocusNode,
+                onKeyEvent: (_, KeyEvent keyEv) {
+                  if (_searchFocusNode.hasFocus || keyEv is! KeyDownEvent) {
+                    return KeyEventResult.ignored;
+                  }
+                  if (keyEv.logicalKey != LogicalKeyboardKey.arrowDown &&
+                      keyEv.logicalKey != LogicalKeyboardKey.arrowUp) {
+                    return KeyEventResult.ignored;
+                  }
+                  final curIdx = filtered.indexWhere(
+                    (e) => ((e['_seq'] as int?) ?? -1) == activeSeq,
+                  );
+                  if (curIdx < 0) return KeyEventResult.ignored;
+                  final nextIdx = keyEv.logicalKey == LogicalKeyboardKey.arrowDown
+                      ? (curIdx + 1).clamp(0, filtered.length - 1)
+                      : (curIdx - 1).clamp(0, filtered.length - 1);
+                  if (nextIdx != curIdx) {
+                    setState(() {
+                      _selectedSeq = (filtered[nextIdx]['_seq'] as int?) ?? nextIdx;
+                    });
+                  }
+                  return KeyEventResult.handled;
+                },
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 46,
+                      child: CustomScrollView(
+                        controller: _scrollCtrl,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: feedSlivers,
                       ),
-                      child: _DockedInspectorPane(
-                        ev: activeEv!,
-                        onCopy: (txt, msg) {
-                          Clipboard.setData(ClipboardData(text: txt));
-                          widget.onToast(msg);
-                        },
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      flex: 54,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: 24 + widget.extraBottomPadding,
+                        ),
+                        child: ClaudeFadeBox(
+                          duration: const Duration(milliseconds: 140),
+                          alignment: Alignment.topLeft,
+                          child: KeyedSubtree(
+                            key: ValueKey('insp-$activeSeq-${activeEv!['status']}'),
+                            child: _DockedInspectorPane(
+                              ev: activeEv,
+                              onCopy: (txt, msg) {
+                                Clipboard.setData(ClipboardData(text: txt));
+                                widget.onToast(msg);
+                              },
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

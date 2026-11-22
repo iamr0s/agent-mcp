@@ -41,6 +41,28 @@ String classifyIpKindLabel(String ip, [String iface = '']) {
   return '外部地址';
 }
 
+int _hostOptionPriority(HostIpOption o) {
+  if (o.label.contains('Tailscale') || o.kind == 'vpn') return 0;
+  if (o.ip.startsWith('192.168.') || o.ip.startsWith('10.')) return 1;
+  if (o.kind == 'lan') return 2;
+  if (o.kind == 'loopback' || o.ip == kLoopbackIpv4) return 3;
+  if (o.kind == 'tun_proxy') return 5;
+  return 4;
+}
+
+int _endpointOptionPriority(EndpointCopyOption o) {
+  if (o.isCopyAll) return 99;
+  if (o.badge == 'HTTPS') return 0;
+  if (o.badge == '组网') return 1;
+  if (o.badge == '局域网') {
+    if (o.url.contains('://192.168.') || o.url.contains('://10.')) return 2;
+    return 3;
+  }
+  if (o.badge == 'HTTP') return 4;
+  if (o.badge == '回环') return 5;
+  return 6;
+}
+
 List<HostIpOption> parseHostIpOptions(
   Map<String, dynamic> config,
   List<String> fallbackLanIps,
@@ -87,6 +109,7 @@ List<HostIpOption> parseHostIpOptions(
     out.add(HostIpOption(ip: ip, iface: '', kind: kind, label: lbl));
   }
 
+  out.sort((a, b) => _hostOptionPriority(a).compareTo(_hostOptionPriority(b)));
   return out;
 }
 
@@ -217,6 +240,9 @@ List<EndpointCopyOption> buildProfileEndpointCopyOptions(
     }
   }
 
+  opts.sort(
+    (a, b) => _endpointOptionPriority(a).compareTo(_endpointOptionPriority(b)),
+  );
   if (opts.length > 1) {
     final allJoined = opts.map((o) => o.url).join('\n');
     opts.add(

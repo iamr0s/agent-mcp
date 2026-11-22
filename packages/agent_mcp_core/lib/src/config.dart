@@ -856,6 +856,51 @@ bool wildcardMatch(String text, String pattern, {bool caseSensitive = true}) {
   return RegExp(buf.toString()).hasMatch(t);
 }
 
+
+/// Checks whether [targetPath] points to a protected credential file, secret
+/// directory (`.ssh`, `.aws`, `.gnupg`, `.kube`, `.local-agent-mcp`), or MCP
+/// internal config/data file. Shared by both MCP tools and `/share/<id>`.
+String? blockedSecretReason(
+  String targetPath, {
+  String? rawLabel,
+  ServerConfig? config,
+}) {
+  final resolved = expandAndResolvePath(targetPath);
+  final label = rawLabel ?? targetPath;
+  final storage = StoragePaths.instance;
+  final cfgDirResolved = expandAndResolvePath(storage.configDir.path);
+  final dataDirResolved = expandAndResolvePath(storage.dataDir.path);
+  final cfgResolved =
+      config != null ? expandAndResolvePath(config.configFile.path) : null;
+
+  if ((cfgResolved != null && _samePath(resolved, cfgResolved)) ||
+      isWithin(resolved, cfgDirResolved) ||
+      isWithin(resolved, dataDirResolved)) {
+    return "Access blocked for protected MCP config/data file '$label'. "
+        'Enable allow_secrets on this profile if you intentionally need access.';
+  }
+
+  final baseLower = p.basename(resolved).toLowerCase();
+  if (baseLower != '.env.example') {
+    for (final pat in secretFilenamePatterns) {
+      if (wildcardMatch(baseLower, pat.toLowerCase(), caseSensitive: false)) {
+        return "Access blocked for secret file '${p.basename(resolved)}'. "
+            'Enable allow_secrets on this profile if you intentionally need access.';
+      }
+    }
+  }
+
+  final parts = p.split(resolved);
+  if (parts.any((part) => secretDirParts.contains(part.toLowerCase()))) {
+    return "Access blocked inside sensitive directory '$label'. "
+        'Enable allow_secrets on this profile if you intentionally need access.';
+  }
+  return null;
+}
+
+bool isBlockedSecretPath(String targetPath, {ServerConfig? config}) =>
+    blockedSecretReason(targetPath, config: config) != null;
+
 String? checkAccess(String targetPath, ServerConfig config) {
   final policy = getEffectivePolicy(config);
   final resolved = expandAndResolvePath(targetPath);
@@ -867,31 +912,8 @@ String? checkAccess(String targetPath, ServerConfig config) {
   }
 
   if (!policy.allowSecrets) {
-    final storage = StoragePaths.instance;
-    final cfgResolved = expandAndResolvePath(config.configFile.path);
-    final cfgDirResolved = expandAndResolvePath(storage.configDir.path);
-    final dataDirResolved = expandAndResolvePath(storage.dataDir.path);
-
-    if (_samePath(resolved, cfgResolved) ||
-        isWithin(resolved, cfgDirResolved) ||
-        isWithin(resolved, dataDirResolved)) {
-      return "Access blocked for protected MCP config/data file '$targetPath'. "
-          'Enable allow_secrets on this profile if you intentionally need access.';
-    }
-
-    final baseLower = p.basename(resolved).toLowerCase();
-    for (final pat in secretFilenamePatterns) {
-      if (wildcardMatch(baseLower, pat.toLowerCase(), caseSensitive: false)) {
-        return "Access blocked for secret file '${p.basename(resolved)}'. "
-            'Enable allow_secrets on this profile if you intentionally need access.';
-      }
-    }
-
-    final parts = p.split(resolved);
-    if (parts.any((part) => secretDirParts.contains(part.toLowerCase()))) {
-      return "Access blocked inside sensitive directory '$targetPath'. "
-          'Enable allow_secrets on this profile if you intentionally need access.';
-    }
+    final reason = blockedSecretReason(resolved, rawLabel: targetPath, config: config);
+    if (reason != null) return reason;
   }
   return null;
 }

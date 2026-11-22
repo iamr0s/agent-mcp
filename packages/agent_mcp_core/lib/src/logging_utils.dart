@@ -150,26 +150,60 @@ class McpLogger {
   }
 }
 
+final RegExp _inlineBearerRe = RegExp(
+  r'\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}',
+  caseSensitive: false,
+);
+
 bool isSensitiveKeyName(String key) {
-  final kl = key.toLowerCase();
+  final kl = key.trim().toLowerCase();
+  if (kl == 'pin' || kl == 'pin_code' || kl == 'pincode') return true;
   return kl.contains('password') ||
+      kl.contains('passwd') ||
       kl.contains('secret') ||
       kl.contains('token') ||
       kl.contains('api_key') ||
-      kl.contains('apikey');
+      kl.contains('apikey') ||
+      kl.contains('authorization') ||
+      kl.contains('cookie') ||
+      kl.contains('private_key') ||
+      kl.contains('credential');
+}
+
+dynamic _redactDynamic(dynamic value, int depth) {
+  if (depth > 6 || value == null) return value;
+  if (value is String) {
+    if (_inlineBearerRe.hasMatch(value)) {
+      return value.replaceAllMapped(_inlineBearerRe, (m) => '${m.group(1)}***');
+    }
+    return value;
+  }
+  if (value is Map) {
+    final out = <String, dynamic>{};
+    value.forEach((rawKey, v) {
+      final k = rawKey.toString();
+      out[k] = isSensitiveKeyName(k) ? '***' : _redactDynamic(v, depth + 1);
+    });
+    return out;
+  }
+  if (value is List) {
+    return value.map((item) => _redactDynamic(item, depth + 1)).toList();
+  }
+  return value;
 }
 
 Map<String, dynamic> redactArgs(Map<String, dynamic> args) {
-  final out = <String, dynamic>{};
-  for (final entry in args.entries) {
-    out[entry.key] = isSensitiveKeyName(entry.key) ? '***' : entry.value;
-  }
-  return out;
+  final res = _redactDynamic(args, 0);
+  return res is Map<String, dynamic> ? res : Map<String, dynamic>.from(res as Map);
 }
 
-String abbrevValue(dynamic val, [int maxLen = 120]) {
+String abbrevValue(dynamic val, [int maxLen = 120, int depth = 0]) {
+  if (depth > 6) return '...';
   if (val is String) {
-    final s = val.replaceAll('\r', r'\r').replaceAll('\n', r'\n');
+    final masked = _inlineBearerRe.hasMatch(val)
+        ? val.replaceAllMapped(_inlineBearerRe, (m) => '${m.group(1)}***')
+        : val;
+    final s = masked.replaceAll('\r', r'\r').replaceAll('\n', r'\n');
     if (s.length > maxLen) {
       return "'${s.substring(0, maxLen)}...' (len=${val.length})";
     }
@@ -177,10 +211,11 @@ String abbrevValue(dynamic val, [int maxLen = 120]) {
   }
   if (val is List) {
     if (val.length > 5) {
-      final preview = val.take(3).map((e) => abbrevValue(e, 40)).join(', ');
+      final preview =
+          val.take(3).map((e) => abbrevValue(e, 40, depth + 1)).join(', ');
       return '[$preview, ... (${val.length} items)]';
     }
-    return '[${val.map((e) => abbrevValue(e, 60)).join(', ')}]';
+    return '[${val.map((e) => abbrevValue(e, 60, depth + 1)).join(', ')}]';
   }
   if (val is Map) {
     final entries = val.entries.toList();
@@ -188,7 +223,9 @@ String abbrevValue(dynamic val, [int maxLen = 120]) {
     for (final e in entries.take(5)) {
       final k = e.key.toString();
       parts.add(
-        isSensitiveKeyName(k) ? '$k=***' : '$k=${abbrevValue(e.value, 50)}',
+        isSensitiveKeyName(k)
+            ? '$k=***'
+            : '$k=${abbrevValue(e.value, 50, depth + 1)}',
       );
     }
     if (entries.length > 5) {

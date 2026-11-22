@@ -258,6 +258,47 @@ class PrivilegedExecutor {
     return data;
   }
 
+  /// Streams arbitrary byte ranges (including >32MB video/APK files) over the
+  /// privileged loopback socket in 64KB chunks without full-file buffering.
+  Stream<List<int>> fsOpenRead(
+    String targetPath, [
+    int? start,
+    int? end,
+  ]) async* {
+    final offset = (start ?? 0) < 0 ? 0 : (start ?? 0);
+    final length = (end != null && end >= offset) ? (end - offset) : -1;
+    final req = await _http
+        .postUrl(_uri('/fs/read_range'))
+        .timeout(const Duration(seconds: 15));
+    req.headers.set('x-mcp-priv-token', _bridgeToken);
+    req.headers.set(
+      HttpHeaders.contentTypeHeader,
+      'application/json; charset=utf-8',
+    );
+    final encoded = utf8.encode(
+      jsonEncode({
+        'path': targetPath,
+        'offset': offset,
+        'length': length,
+      }),
+    );
+    req.contentLength = encoded.length;
+    req.add(encoded);
+    final res = await req.close().timeout(const Duration(seconds: 25));
+    if (res.statusCode != 200) {
+      final errBytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+      String msg = 'HTTP ${res.statusCode}';
+      try {
+        final d = jsonDecode(utf8.decode(errBytes, allowMalformed: true));
+        if (d is Map && d['error'] != null) msg = d['error'].toString();
+      } catch (_) {}
+      throw FileSystemException(msg, targetPath);
+    }
+    await for (final chunk in res) {
+      yield chunk;
+    }
+  }
+
   Future<int> fsWriteBytes(
     String targetPath,
     List<int> bytes, {
@@ -438,6 +479,19 @@ class PrivFs {
       return PrivilegedExecutor.instance.fsReadBytes(targetPath);
     }
     return File(targetPath).readAsBytesSync();
+  }
+
+  /// Opens a zero-buffering read stream for [targetPath] over optional [start]..[end]
+  /// byte bounds, working seamlessly across both native `dart:io` and Android Shizuku/Root.
+  static Future<Stream<List<int>>> openRead(
+    String targetPath, [
+    int? start,
+    int? end,
+  ]) async {
+    if (await useBridgeForPath(targetPath)) {
+      return PrivilegedExecutor.instance.fsOpenRead(targetPath, start, end);
+    }
+    return File(targetPath).openRead(start, end);
   }
 
   static Future<DecodedTextFile> readText(String targetPath) async {

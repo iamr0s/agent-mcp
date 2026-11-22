@@ -1,4 +1,4 @@
-# Agent MCP v2.1
+# Agent MCP v2.2
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,15 +12,15 @@
 >
 > 眼前的开发电脑早已不缺本地编程助手；但当你的代码、算力、容器或测试环境位于**远端 Linux 云服务器、内网 GPU 主机、NAS 或手头的 Android 手机**上时，本地 `stdio` 工具便触碰到了物理边界。
 >
-> **Agent MCP v2.1** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**把远端刚生成的视频或网站端口一键映射成外部预览链接**。
+> **Agent MCP v2.2** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**把远端刚生成的视频或网站端口一键映射成外部预览链接**。
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v2.1 跨设备远程执行节点总览">
+  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v2.2 跨设备远程执行节点总览">
 </p>
 
 ## 为什么选择 Agent MCP？（典型跨设备场景）
 
-| 常见痛点场景 | 传统做法的局限 | Agent MCP v2.1 的解决方式 |
+| 常见痛点场景 | 传统做法的局限 | Agent MCP v2.2 的解决方式 |
 | :--- | :--- | :--- |
 | **电脑端 AI 调试远端 Linux 云服务器 / GPU 机** | 需在服务器配复杂 Python/Node 环境，或靠粗粒度 SSH 命令整文件覆盖，内网数据库不敢开公网 | 单文件解压 + `agent-mcp init` 10 秒上线（自带 `/dashboard/` 网页管理台与 `systemd` 守护），支持行级精准补丁、`undo_edit` 秒撤回与后台进程托管 |
 | **自研 Python / TS Agent 程序调度多台机器** | 需自己封装一套私有 RPC 接口、鉴权、命令超时回收与文件编码处理 | 原生兼容官方 MCP SDK（`streamablehttp_client` / `StreamableHTTPClientTransport`），几行代码即可安全调用远端主机与手机上的 20 项标准工具 |
@@ -35,7 +35,7 @@
 
 ```bash
 # 1. 下载并解压（内置 agent-mcp 单文件与 web_dashboard 网页前端）
-curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.1.0/AgentMCP-v2.1.0-linux-x64-cli.tar.gz | tar -xzf -
+curl -L https://github.com/iamr0s/agent-mcp/releases/download/v2.2.0/AgentMCP-v2.2.0-linux-x64-cli.tar.gz | tar -xzf -
 
 # 2. 一行初始化：监听全网卡、自动识别局域网与 Tailscale IP、生成高强 Bearer Key
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
@@ -126,15 +126,16 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 - **AI 自动发链接**：直接对 AI 说 *“把刚做好的视频映射出来发我链接看，看完关掉”*，AI 调用 `manage_expose` 即可返回外部可直开的预览地址（MP4 视频内置播放器并支持 HTTP `206 Range` 任意拖动进度条）。
 - **四种清晰分享形态（`mode: file | folder | site | port`）**：
   1. **单个文件分享 (`file`)**：打开即进入干净的单文件预览页（视频支持 HTTP `206 Range` 拖动进度条，音频、图片、PDF 与代码支持在线直看，安装包直达下载）。
-  2. **文件夹目录分享 (`folder`)**：打开展示清爽云盘目录与面包屑，支持进入任意子目录与 `?zip=1` 一键打包下载；**点击目录内任意文件即无缝进入同款单文件预览页，并可一键返回所在文件夹**。
-  3. **静态网站 / HTML 分享 (`site`)**：无论传入**单个 `.html` 文件**还是**含 `index.html` 的前端构建目录**，打开都直接全屏作为真实网页运行，绝不暴露后台目录列表。
-  4. **端口转发分享 (`port`)**：把本机正在运行的 `:3000` / `:5173` 等端口一键反向代理为手机或外部浏览器可直连的预览链接（服务未启动时自动展示重连等待页）。
+  2. **文件夹目录分享 (`folder`)**：打开展示清爽云盘目录与面包屑，支持进入任意子目录与 `?zip=1` 64KB 零内存堆积流式打包下载；**点击子目录内任意文件即进入单文件预览页，顶部提供可点击层级面包屑、返回所在子目录与「上一文件 / 下一文件」快捷切换（支持键盘 `←` / `→`）**。
+  3. **静态网站 / HTML 分享 (`site`)**：无论传入**单个 `.html` 文件**还是**含 `index.html` 的前端构建目录**，打开都直接全屏作为真实网页运行，并拦截软链接逃逸与敏感凭据路径。
+  4. **全双工端口转发分享 (`port`)**：把本机正在运行的 `:3000` / `:5173` / `:7860` 等端口一键反向代理为外部预览链接，**原生支持 `Upgrade: websocket` 全双工升级转发（完整兼容 Vite / Next.js HMR 热更新、Gradio 与 Jupyter）**。
+- **拖拽直享、可选提取码与限次即焚**：桌面端与网页端支持把任意文件、文件夹或 `.html` 直接拖入窗口自动识别模式；可按需设置 **4–8 位访问提取码（PIN）** 与 **最大下载次数（如 1 次即焚自动收起）**。
 - **独立管理页统一掌控**：切到 **「外网与分享」** 标签页，可点选四态快捷卡片、调用系统原生选文件/选文件夹对话框、生成手机扫码二维码、复制多通道地址或点击 **「全部关闭」** 一键收回。
 - **设置页 Tailscale 总开关**：在 **「服务配置 → Tailscale 与外网分享设置」** 中，随时一键总控 AI 映射权限、切换公网或组网私享模式，并设置默认自动到期时间（30 分钟 / 2 小时 / 24 小时 / 手动关闭）。
 
 ### 2. 服务器内网子 MCP 二级跳板网关（省去 96% 首轮上下文）
 在远端云服务器里跑着 PostgreSQL、Redis、Docker 或企业内部接口，既不想把数据库端口暴露到公网，也不想往客户端一次性塞进上百个工具拖慢响应？
-- **怎么用**：打开远端节点的 **「子 MCP 网关」** 页，把现有的 `mcpServers` JSON 直接粘贴导入。Agent MCP 对外始终只暴露 `list_sub_mcps`、`inspect_sub_mcp`、`call_sub_mcp` **3 个固定入口**，AI 需要用哪个服务才按需拉取对应工具定义并在服务器内网完成调用，增删改免重启即时生效。
+- **怎么用**：打开远端节点的 **「子 MCP 网关」** 页，把现有的 `mcpServers` JSON 直接粘贴导入。Agent MCP 对外始终只暴露 `list_sub_mcps`、`inspect_sub_mcp`、`call_sub_mcp` **3 个固定入口**，底层内置 **热驻留进程池（`_WarmStdioSessionPool`，5 分钟空闲自动回收 + 请求多路复用）**，将连续调用延迟从冷启动秒级压至毫秒级，增删改免重启即时生效。
 
 ### 3. 多网卡直连多选与分入口权限隔离
 同一台服务器或电脑既想走 Tailscale `100.x` 私网给 Cursor 连，又想走局域网给手机连，还要开一条只读公网隧道给网页端大模型看代码？
@@ -161,11 +162,11 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 
 | 目标设备平台 | 发行包文件名 | 适用场景说明 |
 | :--- | :--- | :--- |
-| **Linux 服务器 / GPU 机 / NAS (x64)** | `AgentMCP-v2.1.0-linux-x64-cli.tar.gz` | **远程服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `init` 与 `systemd` 一键常驻 |
-| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v2.1.0-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
-| **Android 全架构通用版** | `AgentMCP-v2.1.0-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
-| **Windows 10 / 11 桌面与工作站 (x64)** | `AgentMCP-v2.1.0-windows-x64-sfx.exe` | 自解压图形化安装向导，含 Windows 11 云母桌面控制台、网页端与 `agent-mcp.exe` CLI |
-| **Windows 10 / 11 免安装便携版 (x64)** | `AgentMCP-v2.1.0-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
+| **Linux 服务器 / GPU 机 / NAS (x64)** | `AgentMCP-v2.2.0-linux-x64-cli.tar.gz` | **远程服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `init` 与 `systemd` 一键常驻 |
+| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v2.2.0-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
+| **Android 全架构通用版** | `AgentMCP-v2.2.0-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
+| **Windows 10 / 11 桌面与工作站 (x64)** | `AgentMCP-v2.2.0-windows-x64-sfx.exe` | 自解压图形化安装向导，含 Windows 11 云母桌面控制台、网页端与 `agent-mcp.exe` CLI |
+| **Windows 10 / 11 免安装便携版 (x64)** | `AgentMCP-v2.2.0-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
 
 ## 内置工具矩阵（20 项）
 
@@ -215,7 +216,7 @@ agent-mcp gui --silent
 ```powershell
 git clone https://github.com/iamr0s/agent-mcp.git
 cd agent-mcp
-flutter pub get
+cd apps/agent_mcp_app && flutter pub get && cd ../..
 
 # 运行核心协议单测与界面组件测试
 cd packages/agent_mcp_core && dart test && cd ../..

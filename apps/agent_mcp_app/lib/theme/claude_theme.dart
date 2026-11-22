@@ -40,7 +40,7 @@ const List<String> kMonoFallback = [
   'monospace',
 ];
 
-/// Continuous-curvature Superellipse shape helper (FlClash visual standard).
+/// Continuous-curvature Superellipse shape helper (continuous-curvature visual standard).
 RoundedSuperellipseBorder claudeSuperellipse(
   double radius, {
   BorderSide side = BorderSide.none,
@@ -206,7 +206,7 @@ class ClaudePalette {
       ? const Color(0x18FAF9F5)
       : const Color(0x88FFFFFF);
 
-  /// FlClash sigma-calibrated whisper shadow (`cssBlur -> Skia blurRadius`)
+  /// Sigma-calibrated whisper shadow (`cssBlur -> Skia blurRadius`)
   List<BoxShadow> get whisperShadow => isDark
       ? const [
           BoxShadow(
@@ -925,7 +925,7 @@ class _ClaudeCardState extends State<ClaudeCard> {
   }
 }
 
-/// Spring Sliding-Pill Segmented Control (FlClash superellipse style + narrow-safe scroll).
+/// Spring Sliding-Pill Segmented Control (superellipse style + narrow-safe scroll).
 class ClaudeSegmented<T> extends StatefulWidget {
   final List<(T, String)> items;
   final T value;
@@ -1191,7 +1191,7 @@ class ClaudePill extends StatelessWidget {
   }
 }
 
-/// Elastic Thumb-Stretch Toggle Switch (inspired by FlClash `Switch`)
+/// Elastic Thumb-Stretch Toggle Switch (elastic thumb-stretch physics)
 class ClaudeSwitch extends StatefulWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -1493,7 +1493,7 @@ class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
   }
 }
 
-/// Opens a modal dialog with frosted scrim blur + FlClash spring physics.
+/// Opens a modal dialog with frosted scrim blur + critically-damped spring physics.
 Future<T?> showClaudeDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -1618,7 +1618,7 @@ Future<bool> showClaudeConfirmDialog(
   return res ?? false;
 }
 
-/// Pixel-aligned 10x10 Windows 11 Caption Glyphs (modeled after FlClash `CaptionIcon`).
+/// Pixel-aligned 10x10 Windows 11 Caption Glyphs (pixel-aligned 10x10 Win11 glyphs).
 enum ClaudeCaptionGlyph { minimize, maximize, restore, close }
 
 class ClaudeCaptionIcon extends StatelessWidget {
@@ -1695,7 +1695,7 @@ class _ClaudeCaptionGlyphPainter extends CustomPainter {
       oldDelegate.glyph != glyph || oldDelegate.color != color;
 }
 
-/// FlClash-style Windows frameless caption controls: Pin + Minimize + Maximize/Restore + Hide-to-Tray.
+/// Windows 11 frameless caption controls: Pin + Minimize + Maximize/Restore + Hide-to-Tray.
 class ClaudeWindowCaptionActions extends StatelessWidget {
   final bool isMaximized;
   final bool isPinned;

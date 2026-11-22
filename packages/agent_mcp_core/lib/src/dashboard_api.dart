@@ -205,6 +205,30 @@ class DashboardHandler {
   }
 
   Future<Response> _handleApi(Request req, String apiPath) async {
+    if (req.method != 'GET' && req.method != 'HEAD') {
+      final rawOrigin = (req.headers['origin'] ?? '').trim();
+      if (rawOrigin.isNotEmpty && rawOrigin != 'null') {
+        final originUri = Uri.tryParse(rawOrigin);
+        final reqHost = (req.headers['x-forwarded-host'] ?? req.headers['host'] ?? '')
+            .split(',')
+            .first
+            .trim()
+            .split(':')
+            .first
+            .toLowerCase();
+        final oHost = (originUri?.host ?? '').toLowerCase();
+        final isLoopbackPair =
+            (oHost == 'localhost' || oHost == '127.0.0.1' || oHost == '::1') &&
+            (reqHost == 'localhost' || reqHost == '127.0.0.1' || reqHost == '::1');
+        if (oHost.isEmpty || (oHost != reqHost && !isLoopbackPair)) {
+          return _json(
+            {'ok': false, 'error': 'Cross-origin request rejected by Origin guard'},
+            status: 403,
+          );
+        }
+      }
+    }
+
     if (apiPath == '/auth-state' && req.method == 'GET') {
       return _json({
         'ok': true,
@@ -358,10 +382,14 @@ class DashboardHandler {
       });
     }
 
-        if (apiPath == '/exposures' && req.method == 'GET') {
+    if (apiPath == '/exposures' && req.method == 'GET') {
+      final forcePorts = req.url.queryParameters['scan_ports'] == '1';
       return _json({
         'ok': true,
-        'exposures': await ExposureManager.instance.getDashboardSummary(config),
+        'exposures': await ExposureManager.instance.getDashboardSummary(
+          config,
+          forcePortScan: forcePorts,
+        ),
       });
     }
 
@@ -394,6 +422,8 @@ class DashboardHandler {
           scope: (body['scope'] ?? 'auto').toString(),
           label: body['label']?.toString(),
           ttlMinutes: int.tryParse('${body['ttl_minutes'] ?? ''}'),
+          pinCode: (body['pin_code'] ?? body['pin'])?.toString(),
+          maxDownloads: int.tryParse('${body['max_downloads'] ?? ''}'),
           spa: body['spa'] == true,
           validateWithPolicy: false,
         );

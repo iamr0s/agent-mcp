@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v2.1.0)'
+        description: 'Release tag to publish (e.g. v2.2.0)'
         required: true
-        default: 'v2.1.0'
+        default: 'v2.2.0'
 
 permissions:
   contents: write
@@ -43,7 +43,7 @@ jobs:
       - name: Fetch Workspace Dependencies & Run Tests
         shell: pwsh
         run: |
-          flutter pub get
+          Push-Location apps/agent_mcp_app; flutter pub get; Pop-Location
           dart analyze packages/agent_mcp_core
           Push-Location packages/agent_mcp_core
           dart test
@@ -104,7 +104,7 @@ jobs:
 
       - name: Build Universal & Split-ABI Release APKs
         run: |
-          flutter pub get
+          (cd apps/agent_mcp_app && flutter pub get)
           mkdir -p release
           cd apps/agent_mcp_app
           flutter build apk --release --no-pub
@@ -142,7 +142,7 @@ jobs:
 
       - name: Compile Native Linux x64 Server Binary & Web Dashboard
         run: |
-          flutter pub get
+          (cd apps/agent_mcp_app && flutter pub get)
           pushd apps/agent_mcp_app
           flutter build web --release --base-href /dashboard/ --no-pub
           popd
@@ -206,7 +206,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Relaxed Studio UI & 4-Mode External Sharing Edition"
+          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Security, Warm Sub-MCP Pool, WebSocket Tunnel & 120Hz Edition"
           generate_release_notes: true
           files: |
             dist_artifacts/AgentMCP-*
