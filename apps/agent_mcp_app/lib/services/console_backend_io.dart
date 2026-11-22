@@ -5,9 +5,12 @@ import 'dart:io';
 import 'package:agent_mcp_core/agent_mcp_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'console_backend_interface.dart';
+import 'update_service.dart';
 import 'remote_http_client_io.dart';
 
 class UnauthorizedConsoleException implements Exception {
@@ -41,6 +44,18 @@ class _IoConsoleBackend extends ConsoleBackend {
 
   @override
   bool get isAndroidPlatform => Platform.isAndroid;
+
+  @override
+  bool get isWindowsPlatform => Platform.isWindows;
+
+  @override
+  bool get isLinuxPlatform => Platform.isLinux;
+
+  @override
+  String get currentAppVersion => agentMcpVersion;
+
+  @override
+  bool get supportsInAppUpgrade => Platform.isWindows || Platform.isAndroid;
 
   @override
   bool get supportsNodeSwitching => true;
@@ -530,6 +545,12 @@ class _IoConsoleBackend extends ConsoleBackend {
         switch (act) {
           case 'open':
             await _restoreAndFocusConsole();
+          case 'open_share':
+            await _restoreAndFocusConsole();
+            emitTrayCommand('open_share');
+          case 'check_update':
+            await _restoreAndFocusConsole();
+            emitTrayCommand('check_update');
           case 'open_web':
             if (!_ctrl.isRunning) {
               await _ctrl.start();
@@ -1323,6 +1344,158 @@ class _IoConsoleBackend extends ConsoleBackend {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+
+  File get _updatePrefsFile =>
+      File(p.join(StoragePaths.instance.dataDir.path, 'update_prefs.json'));
+
+  @override
+  Future<UpdatePreferences> loadUpdatePreferences() async {
+    try {
+      final f = _updatePrefsFile;
+      if (!f.existsSync()) return const UpdatePreferences();
+      final decoded = jsonDecode(f.readAsStringSync());
+      if (decoded is Map) {
+        return UpdatePreferences.fromJson(decoded);
+      }
+    } catch (_) {}
+    return const UpdatePreferences();
+  }
+
+  @override
+  Future<void> saveUpdatePreferences(UpdatePreferences prefs) async {
+    try {
+      StoragePaths.instance.ensureLayout();
+      const enc = JsonEncoder.withIndent('  ');
+      _updatePrefsFile.writeAsStringSync('${enc.convert(prefs.toJson())}\n',
+          flush: true);
+    } catch (_) {}
+  }
+
+  @override
+  Future<UpdateDownloadResult> downloadUpdatePackage(
+    UpdateAsset asset, {
+    void Function(int received, int total)? onProgress,
+    String mirrorPrefix = '',
+  }) async {
+    final downloadUrl = applyGithubMirrorPrefix(asset.url, mirrorPrefix);
+    final client = http.Client();
+    IOSink? sink;
+    File? tmpFile;
+    try {
+      StoragePaths.instance.ensureLayout();
+      final updatesDir =
+          Directory(p.join(StoragePaths.instance.cacheDir.path, 'updates'));
+      updatesDir.createSync(recursive: true);
+
+      final safeName = asset.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final finalPath = p.join(
+        updatesDir.path,
+        safeName.isEmpty ? 'agent_mcp_update.bin' : safeName,
+      );
+      tmpFile = File('$finalPath.part');
+      if (tmpFile.existsSync()) {
+        try { tmpFile.deleteSync(); } catch (_) {}
+      }
+
+      final req = http.Request('GET', Uri.parse(downloadUrl));
+      req.headers['User-Agent'] = 'Agent-MCP-Updater';
+      final resp = await client.send(req).timeout(const Duration(seconds: 30));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        return UpdateDownloadResult(
+          ok: false,
+          error: '下载失败（HTTP ${resp.statusCode}）',
+        );
+      }
+
+      final total = (resp.contentLength ?? 0) > 0
+          ? resp.contentLength!
+          : asset.size;
+      sink = tmpFile.openWrite();
+      var received = 0;
+      await for (final chunk in resp.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      final digest = await sha256.bind(tmpFile.openRead()).first;
+      final actualSha = digest.toString().toLowerCase();
+      final expectedSha = asset.sha256.trim().toLowerCase();
+      final verified = expectedSha.isNotEmpty && actualSha == expectedSha;
+      if (expectedSha.isNotEmpty && !verified) {
+        try { tmpFile.deleteSync(); } catch (_) {}
+        return UpdateDownloadResult(
+          ok: false,
+          sha256: actualSha,
+          verified: false,
+          error: 'SHA-256 完整性校验失败（文件可能损坏或不完整），已自动清理临时文件。',
+        );
+      }
+
+      final targetFile = File(finalPath);
+      if (targetFile.existsSync()) {
+        try { targetFile.deleteSync(); } catch (_) {}
+      }
+      tmpFile.renameSync(finalPath);
+      tmpFile = null;
+
+      return UpdateDownloadResult(
+        ok: true,
+        filePath: finalPath,
+        sha256: actualSha,
+        verified: verified,
+      );
+    } catch (e) {
+      try { await sink?.close(); } catch (_) {}
+      try { if (tmpFile != null && tmpFile.existsSync()) tmpFile.deleteSync(); } catch (_) {}
+      return UpdateDownloadResult(ok: false, error: '下载安装包失败：$e');
+    } finally {
+      client.close();
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> launchDownloadedInstaller(
+    String filePath, {
+    bool silent = false,
+    String after = 'gui',
+  }) async {
+    final f = File(filePath);
+    if (!f.existsSync()) {
+      return const {'ok': false, 'error': '安装包文件不存在'};
+    }
+    try {
+      if (Platform.isWindows) {
+        final installDir = StoragePaths.instance.rootDir.path;
+        final lower = filePath.toLowerCase();
+        if (lower.endsWith('.exe')) {
+          final args = <String>[
+            if (silent) '--silent',
+            '--dir',
+            installDir,
+            '--after',
+            after,
+          ];
+          await Process.start(filePath, args, mode: ProcessStartMode.detached);
+          return {'ok': true, 'mode': silent ? 'silent' : 'gui', 'dir': installDir};
+        }
+        await Process.start('explorer.exe', ['/select,$filePath'], mode: ProcessStartMode.detached);
+        return {'ok': true, 'mode': 'explorer'};
+      }
+      if (Platform.isAndroid) {
+        final opened = await _androidChannel.invokeMethod<bool>('openExternalUrl', filePath);
+        if (opened == true) return {'ok': true, 'mode': 'android'};
+        return const {'ok': false, 'error': '已下载至本地缓存，请在系统文件管理器中点击安装 APK'};
+      }
+      return const {'ok': false, 'error': '当前平台请手动解压或安装下载的包'};
+    } catch (e) {
+      return {'ok': false, 'error': '启动安装程序失败：$e'};
     }
   }
 

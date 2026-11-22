@@ -23,6 +23,11 @@ class ServiceSetupPage extends StatefulWidget {
   final ValueChanged<String> onToast;
   final double topPadding;
   final double extraBottomPadding;
+  final UpdatePreferences updatePrefs;
+  final bool checkingUpdate;
+  final UpdateInfo? latestUpdate;
+  final Future<void> Function(UpdatePreferences next)? onUpdatePrefsChanged;
+  final Future<void> Function()? onCheckUpdate;
 
   const ServiceSetupPage({
     super.key,
@@ -40,6 +45,11 @@ class ServiceSetupPage extends StatefulWidget {
     required this.onToast,
     this.topPadding = 0.0,
     this.extraBottomPadding = 0.0,
+    this.updatePrefs = const UpdatePreferences(),
+    this.checkingUpdate = false,
+    this.latestUpdate,
+    this.onUpdatePrefsChanged,
+    this.onCheckUpdate,
   });
 
   @override
@@ -57,6 +67,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   final _pwdCtrl = TextEditingController();
   final _rootsCtrl = TextEditingController();
   final _logFileCtrl = TextEditingController();
+  final _mirrorCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   bool _bindAllInterfaces = false;
@@ -209,12 +220,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   @override
   void initState() {
     super.initState();
+    _mirrorCtrl.text = widget.updatePrefs.mirrorPrefix;
     _syncFromConfig(force: true);
   }
 
   @override
   void didUpdateWidget(covariant ServiceSetupPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.updatePrefs.mirrorPrefix != widget.updatePrefs.mirrorPrefix &&
+        _mirrorCtrl.text != widget.updatePrefs.mirrorPrefix) {
+      _mirrorCtrl.text = widget.updatePrefs.mirrorPrefix;
+    }
     _syncFromConfig(force: false);
   }
 
@@ -270,6 +286,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
     _pwdCtrl.dispose();
     _rootsCtrl.dispose();
     _logFileCtrl.dispose();
+    _mirrorCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -492,6 +509,177 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         profile: prof,
         effectiveBaseUrls: effectiveList,
         onToast: widget.onToast,
+      ),
+    );
+  }
+
+
+  String _formatLastChecked(UpdatePreferences prefs) {
+    final dt = prefs.lastCheckedAt?.toLocal();
+    if (dt == null) return '尚未检查过更新';
+    String pad(int v) => v.toString().padLeft(2, '0');
+    return '上次检查：${dt.year}-${pad(dt.month)}-${pad(dt.day)} ${pad(dt.hour)}:${pad(dt.minute)}';
+  }
+
+  Widget _buildAppUpdateCard(ClaudePalette c) {
+    final prefs = widget.updatePrefs;
+    final curVer = widget.backend.currentAppVersion;
+    final latest = widget.latestUpdate;
+    final hasNewer =
+        latest != null && compareSemVer(latest.version, curVer) > 0;
+
+    return ClaudeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('应用更新', style: serifTitleStyle(c, size: 18)),
+                  const SizedBox(width: 10),
+                  ClaudePill(text: 'v$curVer', bg: c.recessed, fg: c.muted),
+                  if (hasNewer) ...[
+                    const SizedBox(width: 8),
+                    ClaudePill(
+                      text: '有新版本 v${latest.version}',
+                      bg: c.clay.withValues(alpha: 0.12),
+                      fg: c.clay,
+                    ),
+                  ],
+                ],
+              ),
+              ClaudeButton(
+                label: widget.checkingUpdate
+                    ? '检查中...'
+                    : (hasNewer ? '查看更新 v${latest.version}' : '立即检查更新'),
+                compact: true,
+                loading: widget.checkingUpdate,
+                variant: hasNewer ? ClaudeBtnVariant.clay : ClaudeBtnVariant.ink,
+                leading: const Icon(Icons.system_update_alt_rounded),
+                onPressed: widget.checkingUpdate || widget.onCheckUpdate == null
+                    ? null
+                    : () => widget.onCheckUpdate!(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_formatLastChecked(prefs)} · 优先拉取 GitHub Releases version.json（自动降级 API 兜底）',
+            style: sansStyle(c, size: 12, color: c.muted),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: ShapeDecoration(
+              color: c.recessed,
+              shape: claudeSuperellipse(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StartupSwitchRow(
+                  palette: c,
+                  title: '定期自动检查更新',
+                  subtitle: '启动与后台驻留期间按设定周期静默检测 GitHub 最新正式版本',
+                  value: prefs.autoCheckEnabled,
+                  onChanged: (v) async {
+                    final next = prefs.copyWith(autoCheckEnabled: v);
+                    await widget.onUpdatePrefsChanged?.call(next);
+                    widget.onToast(v ? '已开启定期自动检查更新' : '已关闭定期自动检查更新');
+                  },
+                ),
+                ClaudeCollapsible(
+                  expanded: prefs.autoCheckEnabled,
+                  builder: (_) => Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text('检测周期', style: sansStyle(c, size: 12.5, color: c.muted)),
+                        ClaudeSegmented<int>(
+                          value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours)
+                              ? prefs.checkIntervalHours
+                              : 12,
+                          items: const [
+                            (6, '每 6 小时'),
+                            (12, '每 12 小时'),
+                            (24, '每天'),
+                            (168, '每周'),
+                          ],
+                          onChanged: (hours) async {
+                            final next = prefs.copyWith(checkIntervalHours: hours);
+                            await widget.onUpdatePrefsChanged?.call(next);
+                            widget.onToast('已更新自动检测周期');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (prefs.skippedVersion.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(color: c.hairline, height: 1),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '当前已忽略 v${prefs.skippedVersion} 的自动提醒（手动检查仍可查看）',
+                          style: sansStyle(c, size: 12, color: c.muted),
+                        ),
+                      ),
+                      ClaudeButton(
+                        label: '恢复提醒',
+                        compact: true,
+                        variant: ClaudeBtnVariant.ghost,
+                        onPressed: () async {
+                          await widget.onUpdatePrefsChanged
+                              ?.call(prefs.copyWith(skippedVersion: ''));
+                          widget.onToast('已恢复所有版本的更新提醒');
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(color: c.hairline, height: 1),
+                ),
+                _ResponsiveGridRow(
+                  label: 'GitHub 加速前缀 (可选)',
+                  trailing: ClaudeButton(
+                    label: '应用',
+                    compact: true,
+                    onPressed: () async {
+                      final trimmed = _mirrorCtrl.text.trim();
+                      await widget.onUpdatePrefsChanged
+                          ?.call(prefs.copyWith(mirrorPrefix: trimmed));
+                      widget.onToast(
+                        trimmed.isEmpty ? '已恢复直连 GitHub 检测与下载' : '已保存 GitHub 加速前缀',
+                      );
+                    },
+                  ),
+                  child: TextField(
+                    controller: _mirrorCtrl,
+                    style: monoStyle(c, size: 12.5, color: c.ink),
+                    decoration: const InputDecoration(
+                      hintText: '留空直连 GitHub；国内可选填镜像前缀如 https://gh-proxy.com/',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -860,7 +1048,12 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                                   child: Divider(color: c.hairline, height: 1),
                                 ),
                               ],
-                              if (isAndroidHost) ...[
+                              const SizedBox(height: 16),
+                ClaudeStaggeredReveal(
+                  index: 2,
+                  child: _buildAppUpdateCard(c),
+                ),
+                if (isAndroidHost) ...[
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [

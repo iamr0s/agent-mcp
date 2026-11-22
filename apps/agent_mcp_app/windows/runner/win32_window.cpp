@@ -44,9 +44,9 @@ constexpr UINT_PTR kTrayIdQuit = 1004;
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr const wchar_t kTrayFlyoutClassName[] = L"AGENT_MCP_TRAY_FLYOUT";
 
-constexpr int kFlyoutLogicalW = 248;
-constexpr int kFlyoutLogicalH = 266;
-constexpr int kFlyoutItemCount = 5;
+constexpr int kFlyoutLogicalW = 264;
+constexpr int kFlyoutLogicalH = 342;
+constexpr int kFlyoutItemCount = 7;
 
 void EnsureGdiPlusInitialized() {
   static ULONG_PTR token = 0;
@@ -72,9 +72,9 @@ void AddRoundedRectPath(Gdiplus::GraphicsPath& path,
 }
 
 Gdiplus::RectF FlyoutItemRect(int index, float s) {
-  // Items 0..3 sit at y = 74 + index * 35; Item 4 (Quit) sits below bottom divider at y = 224.
-  const float y = (index < 4) ? (74.0f + index * 35.0f) : 224.0f;
-  return Gdiplus::RectF(8.0f * s, y * s, (kFlyoutLogicalW - 16.0f) * s,
+  // Items 0..5 sit at y = 76 + index * 35; Item 6 (Quit) sits below bottom divider at y = 298.
+  const float y = (index < 6) ? (76.0f + index * 35.0f) : 298.0f;
+  return Gdiplus::RectF(10.0f * s, y * s, (kFlyoutLogicalW - 20.0f) * s,
                         33.0f * s);
 }
 
@@ -381,15 +381,23 @@ void Win32Window::TriggerTrayFlyoutItem(int index) {
       OnTrayAction("open");
       break;
     case 1:
-      OnTrayAction("open_web");
+      ShowAndFocus();
+      OnTrayAction("open_share");
       break;
     case 2:
-      OnTrayAction(tray_service_running_ ? "stop" : "start");
+      OnTrayAction("open_web");
       break;
     case 3:
-      OnTrayAction("restart");
+      OnTrayAction(tray_service_running_ ? "stop" : "start");
       break;
     case 4:
+      OnTrayAction("restart");
+      break;
+    case 5:
+      ShowAndFocus();
+      OnTrayAction("check_update");
+      break;
+    case 6:
       OnTrayAction("quit");
       break;
     default:
@@ -415,58 +423,51 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
   g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-  // Anthropic Warm Editorial Palette (Warm Paper #FAF9F5 / Deep Slate #1E1D1B)
+  // Swiss Craft A+B Fusion Palette (Warm Ivory #FAF9F6 / Graphite #181A20 + Indigo Ink #4338CA)
   const Gdiplus::Color bgCol =
-      dark ? Gdiplus::Color(255, 0x1E, 0x1D, 0x1B)
-           : Gdiplus::Color(255, 0xFA, 0xF9, 0xF5);
+      dark ? Gdiplus::Color(255, 0x18, 0x1A, 0x20)
+           : Gdiplus::Color(255, 0xFA, 0xF9, 0xF6);
   const Gdiplus::Color inkCol =
-      dark ? Gdiplus::Color(255, 0xF3, 0xF1, 0xEA)
-           : Gdiplus::Color(255, 0x19, 0x18, 0x16);
+      dark ? Gdiplus::Color(255, 0xF4, 0xF5, 0xF8)
+           : Gdiplus::Color(255, 0x1A, 0x1D, 0x24);
   const Gdiplus::Color iconCol =
-      dark ? Gdiplus::Color(255, 0xB8, 0xB3, 0xA6)
-           : Gdiplus::Color(255, 0x66, 0x62, 0x59);
+      dark ? Gdiplus::Color(255, 0x94, 0xA3, 0xB8)
+           : Gdiplus::Color(255, 0x64, 0x74, 0x8B);
   const Gdiplus::Color hairlineCol =
-      dark ? Gdiplus::Color(255, 0x31, 0x2F, 0x2B)
-           : Gdiplus::Color(255, 0xE5, 0xE1, 0xD7);
+      dark ? Gdiplus::Color(255, 0x2B, 0x30, 0x3E)
+           : Gdiplus::Color(255, 0xE2, 0xE8, 0xF0);
   const Gdiplus::Color hoverFill =
-      dark ? Gdiplus::Color(255, 0x2B, 0x29, 0x25)
-           : Gdiplus::Color(255, 0xEF, 0xEC, 0xE3);
-  const Gdiplus::Color clayCol(255, 0xD9, 0x77, 0x57);
+      dark ? Gdiplus::Color(255, 0x25, 0x29, 0x36)
+           : Gdiplus::Color(255, 0xEF, 0xF2, 0xF6);
+  const Gdiplus::Color accentCol =
+      dark ? Gdiplus::Color(255, 0x81, 0x8C, 0xF8)
+           : Gdiplus::Color(255, 0x43, 0x38, 0xCA);
   const Gdiplus::Color sageCol =
-      dark ? Gdiplus::Color(255, 0x5E, 0xB8, 0x8A)
-           : Gdiplus::Color(255, 0x2E, 0x7D, 0x5B);
+      dark ? Gdiplus::Color(255, 0x34, 0xD3, 0x99)
+           : Gdiplus::Color(255, 0x05, 0x96, 0x69);
   const Gdiplus::Color dangerTextCol =
-      dark ? Gdiplus::Color(255, 0xF0, 0x74, 0x74)
-           : Gdiplus::Color(255, 0xC6, 0x42, 0x42);
+      dark ? Gdiplus::Color(255, 0xF8, 0x71, 0x71)
+           : Gdiplus::Color(255, 0xDC, 0x26, 0x26);
   const Gdiplus::Color dangerHoverFill =
-      dark ? Gdiplus::Color(255, 0x3A, 0x20, 0x20)
-           : Gdiplus::Color(255, 0xFC, 0xE9, 0xE9);
+      dark ? Gdiplus::Color(255, 0x3B, 0x1F, 0x24)
+           : Gdiplus::Color(255, 0xFE, 0xE2, 0xE2);
 
   g.Clear(bgCol);
 
-  // Subtle 1px inner border on Windows 10 where DWMWA_BORDER_COLOR isn't present
   if (!IsWindows11OrGreater()) {
     Gdiplus::GraphicsPath borderPath;
-    AddRoundedRectPath(
-        borderPath,
-        Gdiplus::RectF(0.5f, 0.5f, w - 1.0f, h - 1.0f),
-        10.0f * s);
+    AddRoundedRectPath(borderPath, Gdiplus::RectF(0.5f, 0.5f, w - 1.0f, h - 1.0f), 10.0f * s);
     Gdiplus::Pen borderPen(hairlineCol, 1.0f);
     g.DrawPath(&borderPen, &borderPath);
   }
 
-  // Font resolution: Segoe UI Variable / Microsoft YaHei UI
   Gdiplus::FontFamily fontFamily(L"Microsoft YaHei UI");
   const Gdiplus::FontFamily* fam =
       fontFamily.IsAvailable() ? &fontFamily : Gdiplus::FontFamily::GenericSansSerif();
-  Gdiplus::Font titleFont(fam, 13.0f * s, Gdiplus::FontStyleBold,
-                          Gdiplus::UnitPixel);
-  Gdiplus::Font itemFont(fam, 12.8f * s, Gdiplus::FontStyleRegular,
-                         Gdiplus::UnitPixel);
-  Gdiplus::Font itemActiveFont(fam, 12.8f * s, Gdiplus::FontStyleBold,
-                               Gdiplus::UnitPixel);
-  Gdiplus::Font pillFont(fam, 11.2f * s, Gdiplus::FontStyleBold,
-                         Gdiplus::UnitPixel);
+  Gdiplus::Font titleFont(fam, 13.2f * s, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+  Gdiplus::Font itemFont(fam, 12.6f * s, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+  Gdiplus::Font itemActiveFont(fam, 12.6f * s, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+  Gdiplus::Font pillFont(fam, 10.8f * s, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
 
   Gdiplus::StringFormat leftFmt;
   leftFmt.SetAlignment(Gdiplus::StringAlignmentNear);
@@ -474,37 +475,39 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
   leftFmt.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
   leftFmt.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
 
-  // 1. Header Card: Sparkle Badge + Server Name + Live Status Pill
   {
-    Gdiplus::RectF badgeRect(14.0f * s, 14.0f * s, 36.0f * s, 36.0f * s);
+    Gdiplus::RectF badgeRect(14.0f * s, 14.0f * s, 38.0f * s, 38.0f * s);
     Gdiplus::GraphicsPath badgePath;
-    AddRoundedRectPath(badgePath, badgeRect, 10.0f * s);
-    Gdiplus::SolidBrush badgeFill(
-        Gdiplus::Color(dark ? 42 : 30, 0xD9, 0x77, 0x57));
-    g.FillPath(&badgeFill, &badgePath);
+    AddRoundedRectPath(badgePath, badgeRect, 11.0f * s);
+    Gdiplus::LinearGradientBrush badgeGrad(
+        badgeRect,
+        Gdiplus::Color(255, 0x4F, 0x46, 0xE5),
+        Gdiplus::Color(255, 0x31, 0x2E, 0x81),
+        Gdiplus::LinearGradientModeForwardDiagonal);
+    g.FillPath(&badgeGrad, &badgePath);
 
-    // 4-point Anthropic Terracotta Sparkle vector
     const float cx = badgeRect.X + badgeRect.Width * 0.5f;
     const float cy = badgeRect.Y + badgeRect.Height * 0.5f;
-    const float rOut = 8.5f * s;
-    const float rIn = 2.6f * s;
+    const float rOut = 9.5f * s;
+    const float rIn = 2.8f * s;
     Gdiplus::PointF star[8] = {
         {cx, cy - rOut}, {cx + rIn, cy - rIn},
         {cx + rOut, cy}, {cx + rIn, cy + rIn},
         {cx, cy + rOut}, {cx - rIn, cy + rIn},
         {cx - rOut, cy}, {cx - rIn, cy - rIn},
     };
-    Gdiplus::SolidBrush clayBrush(clayCol);
-    g.FillPolygon(&clayBrush, star, 8);
+    Gdiplus::SolidBrush ivoryBrush(Gdiplus::Color(255, 0xFA, 0xF9, 0xF6));
+    g.FillPolygon(&ivoryBrush, star, 8);
 
-    // Server Name
+    Gdiplus::Pen bridgePen(Gdiplus::Color(200, 0xC7, 0xD2, 0xFE), 1.6f * s);
+    g.DrawLine(&bridgePen, cx - 6.0f * s, cy + 6.0f * s, cx + 6.0f * s, cy - 6.0f * s);
+    g.FillEllipse(&ivoryBrush, cx - 8.0f * s, cy + 4.0f * s, 4.0f * s, 4.0f * s);
+    g.FillEllipse(&ivoryBrush, cx + 4.0f * s, cy - 8.0f * s, 4.0f * s, 4.0f * s);
+
     Gdiplus::SolidBrush inkBrush(inkCol);
-    Gdiplus::RectF titleRect(58.0f * s, 13.0f * s,
-                             (kFlyoutLogicalW - 70.0f) * s, 19.0f * s);
-    g.DrawString(tray_server_name_.c_str(), -1, &titleFont, titleRect, &leftFmt,
-                 &inkBrush);
+    Gdiplus::RectF titleRect(60.0f * s, 13.0f * s, (kFlyoutLogicalW - 72.0f) * s, 19.0f * s);
+    g.DrawString(tray_server_name_.c_str(), -1, &titleFont, titleRect, &leftFmt, &inkBrush);
 
-    // Status Subtitle Pill
     std::wstring statusText;
     if (tray_service_running_) {
       wchar_t buf[64]{};
@@ -515,54 +518,44 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
     }
 
     Gdiplus::RectF measured;
-    g.MeasureString(statusText.c_str(), -1, &pillFont,
-                    Gdiplus::PointF(0.0f, 0.0f), &measured);
-    const float pillW = min((kFlyoutLogicalW - 72.0f) * s,
-                            measured.Width + 22.0f * s);
-    Gdiplus::RectF pillRect(58.0f * s, 34.0f * s, pillW, 19.0f * s);
+    g.MeasureString(statusText.c_str(), -1, &pillFont, Gdiplus::PointF(0.0f, 0.0f), &measured);
+    const float pillW = min((kFlyoutLogicalW - 74.0f) * s, measured.Width + 22.0f * s);
+    Gdiplus::RectF pillRect(60.0f * s, 35.0f * s, pillW, 19.0f * s);
     Gdiplus::GraphicsPath pillPath;
     AddRoundedRectPath(pillPath, pillRect, 9.5f * s);
     Gdiplus::SolidBrush pillBg(
         tray_service_running_
-            ? (dark ? Gdiplus::Color(40, 0x5E, 0xB8, 0x8A)
-                    : Gdiplus::Color(28, 0x2E, 0x7D, 0x5B))
-            : (dark ? Gdiplus::Color(255, 0x2B, 0x29, 0x25)
-                    : Gdiplus::Color(255, 0xED, 0xEA, 0xE0)));
+            ? (dark ? Gdiplus::Color(42, 0x34, 0xD3, 0x99)
+                    : Gdiplus::Color(26, 0x05, 0x96, 0x69))
+            : (dark ? Gdiplus::Color(255, 0x25, 0x29, 0x36)
+                    : Gdiplus::Color(255, 0xEF, 0xF2, 0xF6)));
     g.FillPath(&pillBg, &pillPath);
 
-    // Dot inside pill
     const Gdiplus::Color dotCol = tray_service_running_ ? sageCol : iconCol;
     Gdiplus::SolidBrush dotBrush(dotCol);
-    g.FillEllipse(&dotBrush, pillRect.X + 7.0f * s,
-                  pillRect.Y + (pillRect.Height - 6.0f * s) * 0.5f,
-                  6.0f * s, 6.0f * s);
-
-    Gdiplus::RectF pillTextRect(pillRect.X + 16.5f * s, pillRect.Y,
-                                pillRect.Width - 19.0f * s, pillRect.Height);
-    g.DrawString(statusText.c_str(), -1, &pillFont, pillTextRect, &leftFmt,
-                 &dotBrush);
+    g.FillEllipse(&dotBrush, pillRect.X + 7.0f * s, pillRect.Y + (pillRect.Height - 6.0f * s) * 0.5f, 6.0f * s, 6.0f * s);
+    Gdiplus::RectF pillTextRect(pillRect.X + 16.5f * s, pillRect.Y, pillRect.Width - 19.0f * s, pillRect.Height);
+    g.DrawString(statusText.c_str(), -1, &pillFont, pillTextRect, &leftFmt, &dotBrush);
   }
 
-  // 2. Top Divider
   Gdiplus::Pen divPen(hairlineCol, 1.0f);
-  g.DrawLine(&divPen, 12.0f * s, 66.0f * s, (kFlyoutLogicalW - 12.0f) * s,
-             66.0f * s);
+  g.DrawLine(&divPen, 12.0f * s, 68.0f * s, (kFlyoutLogicalW - 12.0f) * s, 68.0f * s);
 
-  // 3. Menu Items (0..4)
   const wchar_t* labels[kFlyoutItemCount] = {
       L"\u6253\u5f00\u4e3b\u63a7\u5236\u53f0",
+      L"\u65b0\u5efa\u5916\u7f51\u5206\u4eab",
       L"\u6d4f\u89c8\u5668\u6253\u5f00\u9762\u677f",
-      tray_service_running_ ? L"\u505c\u6b62 MCP \u670d\u52a1"
-                            : L"\u542f\u52a8 MCP \u670d\u52a1",
+      tray_service_running_ ? L"\u505c\u6b62 MCP \u670d\u52a1" : L"\u542f\u52a8 MCP \u670d\u52a1",
       L"\u91cd\u542f MCP \u670d\u52a1",
+      L"\u68c0\u67e5\u5e94\u7528\u66f4\u65b0",
       L"\u5b8c\u5168\u9000\u51fa\u5e94\u7528",
   };
 
   for (int i = 0; i < kFlyoutItemCount; ++i) {
     const Gdiplus::RectF row = FlyoutItemRect(i, s);
     const bool hovered = (tray_hover_index_ == i);
-    const bool isDanger = (i == 4);
-    const bool isStartAccent = (i == 2 && !tray_service_running_);
+    const bool isDanger = (i == 6);
+    const bool isAccent = (i == 1) || (i == 3 && !tray_service_running_);
 
     if (hovered) {
       Gdiplus::GraphicsPath hoverPath;
@@ -573,83 +566,68 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
 
     const Gdiplus::Color curTextCol =
         isDanger ? (hovered ? dangerTextCol : inkCol)
-                 : (isStartAccent ? clayCol : inkCol);
+                 : (isAccent ? accentCol : inkCol);
     const Gdiplus::Color curIconCol =
         isDanger ? dangerTextCol
-                 : (isStartAccent ? clayCol : (hovered ? inkCol : iconCol));
+                 : (isAccent ? accentCol : (hovered ? inkCol : iconCol));
 
-    // Crisp Vector Icon (15x15 box centered vertically at x = row.X + 11*s)
     const float ix = row.X + 11.0f * s;
     const float iy = row.Y + (row.Height - 15.0f * s) * 0.5f;
     const float iw = 15.0f * s;
     Gdiplus::Pen iconPen(curIconCol, 1.55f * s);
-    iconPen.SetLineCap(Gdiplus::LineCapRound, Gdiplus::LineCapRound,
-                       Gdiplus::DashCapRound);
+    iconPen.SetLineCap(Gdiplus::LineCapRound, Gdiplus::LineCapRound, Gdiplus::DashCapRound);
     iconPen.SetLineJoin(Gdiplus::LineJoinRound);
 
     if (i == 0) {
-      // Console window layout icon
       Gdiplus::GraphicsPath wp;
-      AddRoundedRectPath(
-          wp, Gdiplus::RectF(ix + 0.5f * s, iy + 1.5f * s, iw - 1.0f * s,
-                             iw - 3.0f * s),
-          3.0f * s);
+      AddRoundedRectPath(wp, Gdiplus::RectF(ix + 0.5f * s, iy + 1.5f * s, iw - 1.0f * s, iw - 3.0f * s), 3.0f * s);
       g.DrawPath(&iconPen, &wp);
-      g.DrawLine(&iconPen, ix + 5.2f * s, iy + 1.8f * s, ix + 5.2f * s,
-                 iy + iw - 1.8f * s);
+      g.DrawLine(&iconPen, ix + 5.2f * s, iy + 1.8f * s, ix + 5.2f * s, iy + iw - 1.8f * s);
     } else if (i == 1) {
-      // Browser globe icon
-      g.DrawEllipse(&iconPen, ix + 1.0f * s, iy + 1.0f * s, iw - 2.0f * s,
-                    iw - 2.0f * s);
-      g.DrawEllipse(&iconPen, ix + 4.3f * s, iy + 1.0f * s, iw - 8.6f * s,
-                    iw - 2.0f * s);
-      g.DrawLine(&iconPen, ix + 1.4f * s, iy + iw * 0.5f, ix + iw - 1.4f * s,
-                 iy + iw * 0.5f);
+      g.DrawLine(&iconPen, ix + iw * 0.5f, iy + 2.0f * s, ix + iw * 0.5f, iy + 10.5f * s);
+      g.DrawLine(&iconPen, ix + 4.0f * s, iy + 5.2f * s, ix + iw * 0.5f, iy + 1.8f * s);
+      g.DrawLine(&iconPen, ix + iw - 4.0f * s, iy + 5.2f * s, ix + iw * 0.5f, iy + 1.8f * s);
+      g.DrawLine(&iconPen, ix + 2.2f * s, iy + 10.5f * s, ix + 2.2f * s, iy + 13.2f * s);
+      g.DrawLine(&iconPen, ix + 2.2f * s, iy + 13.2f * s, ix + iw - 2.2f * s, iy + 13.2f * s);
+      g.DrawLine(&iconPen, ix + iw - 2.2f * s, iy + 10.5f * s, ix + iw - 2.2f * s, iy + 13.2f * s);
     } else if (i == 2) {
+      g.DrawEllipse(&iconPen, ix + 1.0f * s, iy + 1.0f * s, iw - 2.0f * s, iw - 2.0f * s);
+      g.DrawEllipse(&iconPen, ix + 4.3f * s, iy + 1.0f * s, iw - 8.6f * s, iw - 2.0f * s);
+      g.DrawLine(&iconPen, ix + 1.4f * s, iy + iw * 0.5f, ix + iw - 1.4f * s, iy + iw * 0.5f);
+    } else if (i == 3) {
       if (tray_service_running_) {
-        // Stop rounded square
         Gdiplus::GraphicsPath sp;
-        AddRoundedRectPath(
-            sp, Gdiplus::RectF(ix + 2.5f * s, iy + 2.5f * s, iw - 5.0f * s,
-                               iw - 5.0f * s),
-            2.6f * s);
+        AddRoundedRectPath(sp, Gdiplus::RectF(ix + 2.5f * s, iy + 2.5f * s, iw - 5.0f * s, iw - 5.0f * s), 2.6f * s);
         g.DrawPath(&iconPen, &sp);
       } else {
-        // Play triangle
         Gdiplus::PointF tri[3] = {
             {ix + 3.2f * s, iy + 2.0f * s},
             {ix + iw - 2.0f * s, iy + iw * 0.5f},
             {ix + 3.2f * s, iy + iw - 2.0f * s},
         };
-        Gdiplus::SolidBrush playBrush(clayCol);
+        Gdiplus::SolidBrush playBrush(accentCol);
         g.FillPolygon(&playBrush, tri, 3);
       }
-    } else if (i == 3) {
-      // Circular restart arc + arrow tip
-      g.DrawArc(&iconPen, ix + 1.5f * s, iy + 1.5f * s, iw - 3.0f * s,
-                iw - 3.0f * s, 35.0f, 285.0f);
-      g.DrawLine(&iconPen, ix + iw - 1.8f * s, iy + 2.0f * s,
-                 ix + iw - 1.8f * s, iy + 5.8f * s);
-      g.DrawLine(&iconPen, ix + iw - 5.6f * s, iy + 5.8f * s,
-                 ix + iw - 1.8f * s, iy + 5.8f * s);
     } else if (i == 4) {
-      // Power button icon
-      g.DrawArc(&iconPen, ix + 1.8f * s, iy + 2.5f * s, iw - 3.6f * s,
-                iw - 3.6f * s, 300.0f, 300.0f);
-      g.DrawLine(&iconPen, ix + iw * 0.5f, iy + 1.2f * s, ix + iw * 0.5f,
-                 iy + 7.5f * s);
+      g.DrawArc(&iconPen, ix + 1.5f * s, iy + 1.5f * s, iw - 3.0f * s, iw - 3.0f * s, 35.0f, 285.0f);
+      g.DrawLine(&iconPen, ix + iw - 1.8f * s, iy + 2.0f * s, ix + iw - 1.8f * s, iy + 5.8f * s);
+      g.DrawLine(&iconPen, ix + iw - 5.6f * s, iy + 5.8f * s, ix + iw - 1.8f * s, iy + 5.8f * s);
+    } else if (i == 5) {
+      g.DrawLine(&iconPen, ix + iw * 0.5f, iy + 1.8f * s, ix + iw * 0.5f, iy + 10.0f * s);
+      g.DrawLine(&iconPen, ix + 4.2f * s, iy + 6.8f * s, ix + iw * 0.5f, iy + 10.2f * s);
+      g.DrawLine(&iconPen, ix + iw - 4.2f * s, iy + 6.8f * s, ix + iw * 0.5f, iy + 10.2f * s);
+      g.DrawLine(&iconPen, ix + 2.2f * s, iy + 13.0f * s, ix + iw - 2.2f * s, iy + 13.0f * s);
+    } else if (i == 6) {
+      g.DrawArc(&iconPen, ix + 1.8f * s, iy + 2.5f * s, iw - 3.6f * s, iw - 3.6f * s, 300.0f, 300.0f);
+      g.DrawLine(&iconPen, ix + iw * 0.5f, iy + 1.2f * s, ix + iw * 0.5f, iy + 7.5f * s);
     }
 
     Gdiplus::SolidBrush textBrush(curTextCol);
-    Gdiplus::RectF textRect(row.X + 35.0f * s, row.Y, row.Width - 44.0f * s,
-                            row.Height);
-    g.DrawString(labels[i], -1, (i == 0) ? &itemActiveFont : &itemFont,
-                 textRect, &leftFmt, &textBrush);
+    Gdiplus::RectF textRect(row.X + 35.0f * s, row.Y, row.Width - 44.0f * s, row.Height);
+    g.DrawString(labels[i], -1, (i == 0) ? &itemActiveFont : &itemFont, textRect, &leftFmt, &textBrush);
   }
 
-  // 4. Bottom Divider above Quit
-  g.DrawLine(&divPen, 12.0f * s, 217.0f * s, (kFlyoutLogicalW - 12.0f) * s,
-             217.0f * s);
+  g.DrawLine(&divPen, 12.0f * s, 290.0f * s, (kFlyoutLogicalW - 12.0f) * s, 290.0f * s);
 
   // Blit offscreen buffer in one atomic pass
   Gdiplus::Graphics screen(hdc);

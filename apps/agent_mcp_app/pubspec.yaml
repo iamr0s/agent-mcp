@@ -1,7 +1,7 @@
 name: agent_mcp_app
 description: Anthropic Editorial-Style Desktop & Web Console for Agent MCP
 publish_to: none
-version: 2.3.0+5
+version: 2.4.0+6
 
 resolution: workspace
 
@@ -13,6 +13,7 @@ dependencies:
     sdk: flutter
   agent_mcp_core:
     path: ../../packages/agent_mcp_core
+  crypto: ^3.0.6
   http: ^1.2.2
   path: ^1.9.1
   web: ^1.1.0

@@ -1,11 +1,18 @@
 import 'dart:convert';
 
-const String agentMcpVersion = '2.3.0';
+const String agentMcpVersion = '2.4.0';
 
 const String appIconSvg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-    '<rect x="2" y="2" width="60" height="60" rx="16" fill="#FAF9F5" stroke="#E3E0D6" stroke-width="2.5"/>'
-    '<path d="M32 10L37.4 26.6L54 32L37.4 37.4L32 54L26.6 37.4L10 32L26.6 26.6L32 10Z" fill="#D97757"/>'
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+    '<stop offset="0%" stop-color="#4F46E5"/>'
+    '<stop offset="100%" stop-color="#312E81"/>'
+    '</linearGradient></defs>'
+    '<rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>'
+    '<path d="M32 12L36.8 27.2L52 32L36.8 36.8L32 52L27.2 36.8L12 32L27.2 27.2L32 12Z" fill="#FAF9F6"/>'
+    '<line x1="21" y1="43" x2="43" y2="21" stroke="#C7D2FE" stroke-width="3.2" stroke-linecap="round"/>'
+    '<circle cx="21" cy="43" r="4" fill="#FAF9F6" stroke="#4338CA" stroke-width="1.6"/>'
+    '<circle cx="43" cy="21" r="4" fill="#FAF9F6" stroke="#4338CA" stroke-width="1.6"/>'
     '</svg>';
 
 final String appIconDataUri =

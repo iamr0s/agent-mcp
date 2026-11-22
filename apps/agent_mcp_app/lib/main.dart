@@ -13,6 +13,7 @@ import 'views/exposure_page.dart';
 import 'views/setup_page.dart';
 import 'views/remote_nodes_dialog.dart';
 import 'views/sub_mcp_page.dart';
+import 'views/update_dialog.dart';
 
 void main([List<String> _ = const []]) {
   late ConsoleBackend backend;
@@ -251,7 +252,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.3.0';
+  String _version = '2.4.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -276,6 +277,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   String? _toastMessage;
   int _toastTick = 0;
   Timer? _toastTimer;
+  UpdatePreferences _updatePrefs = const UpdatePreferences();
+  bool _checkingUpdate = false;
+  UpdateInfo? _latestUpdate;
+  bool _updateDialogOpen = false;
+  Timer? _updateStartupTimer;
+  Timer? _updatePeriodicTimer;
 
   late final AnimationController _sidebarCtrl = AnimationController(
     vsync: this,
@@ -284,6 +291,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   );
 
   StreamSubscription<List<String>>? _dropSub;
+  StreamSubscription<String>? _trayCmdSub;
   final ValueNotifier<String?> _droppedSharePath = ValueNotifier<String?>(null);
   AppLifecycleState _appLifecycle = AppLifecycleState.resumed;
 
@@ -341,6 +349,17 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       });
       _droppedSharePath.value = paths.first;
     });
+    _trayCmdSub = widget.backend.trayCommandStream.listen((cmd) {
+      if (!mounted || !_authenticated) return;
+      if (cmd == 'open_share') {
+        setState(() {
+          _tabIndex = 2;
+          _chromeVisible = true;
+        });
+      } else if (cmd == 'check_update') {
+        unawaited(_checkForUpdates(manual: true));
+      }
+    });
     _syncAnimationActivityState();
     _bootstrap();
   }
@@ -382,10 +401,13 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     WidgetsBinding.instance.removeObserver(this);
     widget.backend.windowState.removeListener(_onWindowStateChanged);
     _dropSub?.cancel();
+    _trayCmdSub?.cancel();
     _droppedSharePath.dispose();
     _eventSub?.cancel();
     _pollTimer?.cancel();
     _toastTimer?.cancel();
+    _updateStartupTimer?.cancel();
+    _updatePeriodicTimer?.cancel();
     widget.backend.externalRefreshSignal.removeListener(_onExternalBackendSignal);
     _sidebarCtrl.dispose();
     super.dispose();
@@ -412,7 +434,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.3.0').toString();
+      _version = (auth['version'] ?? '2.4.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -493,6 +515,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         _applyThemeWithSnapshot(isDark ? ThemeMode.light : ThemeMode.dark);
         break;
+      case 'check_update':
+        await _checkForUpdates(manual: true);
+        break;
     }
   }
 
@@ -504,6 +529,105 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       onSwitchNode: _switchActiveNode,
     );
     if (mounted) setState(() {});
+  }
+
+
+  Future<void> _initUpdateScheduler() async {
+    final prefs = await widget.backend.loadUpdatePreferences();
+    if (!mounted) return;
+    setState(() => _updatePrefs = prefs);
+
+    _updateStartupTimer?.cancel();
+    _updatePeriodicTimer?.cancel();
+
+    if (prefs.isCheckDue()) {
+      _updateStartupTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && _authenticated && _updatePrefs.isCheckDue()) {
+          unawaited(_checkForUpdates(manual: false));
+        }
+      });
+    }
+
+    _updatePeriodicTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      if (mounted &&
+          _authenticated &&
+          !ClaudePulseClock.instance.isPaused &&
+          _updatePrefs.isCheckDue()) {
+        unawaited(_checkForUpdates(manual: false));
+      }
+    });
+  }
+
+  Future<void> _handleUpdatePrefsChanged(UpdatePreferences next) async {
+    await widget.backend.saveUpdatePreferences(next);
+    if (!mounted) return;
+    setState(() => _updatePrefs = next);
+  }
+
+  Future<void> _checkForUpdates({required bool manual}) async {
+    if (_checkingUpdate) return;
+    if (mounted) setState(() => _checkingUpdate = true);
+    try {
+      final res = await widget.backend.checkForUpdates(manual: manual);
+      final latestPrefs = await widget.backend.loadUpdatePreferences();
+      if (!mounted) return;
+      setState(() {
+        _updatePrefs = latestPrefs;
+        _checkingUpdate = false;
+        if (res.ok && res.latest != null) {
+          _latestUpdate = res.latest;
+        }
+      });
+
+      if (!res.ok) {
+        if (manual) _showToast('检查更新失败：${res.error ?? '网络不可达'}');
+        return;
+      }
+
+      if (res.hasUpdate && res.latest != null) {
+        if (!res.skipped || manual) {
+          await _showUpdateAvailableDialog(res.latest!, currentVersion: res.currentVersion);
+        }
+      } else if (manual) {
+        _showToast('当前已是最新版本 (v${res.currentVersion})');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _checkingUpdate = false);
+        if (manual) _showToast('检查更新失败：$e');
+      }
+    }
+  }
+
+  Future<void> _showUpdateAvailableDialog(
+    UpdateInfo latest, {
+    required String currentVersion,
+  }) async {
+    if (!mounted || _updateDialogOpen) return;
+    _updateDialogOpen = true;
+    try {
+      final outcome = await showClaudeDialog<UpdateDialogOutcome>(
+        context: context,
+        builder: (_) => UpdateAvailableDialog(
+          backend: widget.backend,
+          currentVersion: currentVersion,
+          latest: latest,
+          mirrorPrefix: _updatePrefs.mirrorPrefix,
+          onToast: _showToast,
+        ),
+      );
+      if (!mounted) return;
+      if (outcome == UpdateDialogOutcome.skipThisVersion) {
+        final next = _updatePrefs.copyWith(skippedVersion: latest.version);
+        await widget.backend.saveUpdatePreferences(next);
+        if (mounted) {
+          setState(() => _updatePrefs = next);
+          _showToast('已忽略 v${latest.version} 更新提醒');
+        }
+      }
+    } finally {
+      _updateDialogOpen = false;
+    }
   }
 
   Future<void> _startAuthenticatedSession() async {
@@ -521,6 +645,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         _refreshStatus();
       }
     });
+    unawaited(_initUpdateScheduler());
   }
 
   void _upsertEvent(Map<String, dynamic> rawEv) {
@@ -1205,6 +1330,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         onRefreshStorage: _refreshStorage,
         onRestartService: _restartService,
         onToast: _showToast,
+        updatePrefs: _updatePrefs,
+        checkingUpdate: _checkingUpdate,
+        latestUpdate: _latestUpdate,
+        onUpdatePrefsChanged: _handleUpdatePrefsChanged,
+        onCheckUpdate: () => _checkForUpdates(manual: true),
       ),
     ];
 
@@ -1565,6 +1695,22 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             ],
                           ),
                         ),
+                        if (_latestUpdate != null &&
+                            compareSemVer(_latestUpdate!.version, widget.backend.currentAppVersion) > 0) ...[
+                          const SizedBox(width: 10),
+                          InkWell(
+                            onTap: () => _showUpdateAvailableDialog(
+                              _latestUpdate!,
+                              currentVersion: widget.backend.currentAppVersion,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                            child: ClaudePill(
+                              text: '新版本 v${_latestUpdate!.version}',
+                              fg: c.clay,
+                              bg: c.clay.withValues(alpha: 0.12),
+                            ),
+                          ),
+                        ],
                         if (width >= 760) ...[
                           const SizedBox(width: 12),
                           Text(
@@ -2945,6 +3091,12 @@ class _GlobalCommandPaletteDialogState
         hint: '调用流',
         icon: Icons.bolt_rounded,
         payload: {'action': 'tab', 'index': 0},
+      ),
+      (
+        title: '检查应用更新 (GitHub Releases)',
+        hint: '更新检测 / version.json',
+        icon: Icons.system_update_alt_rounded,
+        payload: {'action': 'check_update'},
       ),
     ];
 

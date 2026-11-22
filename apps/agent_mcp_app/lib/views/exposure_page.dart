@@ -368,21 +368,15 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             const SizedBox(height: 14),
           ],
 
-          // Adaptive Share Dropzone: sleek 52px bar when active shares exist; airy 4-mode cards when empty
+          // Adaptive Share Dropzone: high-visibility dashed dropbar when active shares exist; hero dashed dropzone + 4-mode cards when empty
           if (_enabled && items.isNotEmpty) ...[
-            InkWell(
+            _DashedDropZone(
+              borderColor: c.clay.withValues(alpha: c.isDark ? 0.55 : 0.45),
+              fillColor: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.045),
+              radius: 14,
               onTap: () => _openCreateDialog(initialMode: 'file'),
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: ShapeDecoration(
-                  color: c.paper2,
-                  shape: claudeSuperellipse(
-                    14,
-                    side: BorderSide(color: c.hairline),
-                  ),
-                ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 child: Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -392,11 +386,40 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.file_upload_outlined, size: 17, color: c.clay),
-                        const SizedBox(width: 8),
-                        Text(
-                          '拖入文件、文件夹或 HTML 网页松手即享',
-                          style: sansStyle(c, size: 13, weight: FontWeight.w500, color: c.ink),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: c.clay.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Icon(Icons.file_upload_rounded, size: 17, color: c.clay),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '拖拽文件、文件夹或 HTML 到此处一键分享',
+                                  style: sansStyle(c, size: 13, weight: FontWeight.w600, color: c.ink),
+                                ),
+                                const SizedBox(width: 7),
+                                ClaudePill(
+                                  text: '支持拖拽',
+                                  fg: c.clay,
+                                  bg: c.clay.withValues(alpha: 0.12),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '松手自动识别形态，也可点击右侧按钮手动新建',
+                              style: sansStyle(c, size: 11.5, color: c.muted),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -436,6 +459,58 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             ),
             const SizedBox(height: 12),
           ] else if (_enabled) ...[
+            _DashedDropZone(
+              borderColor: c.clay.withValues(alpha: c.isDark ? 0.58 : 0.48),
+              fillColor: c.clay.withValues(alpha: c.isDark ? 0.08 : 0.045),
+              radius: 16,
+              onTap: () => _openCreateDialog(initialMode: 'file'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: c.clay.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.drive_folder_upload_rounded, size: 23, color: c.clay),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                '拖拽任意文件、文件夹或静态网站目录到此处',
+                                style: sansStyle(c, size: 14.5, weight: FontWeight.w600, color: c.ink),
+                              ),
+                              ClaudePill(
+                                text: '拖拽即享',
+                                fg: c.clay,
+                                bg: c.clay.withValues(alpha: 0.14),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '松手自动识别单文件预览 / 文件夹浏览 / 静态 HTML 站点；也可以点击此处或下方卡片手动选择。',
+                            style: sansStyle(c, size: 12.2, color: c.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             LayoutBuilder(
               builder: (ctx, qbox) {
                 final cols = qbox.maxWidth < 520
@@ -2093,4 +2168,83 @@ class _TailscaleExposureSettingsCardState
       ),
     );
   }
+}
+
+
+class _DashedDropZone extends StatelessWidget {
+  final Color borderColor;
+  final Color fillColor;
+  final double radius;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  const _DashedDropZone({
+    required this.borderColor,
+    required this.fillColor,
+    required this.child,
+    this.radius = 14,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedRRectPainter(
+        color: borderColor,
+        radius: radius,
+        strokeWidth: 1.5,
+        dashWidth: 6.5,
+        dashGap: 4.5,
+      ),
+      child: Material(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(radius),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(radius),
+          child: SizedBox(width: double.infinity, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRRectPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+  final double strokeWidth;
+  final double dashWidth;
+  final double dashGap;
+
+  const _DashedRRectPainter({
+    required this.color,
+    required this.radius,
+    this.strokeWidth = 1.5,
+    this.dashWidth = 6.5,
+    this.dashGap = 4.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var dist = 0.0;
+      while (dist < metric.length) {
+        final next = (dist + dashWidth).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(dist, next), paint);
+        dist += dashWidth + dashGap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
+      oldDelegate.strokeWidth != strokeWidth;
 }

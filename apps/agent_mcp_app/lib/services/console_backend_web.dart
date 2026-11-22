@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
 import 'console_backend_interface.dart';
+import 'update_service.dart';
 
 class UnauthorizedConsoleException implements Exception {
   const UnauthorizedConsoleException();
@@ -488,6 +489,27 @@ class _WebConsoleBackend extends ConsoleBackend {
   Future<bool> openExternalUrl(String url) async {
     web.window.open(url, '_blank');
     return true;
+  }
+
+  static const String _updatePrefsKey = 'agent_mcp_update_prefs_v1';
+
+  @override
+  Future<UpdatePreferences> loadUpdatePreferences() async {
+    try {
+      final raw = web.window.localStorage.getItem(_updatePrefsKey);
+      if (raw != null && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return UpdatePreferences.fromJson(decoded);
+      }
+    } catch (_) {}
+    return const UpdatePreferences();
+  }
+
+  @override
+  Future<void> saveUpdatePreferences(UpdatePreferences prefs) async {
+    try {
+      web.window.localStorage.setItem(_updatePrefsKey, jsonEncode(prefs.toJson()));
+    } catch (_) {}
   }
 
   @override

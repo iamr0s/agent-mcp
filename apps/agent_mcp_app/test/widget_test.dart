@@ -10,6 +10,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeConsoleBackend extends ConsoleBackend {
+  UpdatePreferences updatePrefs = const UpdatePreferences(autoCheckEnabled: false);
+  UpdateCheckResult? stubUpdateResult;
+  String? launchedInstallerPath;
+  String? launchedInstallerAfter;
+  bool? launchedInstallerSilent;
+  String? openedExternalUrl;
+
+  @override
+  bool get isWindowsPlatform => true;
+
+  @override
+  bool get supportsInAppUpgrade => true;
+
+  @override
+  Future<UpdatePreferences> loadUpdatePreferences() async => updatePrefs;
+
+  @override
+  Future<void> saveUpdatePreferences(UpdatePreferences prefs) async { updatePrefs = prefs; }
+
+  @override
+  Future<UpdateCheckResult> checkForUpdates({bool manual = false}) async {
+    return stubUpdateResult ?? UpdateCheckResult(ok: true, hasUpdate: false, currentVersion: currentAppVersion);
+  }
+
+  @override
+  Future<UpdateDownloadResult> downloadUpdatePackage(UpdateAsset asset, {void Function(int received, int total)? onProgress, String mirrorPrefix = ''}) async {
+    onProgress?.call(asset.size > 0 ? asset.size : 1024, asset.size > 0 ? asset.size : 1024);
+    return UpdateDownloadResult(ok: true, filePath: r'C:\Temp\' + asset.name, sha256: asset.sha256, verified: asset.sha256.isNotEmpty);
+  }
+
+  @override
+  Future<Map<String, dynamic>> launchDownloadedInstaller(String filePath, {bool silent = false, String after = 'gui'}) async {
+    launchedInstallerPath = filePath;
+    launchedInstallerSilent = silent;
+    launchedInstallerAfter = after;
+    return const {'ok': true};
+  }
+
+  @override
+  Future<bool> openExternalUrl(String url) async { openedExternalUrl = url; return true; }
+
   @override
   bool get supportsNodeSwitching => true;
 
@@ -897,6 +938,77 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('选 HTML 文件'), findsOneWidget);
     expect(find.text('选网站文件夹'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v2.4 App Updater: SemVer/version.json parsing, periodic toggle, 4-action dialog & one-click upgrade launch',
+      (tester) async {
+    expect(compareSemVer('2.10.0', '2.3.0'), greaterThan(0));
+    expect(compareSemVer('v2.4.0+6', '2.4.0+5'), greaterThan(0));
+    expect(compareSemVer('2.4.0', '2.4.0-beta.1'), greaterThan(0));
+    expect(
+      applyGithubMirrorPrefix(
+        'https://github.com/iamr0s/agent-mcp/releases/latest/download/version.json',
+        'https://gh-proxy.com',
+      ),
+      equals('https://gh-proxy.com/https://github.com/iamr0s/agent-mcp/releases/latest/download/version.json'),
+    );
+    final parsed = UpdateInfo.tryParseVersionJson({
+      'version': '2.5.0',
+      'tag': 'v2.5.0',
+      'build': 7,
+      'published_at': '2026-11-22T12:00:00Z',
+      'release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v2.5.0',
+      'notes': '- 新增自动更新与智能安装器',
+      'assets': {
+        'windows_sfx': {
+          'name': 'AgentMCP-v2.5.0-windows-x64-sfx.exe',
+          'url': 'https://github.com/iamr0s/agent-mcp/releases/download/v2.5.0/AgentMCP-v2.5.0-windows-x64-sfx.exe',
+          'sha256': 'deadbeef',
+          'size': 49000000,
+        },
+      },
+    });
+    expect(parsed, isNotNull);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 960);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    backend.stubUpdateResult = UpdateCheckResult(ok: true, hasUpdate: true, currentVersion: '2.4.0', latest: parsed);
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+
+    await tester.tap(find.text('Ctrl K'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('检查应用更新 (GitHub Releases)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+
+    expect(find.text('发现新版本'), findsOneWidget);
+    expect(find.text('不再提醒本次更新'), findsOneWidget);
+    expect(find.text('稍后更新'), findsOneWidget);
+    expect(find.text('前往下载'), findsOneWidget);
+    expect(find.text('一键升级'), findsOneWidget);
+
+    await tester.tap(find.text('不再提醒本次更新'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(backend.updatePrefs.skippedVersion, equals('2.5.0'));
+
+    expect(find.text('新版本 v2.5.0'), findsOneWidget);
+    await tester.tap(find.text('新版本 v2.5.0'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('一键升级'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(backend.launchedInstallerPath, contains('AgentMCP-v2.5.0-windows-x64-sfx.exe'));
+    expect(backend.launchedInstallerAfter, equals('gui'));
+    expect(backend.launchedInstallerSilent, isFalse);
     expect(tester.takeException(), isNull);
   });
 }

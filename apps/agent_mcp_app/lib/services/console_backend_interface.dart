@@ -3,6 +3,9 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'update_service.dart';
+export 'update_service.dart';
+
 const String kLoopbackIpv4 = '127.0' '.0.1';
 
 String generateRandomToken(String prefix, int len) {
@@ -184,6 +187,10 @@ abstract class ConsoleBackend {
   ValueListenable<DesktopWindowState> get windowState;
 
   bool get isAndroidPlatform => false;
+  bool get isWindowsPlatform => false;
+  bool get isLinuxPlatform => false;
+  String get currentAppVersion => '2.4.0';
+  bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;
   List<String> get deviceLanIps => const [];
@@ -193,6 +200,17 @@ abstract class ConsoleBackend {
   final StreamController<List<String>> _droppedFilesCtrl =
       StreamController<List<String>>.broadcast();
   Stream<List<String>> get droppedFilesStream => _droppedFilesCtrl.stream;
+
+  final StreamController<String> _trayCommandCtrl =
+      StreamController<String>.broadcast();
+  Stream<String> get trayCommandStream => _trayCommandCtrl.stream;
+
+  void emitTrayCommand(String cmd) {
+    final cleaned = cmd.trim();
+    if (cleaned.isNotEmpty && !_trayCommandCtrl.isClosed) {
+      _trayCommandCtrl.add(cleaned);
+    }
+  }
 
   void emitDroppedFiles(List<String> paths) {
     final cleaned = paths.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
@@ -317,6 +335,43 @@ abstract class ConsoleBackend {
       const {'ok': true, 'tailscale': <String, dynamic>{}};
 
   Future<bool> openExternalUrl(String url) async => false;
+
+  Future<UpdatePreferences> loadUpdatePreferences() async =>
+      const UpdatePreferences();
+
+  Future<void> saveUpdatePreferences(UpdatePreferences prefs) async {}
+
+  Future<UpdateCheckResult> checkForUpdates({bool manual = false}) async {
+    final prefs = await loadUpdatePreferences();
+    final res = await UpdateService.checkLatest(
+      currentVersion: currentAppVersion,
+      mirrorPrefix: prefs.mirrorPrefix,
+      skippedVersion: prefs.skippedVersion,
+      manual: manual,
+    );
+    if (res.ok) {
+      await saveUpdatePreferences(
+        prefs.copyWith(
+          lastCheckedAtIso: DateTime.now().toUtc().toIso8601String(),
+        ),
+      );
+    }
+    return res;
+  }
+
+  Future<UpdateDownloadResult> downloadUpdatePackage(
+    UpdateAsset asset, {
+    void Function(int received, int total)? onProgress,
+    String mirrorPrefix = '',
+  }) async =>
+      const UpdateDownloadResult(ok: false, error: '当前平台暂不支持应用内下载');
+
+  Future<Map<String, dynamic>> launchDownloadedInstaller(
+    String filePath, {
+    bool silent = false,
+    String after = 'gui',
+  }) async =>
+      const {'ok': false, 'error': '当前平台暂不支持应用内启动安装'};
 
   void quitDesktopApp();
 }
