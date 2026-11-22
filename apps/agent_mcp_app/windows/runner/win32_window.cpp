@@ -36,6 +36,44 @@ constexpr int kDwmBackdropMica = 2;        // DWMSBT_MAINWINDOW
 constexpr int kDwmBackdropTransient = 3;   // DWMSBT_TRANSIENTWINDOW
 constexpr int kDwmBackdropTabbed = 4;      // DWMSBT_TABBEDWINDOW (Mica Alt)
 
+struct AccentPolicy {
+  int accent_state;
+  int accent_flags;
+  DWORD gradient_color;  // AABBGGRR
+  int animation_id;
+};
+
+struct WindowCompositionAttribData {
+  int attrib;
+  PVOID pv_data;
+  SIZE_T cb_data;
+};
+
+using SetWindowCompositionAttributeFn = BOOL(WINAPI*)(HWND, WindowCompositionAttribData*);
+
+void ApplyWin32AcrylicAccent(HWND hwnd, bool enabled, bool is_dark) {
+  if (!hwnd) return;
+  HMODULE user32 = GetModuleHandleW(L"user32.dll");
+  if (!user32) return;
+  auto set_wca = reinterpret_cast<SetWindowCompositionAttributeFn>(
+      GetProcAddress(user32, "SetWindowCompositionAttribute"));
+  if (!set_wca) return;
+  AccentPolicy policy{};
+  if (enabled) {
+    // ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, AccentFlags = 2 (draw all borders)
+    // ABGR format: 0xAABBGGRR — rich frosted glass that clearly blurs windows & wallpaper behind
+    policy.accent_state = 4;
+    policy.accent_flags = 2;
+    policy.gradient_color = is_dark ? 0xB416100Eu : 0x99F8F5F4u;
+  } else {
+    policy.accent_state = 0;  // ACCENT_DISABLED
+    policy.accent_flags = 0;
+    policy.gradient_color = 0;
+  }
+  WindowCompositionAttribData data{19, &policy, sizeof(policy)};
+  set_wca(hwnd, &data);
+}
+
 constexpr UINT kWmTrayCallback = WM_USER + 20;
 constexpr UINT_PTR kTrayIdOpen = 1001;
 constexpr UINT_PTR kTrayIdStart = 1002;
@@ -917,6 +955,8 @@ void Win32Window::ApplyFramelessStyle() {
     }
   }
 
+  ApplyWin32AcrylicAccent(window_handle_, use_mica, is_dark_mode_);
+
   MARGINS margins{0, 0, 0, 0};
   if (use_mica) {
     margins = {-1, -1, -1, -1};
@@ -975,7 +1015,9 @@ void Win32Window::SetDarkTheme(bool is_dark) {
     DwmSetWindowAttribute(window_handle_, DWMWA_BORDER_COLOR, &border_col,
                           sizeof(border_col));
   }
-  if (!IsBackdropEffectEnabled()) {
+  if (IsBackdropEffectEnabled()) {
+    ApplyWin32AcrylicAccent(window_handle_, true, is_dark_mode_);
+  } else {
     InvalidateRect(window_handle_, nullptr, TRUE);
   }
 }

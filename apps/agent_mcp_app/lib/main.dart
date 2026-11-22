@@ -128,8 +128,14 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const _ConsoleScrollBehavior(),
         themeAnimationDuration: Duration.zero,
-        theme: buildClaudeTheme(ClaudePalette.activeLight),
-        darkTheme: buildClaudeTheme(ClaudePalette.activeDark),
+        theme: buildClaudeTheme(
+          ClaudePalette.activeLight,
+          transparentScaffold: widget.backend.hasCustomTitleBar,
+        ),
+        darkTheme: buildClaudeTheme(
+          ClaudePalette.activeDark,
+          transparentScaffold: widget.backend.hasCustomTitleBar,
+        ),
         themeMode: _themeMode,
         builder: (ctx, navChild) {
           return Stack(
@@ -295,7 +301,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.5.0';
+  String _version = '2.5.1';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -478,7 +484,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.5.0').toString();
+      _version = (auth['version'] ?? '2.5.1').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1328,7 +1334,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     );
     // Floating immersive header on Android & Web so scrolling content invades
     // right behind the frosted glass header, status bar, and camera cutout!
-    final useFloatingTopBar = true;
+    final useFloatingTopBar = isMobile || !widget.backend.hasCustomTitleBar;
     final hideTopOnScroll = true;
     final showTopChrome = !hideTopOnScroll || _chromeVisible;
     final pageTopInset = useFloatingTopBar
@@ -1458,10 +1464,20 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
           Column(
             children: [
               if (!useFloatingTopBar)
-                _buildEditorialHeaderBar(
-                  c,
-                  winState: winState,
-                  micaActive: micaActive,
+                AnimatedContainer(
+                  duration: chromeDur,
+                  curve: ClaudeMotion.editorialOut,
+                  height: showTopChrome ? 46.0 : 0.0,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(color: Colors.transparent),
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: _buildEditorialHeaderBar(
+                      c,
+                      winState: winState,
+                      micaActive: micaActive,
+                    ),
+                  ),
                 ),
               Expanded(
                 child: Row(
@@ -1491,11 +1507,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                               14.0,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  micaActive ? c.micaSidebarTint : c.sidebar,
-                              border: Border(
-                                right: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
-                              ),
+                              color: (micaActive && widget.backend.hasCustomTitleBar)
+                                  ? Colors.transparent
+                                  : (micaActive ? c.glassBarTint : c.sidebar),
+                              border: (micaActive && widget.backend.hasCustomTitleBar)
+                                  ? null
+                                  : Border(
+                                      right: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
+                                    ),
                             ),
                             child: LayoutBuilder(
                               builder: (sbCtx, sbBox) => SingleChildScrollView(
@@ -1706,6 +1725,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                       ),
                     Expanded(
                       child: Container(
+                        margin: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
+                            ? EdgeInsets.fromLTRB(0, showTopChrome ? 0 : 8, 8, 8)
+                            : EdgeInsets.zero,
+                        clipBehavior: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
+                            ? Clip.antiAlias
+                            : Clip.none,
                         decoration: BoxDecoration(
                           color: !micaActive
                               ? c.paper
@@ -1713,13 +1738,24 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                   ? c.micaCanvasTint
                                   : Colors.transparent),
                           borderRadius: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                              ? const BorderRadius.only(topLeft: Radius.circular(14))
+                              ? BorderRadius.circular(14)
                               : null,
                           border: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
-                              ? Border(
-                                  top: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
-                                  left: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
+                              ? Border.all(
+                                  color: c.isDark
+                                      ? Colors.white.withValues(alpha: 0.085)
+                                      : Colors.black.withValues(alpha: 0.065),
+                                  width: 1,
                                 )
+                              : null,
+                          boxShadow: (!isMobile && micaActive && widget.backend.hasCustomTitleBar)
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.06),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ]
                               : null,
                         ),
                         child: Center(
@@ -1761,8 +1797,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 SizedBox(
                   height: 31 + safeBottom,
                   child: ClaudeGlassBar(
-                    blurSigma: 16,
-                    tintColor: micaActive ? c.micaSidebarTint : c.glassBarTint,
+                    blurSigma: (micaActive && widget.backend.hasCustomTitleBar) ? 0 : 16,
+                    tintColor: (micaActive && widget.backend.hasCustomTitleBar)
+                        ? Colors.transparent
+                        : c.glassBarTint,
                     border: Border(top: BorderSide(color: c.hairline)),
                     padding: EdgeInsets.only(
                       left: 18 + safeLeft,
@@ -1879,7 +1917,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 ),
               ),
             ),
-          if (useFloatingTopBar && !showTopChrome)
+          if (!showTopChrome)
             Positioned(
               top: 0,
               left: 0,

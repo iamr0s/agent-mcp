@@ -273,14 +273,12 @@ class ClaudePalette {
 
   /// Whisper-light translucent chrome tint so Win11 Native Acrylic frosted glass
   /// shines unmistakably through the top titlebar & left vertical sidebar.
-  Color get micaSidebarTint => isDark
-      ? const Color(0x2213151A) // ~13% whisper obsidian over Win11 Acrylic
-      : const Color(0x18FFFFFF); // ~9% whisper frost over Win11 Acrylic
+  Color get micaSidebarTint => Colors.transparent;
 
-  /// Crisp high-contrast main reading pane over Acrylic chrome (Windows 11 Settings / Fluent style).
+  /// Crisp Arc / Linear floating reading island over true Win11 Acrylic frosted chrome.
   Color get micaCanvasTint => isDark
-      ? const Color(0xF0181A20) // ~94% crisp obsidian canvas
-      : const Color(0xF4FAF9F6); // ~96% crisp paper canvas
+      ? const Color(0xFA101218) // Raycast deep blue-shifted obsidian island
+      : const Color(0xFCFFFFFF); // Crisp porcelain floating island
 
   /// Specular 1px top/inner highlight on frosted glass surfaces.
   Color get glassSpecular => isDark
@@ -399,7 +397,7 @@ TextStyle monoStyle(
   );
 }
 
-ThemeData buildClaudeTheme(ClaudePalette c) {
+ThemeData buildClaudeTheme(ClaudePalette c, {bool transparentScaffold = false}) {
   final scheme = ColorScheme(
     brightness: c.isDark ? Brightness.dark : Brightness.light,
     primary: c.clay,
@@ -422,7 +420,8 @@ ThemeData buildClaudeTheme(ClaudePalette c) {
     useMaterial3: true,
     brightness: scheme.brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: c.paper,
+    scaffoldBackgroundColor: transparentScaffold ? Colors.transparent : c.paper,
+    canvasColor: transparentScaffold ? Colors.transparent : c.paper,
     fontFamily: kFontSans,
     fontFamilyFallback: kSansFallback,
     textTheme: TextTheme(
