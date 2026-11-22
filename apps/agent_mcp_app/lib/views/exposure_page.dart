@@ -368,8 +368,74 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             const SizedBox(height: 14),
           ],
 
-          // Relaxed 4-Mode Quick Launch Cards (Tap any card to open pre-selected!)
-          if (_enabled) ...[
+          // Adaptive Share Dropzone: sleek 52px bar when active shares exist; airy 4-mode cards when empty
+          if (_enabled && items.isNotEmpty) ...[
+            InkWell(
+              onTap: () => _openCreateDialog(initialMode: 'file'),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: ShapeDecoration(
+                  color: c.paper2,
+                  shape: claudeSuperellipse(
+                    14,
+                    side: BorderSide(color: c.hairline),
+                  ),
+                ),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.file_upload_outlined, size: 17, color: c.clay),
+                        const SizedBox(width: 8),
+                        Text(
+                          '拖入文件、文件夹或 HTML 网页松手即享',
+                          style: sansStyle(c, size: 13, weight: FontWeight.w500, color: c.ink),
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        ClaudeButton(
+                          label: '单文件',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          onPressed: () => _openCreateDialog(initialMode: 'file'),
+                        ),
+                        ClaudeButton(
+                          label: '文件夹',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          onPressed: () => _openCreateDialog(initialMode: 'folder'),
+                        ),
+                        ClaudeButton(
+                          label: '静态网站',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          onPressed: () => _openCreateDialog(initialMode: 'site'),
+                        ),
+                        ClaudeButton(
+                          label: '端口转发',
+                          compact: true,
+                          variant: ClaudeBtnVariant.ghost,
+                          onPressed: () => _openCreateDialog(initialMode: 'port'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else if (_enabled) ...[
             LayoutBuilder(
               builder: (ctx, qbox) {
                 final cols = qbox.maxWidth < 520
@@ -818,7 +884,7 @@ class _HowToUseStepRow extends StatelessWidget {
   }
 }
 
-class _ActiveExposureCard extends StatelessWidget {
+class _ActiveExposureCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final bool closing;
   final Future<void> Function(String text, String tip) onCopy;
@@ -836,7 +902,22 @@ class _ActiveExposureCard extends StatelessWidget {
   });
 
   @override
+  State<_ActiveExposureCard> createState() => _ActiveExposureCardState();
+}
+
+class _ActiveExposureCardState extends State<_ActiveExposureCard> {
+  bool _hovered = false;
+
+  Map<String, dynamic> get item => widget.item;
+  bool get closing => widget.closing;
+  Future<void> Function(String text, String tip) get onCopy => widget.onCopy;
+  void Function(String title, String url) get onShowQr => widget.onShowQr;
+  ValueChanged<String> get onOpenBrowser => widget.onOpenBrowser;
+  VoidCallback get onClose => widget.onClose;
+
+  @override
   Widget build(BuildContext context) {
+    final revealSecondary = _hovered || MediaQuery.sizeOf(context).width < 760;
     final c = ClaudePalette.of(context);
     final kind = (item['kind'] ?? 'file').toString();
     final label = (item['label'] ?? '未命名分享').toString();
@@ -908,8 +989,15 @@ class _ActiveExposureCard extends StatelessWidget {
       );
     }
 
-    return ClaudeCard(
-      padding: const EdgeInsets.all(18),
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: ClaudeCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1011,32 +1099,49 @@ class _ActiveExposureCard extends StatelessWidget {
                       onPressed: () =>
                           onCopy(primaryUrl, '已复制分享链接：$primaryUrl'),
                     ),
-                    ClaudeButton(
-                      label: '二维码',
-                      compact: true,
-                      leading: const Icon(Icons.qr_code_rounded),
-                      onPressed: () => onShowQr(label, primaryUrl),
-                    ),
-                    ClaudeButton(
-                      label: '打开预览',
-                      compact: true,
-                      leading: const Icon(Icons.open_in_new_rounded),
-                      onPressed: () => onOpenBrowser(primaryUrl),
-                    ),
-                    if (copyOptions.length > 1)
-                      EndpointCopyDropButton(
-                        label: '更多通道 (${copyOptions.length})',
-                        options: copyOptions,
-                        onSelect: (opt) =>
-                            onCopy(opt.url, '已复制 ${opt.badge} 地址：${opt.url}'),
+                    AnimatedOpacity(
+                      duration: ClaudeMotion.duration(
+                        context,
+                        const Duration(milliseconds: 140),
                       ),
-                    ClaudeButton(
-                      label: closing ? '关闭中...' : '关闭分享',
-                      compact: true,
-                      loading: closing,
-                      variant: ClaudeBtnVariant.ghost,
-                      leading: const Icon(Icons.close_rounded),
-                      onPressed: onClose,
+                      opacity: revealSecondary ? 1.0 : 0.30,
+                      child: Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: [
+                          ClaudeButton(
+                            label: '二维码',
+                            compact: true,
+                            variant: ClaudeBtnVariant.ghost,
+                            leading: const Icon(Icons.qr_code_rounded),
+                            onPressed: () => onShowQr(label, primaryUrl),
+                          ),
+                          ClaudeButton(
+                            label: '打开预览',
+                            compact: true,
+                            variant: ClaudeBtnVariant.ghost,
+                            leading: const Icon(Icons.open_in_new_rounded),
+                            onPressed: () => onOpenBrowser(primaryUrl),
+                          ),
+                          if (copyOptions.length > 1)
+                            EndpointCopyDropButton(
+                              label: '更多通道 (${copyOptions.length})',
+                              options: copyOptions,
+                              onSelect: (opt) => onCopy(
+                                opt.url,
+                                '已复制 ${opt.badge} 地址：${opt.url}',
+                              ),
+                            ),
+                          ClaudeButton(
+                            label: closing ? '关闭中...' : '关闭分享',
+                            compact: true,
+                            loading: closing,
+                            variant: ClaudeBtnVariant.ghost,
+                            leading: const Icon(Icons.close_rounded),
+                            onPressed: onClose,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1044,6 +1149,7 @@ class _ActiveExposureCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1210,7 +1316,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
       'port' => '例如 3000 或 5173',
       'file' => '例如 D:\\视频\\demo.mp4（可点右侧按钮直接选文件）',
       'folder' => '例如 D:\\教学资料\\实验包（可点右侧按钮直接选文件夹）',
-      _ => '例如 D:\\课件\\lab.html 或 D:\\web\\dist',
+      _ => '例如 D:\\web\\dist（网站目录）或 D:\\lab.html（单页）',
     };
 
     final defaultPorts = <int>[
@@ -1300,7 +1406,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         children: [
                           if (_mode == 'file' || _mode == 'site')
                             ClaudeButton(
-                              label: _picking ? '选择中...' : '选文件...',
+                              label: _picking ? '选择中...' : (_mode == 'site' ? '选 HTML 文件' : '选文件...'),
                               compact: true,
                               leading:
                                   const Icon(Icons.insert_drive_file_outlined),
@@ -1310,7 +1416,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                             ),
                           if (_mode == 'folder' || _mode == 'site')
                             ClaudeButton(
-                              label: _picking ? '选择中...' : '选文件夹...',
+                              label: _picking ? '选择中...' : (_mode == 'site' ? '选网站文件夹' : '选文件夹...'),
                               compact: true,
                               leading: const Icon(Icons.folder_open_rounded),
                               onPressed: _picking

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-const String agentMcpVersion = '2.2.0';
+const String agentMcpVersion = '2.3.0';
 
 const String appIconSvg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'

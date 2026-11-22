@@ -132,54 +132,54 @@ class ClaudePalette {
 
   static const light = ClaudePalette(
     isDark: false,
-    paper: Color(0xFFF5F4ED), // Parchment canvas
-    paper2: Color(0xFFFAF9F5), // Ivory elevated card
-    paper3: Color(0xFFE8E6DC), // Warm Sand interactive fill
-    sidebar: Color(0xFFEFEDE4), // Warm Linen sidebar
-    recessed: Color(0xFFF2F0E8), // Subtle recessed well
-    ink: Color(0xFF141413), // Anthropic Near Black
-    inkSoft: Color(0xFF3D3D3A), // Charcoal Warm
-    muted: Color(0xFF5E5D59), // Olive Gray
-    meta: Color(0xFF87867F), // Stone Gray
-    hairline: Color(0xFFE6E4DA), // Border Cream
-    ringHover: Color(0xFFCFCDC2), // Ring Warm
-    clay: Color(0xFFC96442), // Terracotta Brand
-    clayHover: Color(0xFFB55535),
-    focusRing: Color(0xFF3898EC),
-    sage: Color(0xFF4D7343),
-    sageBg: Color(0x1F4D7343),
-    danger: Color(0xFFB53333), // Error Crimson
-    dangerBg: Color(0x1AB53333),
-    purple: Color(0xFF695899),
-    purpleBg: Color(0x1E695899),
-    termBg: Color(0xFF161614),
-    termFg: Color(0xFFEDEAE2),
+    paper: Color(0xFFFAF9F6), // Quiet warm off-white canvas
+    paper2: Color(0xFFFFFFFF), // Crisp pure-white elevated surface
+    paper3: Color(0xFFECEEF5), // Subtle indigo-mist interactive fill
+    sidebar: Color(0xFFEFF2F6), // Cool architectural mist sidebar
+    recessed: Color(0xFFF3F4F7), // Clean recessed well
+    ink: Color(0xFF13161C), // Deep Swiss slate ink
+    inkSoft: Color(0xFF3A404D), // Soft slate body
+    muted: Color(0xFF636B78), // Balanced secondary text
+    meta: Color(0xFF858D9B), // Tertiary metadata
+    hairline: Color(0xFFE4E6EB), // Crisp 1px hairline
+    ringHover: Color(0xFFC9CED8), // Subtle hover ring
+    clay: Color(0xFF4338CA), // Restrained indigo-slate primary accent
+    clayHover: Color(0xFF3730A3),
+    focusRing: Color(0xFF4F46E5),
+    sage: Color(0xFF168A45),
+    sageBg: Color(0x1A168A45),
+    danger: Color(0xFFDC2626), // Crisp crimson
+    dangerBg: Color(0x18DC2626),
+    purple: Color(0xFF5B4FD9),
+    purpleBg: Color(0x1C5B4FD9),
+    termBg: Color(0xFF13151A),
+    termFg: Color(0xFFECEFF4),
   );
 
   static const dark = ClaudePalette(
     isDark: true,
-    paper: Color(0xFF141413), // Deep Dark canvas
-    paper2: Color(0xFF1E1E1B), // Elevated Charcoal card
-    paper3: Color(0xFF2B2A27), // Dark Sand interactive fill
-    sidebar: Color(0xFF191816), // Recessed dark sidebar
-    recessed: Color(0xFF171614), // Recessed well
-    ink: Color(0xFFFAF9F5), // Ivory ink
-    inkSoft: Color(0xFFD6D4CB),
-    muted: Color(0xFFB0AEA5), // Warm Silver
-    meta: Color(0xFF807E77),
-    hairline: Color(0xFF2E2D2A), // Border Dark
-    ringHover: Color(0xFF46443F),
-    clay: Color(0xFFD97757), // Coral Terracotta
-    clayHover: Color(0xFFE3886B),
-    focusRing: Color(0xFF4BA3F2),
-    sage: Color(0xFF8AB06D),
-    sageBg: Color(0x288AB06D),
-    danger: Color(0xFFE06868),
-    dangerBg: Color(0x26E06868),
-    purple: Color(0xFFA89AD4),
-    purpleBg: Color(0x288F7EC2),
-    termBg: Color(0xFF0E0E0C),
-    termFg: Color(0xFFEDEAE2),
+    paper: Color(0xFF181A20), // Deep obsidian canvas
+    paper2: Color(0xFF1F222A), // Elevated obsidian surface
+    paper3: Color(0xFF262A36), // Interactive surface
+    sidebar: Color(0xFF13151A), // Recessed dark rail
+    recessed: Color(0xFF14161C), // Recessed well
+    ink: Color(0xFFF3F4F6), // Cool white ink
+    inkSoft: Color(0xFFC7CDD8),
+    muted: Color(0xFF939CAE), // Calm slate silver
+    meta: Color(0xFF727B8E),
+    hairline: Color(0xFF2A2E39), // 1px specular hairline
+    ringHover: Color(0xFF3E4454),
+    clay: Color(0xFF818CF8), // Luminous soft indigo accent
+    clayHover: Color(0xFF939DFA),
+    focusRing: Color(0xFF818CF8),
+    sage: Color(0xFF22C55E),
+    sageBg: Color(0x2422C55E),
+    danger: Color(0xFFF87171),
+    dangerBg: Color(0x24F87171),
+    purple: Color(0xFFA5B4FC),
+    purpleBg: Color(0x26818CF8),
+    termBg: Color(0xFF0F1116),
+    termFg: Color(0xFFECEFF4),
   );
 
   static ClaudePalette of(BuildContext context) {
@@ -188,18 +188,18 @@ class ClaudePalette {
 
   /// Translucent frosted glass tint for fixed bars & floating surfaces.
   Color get glassBarTint => isDark
-      ? const Color(0xBF191816) // 75% warm dark charcoal
-      : const Color(0xCCF5F4ED); // 80% warm parchment
+      ? const Color(0xC813151A) // 78% obsidian glass
+      : const Color(0xD4EFF2F6); // 83% architectural mist
 
   /// Translucent sidebar tint when Windows 11 Mica backdrop is active.
   Color get micaSidebarTint => isDark
-      ? const Color(0xA8191816) // 66% dark linen over Mica
-      : const Color(0xB8EFEDE4); // 72% warm linen over Mica
+      ? const Color(0xB013151A) // 69% obsidian rail over Mica
+      : const Color(0xC2EFF2F6); // 76% mist rail over Mica
 
   /// Translucent main reading pane tint over Mica (keeps text ultra-crisp).
   Color get micaCanvasTint => isDark
-      ? const Color(0xEB141413) // 92% deep charcoal
-      : const Color(0xEEFAF9F5); // 93% warm ivory/parchment
+      ? const Color(0xED181A20) // 93% deep obsidian
+      : const Color(0xF0FAF9F6); // 94% warm off-white
 
   /// Specular 1px top/inner highlight on frosted glass surfaces.
   Color get glassSpecular => isDark
@@ -2372,6 +2372,102 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
                       : null,
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Precision single-line hairline list row with smooth hover-reveal secondary actions.
+/// Keeps desktop lists calm and uncluttered while preserving full tap access on narrow/touch screens.
+class ClaudeHoverRevealRow extends StatefulWidget {
+  final Widget leading;
+  final Widget? secondaryActions;
+  final Widget? primaryAction;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry padding;
+  final bool showDivider;
+  final bool highlighted;
+
+  const ClaudeHoverRevealRow({
+    super.key,
+    required this.leading,
+    this.secondaryActions,
+    this.primaryAction,
+    this.onTap,
+    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+    this.showDivider = true,
+    this.highlighted = false,
+  });
+
+  @override
+  State<ClaudeHoverRevealRow> createState() => _ClaudeHoverRevealRowState();
+}
+
+class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final alwaysShowSecondary = MediaQuery.sizeOf(context).width < 760;
+    final reveal = _hovered || alwaysShowSecondary;
+
+    final rowBg = widget.highlighted
+        ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.08)
+        : (_hovered ? c.paper3.withValues(alpha: c.isDark ? 0.55 : 0.65) : Colors.transparent);
+
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: widget.showDivider
+              ? Border(bottom: BorderSide(color: c.hairline.withValues(alpha: 0.72)))
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(9),
+            hoverColor: Colors.transparent,
+            splashColor: c.clay.withValues(alpha: 0.08),
+            child: AnimatedContainer(
+              duration: ClaudeMotion.duration(context, const Duration(milliseconds: 130)),
+              curve: Curves.easeOutCubic,
+              padding: widget.padding,
+              decoration: BoxDecoration(
+                color: rowBg,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: widget.leading),
+                  if (widget.secondaryActions != null) ...[
+                    const SizedBox(width: 8),
+                    AnimatedOpacity(
+                      duration: ClaudeMotion.duration(context, const Duration(milliseconds: 140)),
+                      opacity: reveal ? 1.0 : 0.0,
+                      child: IgnorePointer(
+                        ignoring: !reveal,
+                        child: widget.secondaryActions!,
+                      ),
+                    ),
+                  ],
+                  if (widget.primaryAction != null) ...[
+                    const SizedBox(width: 6),
+                    widget.primaryAction!,
+                  ],
+                ],
+              ),
             ),
           ),
         ),

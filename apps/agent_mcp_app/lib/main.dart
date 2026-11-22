@@ -4,6 +4,7 @@ import 'dart:ui' show PlatformDispatcher, lerpDouble;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'services/console_backend.dart';
 import 'theme/claude_theme.dart';
@@ -250,7 +251,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.2.0';
+  String _version = '2.3.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -411,7 +412,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.2.0').toString();
+      _version = (auth['version'] ?? '2.3.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -449,6 +450,49 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     await _bootstrap();
     if (mounted) {
       _showToast('已切换至：${widget.backend.activeNode.name}');
+    }
+  }
+
+  Future<void> _openCommandPalette() async {
+    if (!mounted || !_authenticated) return;
+    final res = await showClaudeDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _GlobalCommandPaletteDialog(
+        serverName: _serverName,
+        isRunning: _isRunning,
+        isDark: Theme.of(context).brightness == Brightness.dark,
+        activeNodeName: widget.backend.activeNode.name,
+      ),
+    );
+    if (!mounted || res == null) return;
+    final action = (res['action'] ?? '').toString();
+    switch (action) {
+      case 'share_direct':
+        final target = (res['target'] ?? '').toString().trim();
+        if (target.isNotEmpty) {
+          setState(() {
+            _tabIndex = 2;
+            _chromeVisible = true;
+          });
+          _droppedSharePath.value = target;
+        }
+        break;
+      case 'tab':
+        final idx = (res['index'] as int?) ?? 0;
+        _selectTab(idx);
+        break;
+      case 'nodes':
+        if (widget.backend.supportsNodeSwitching) {
+          await _openRemoteNodesDialog();
+        }
+        break;
+      case 'restart':
+        await _restartService();
+        break;
+      case 'toggle_theme':
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        _applyThemeWithSnapshot(isDark ? ThemeMode.light : ThemeMode.dark);
+        break;
     }
   }
 
@@ -905,6 +949,51 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         ),
                       ),
                     ),
+                    if (showAuthControls && viewW >= 860) ...[
+                      InkWell(
+                        onTap: _openCommandPalette,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 28,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: c.paper2.withValues(alpha: c.isDark ? 0.72 : 0.88),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: c.hairline.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.search_rounded, size: 13.5, color: c.meta),
+                              const SizedBox(width: 6),
+                              Text(
+                                '指令、切节点或贴路径秒享…',
+                                style: sansStyle(c, size: 11.8, color: c.muted),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: c.recessed,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: c.hairline),
+                                ),
+                                child: Text(
+                                  'Ctrl K',
+                                  style: monoStyle(c, size: 10, color: c.meta),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1119,7 +1208,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       ),
     ];
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _openCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _openCommandPalette,
+      },
+      child: Scaffold(
       key: const ValueKey('shell'),
       backgroundColor: micaActive ? Colors.transparent : c.paper,
       body: Stack(
@@ -1717,6 +1813,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -2733,6 +2830,291 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlobalCommandPaletteDialog extends StatefulWidget {
+  final String serverName;
+  final bool isRunning;
+  final bool isDark;
+  final String activeNodeName;
+
+  const _GlobalCommandPaletteDialog({
+    required this.serverName,
+    required this.isRunning,
+    required this.isDark,
+    required this.activeNodeName,
+  });
+
+  @override
+  State<_GlobalCommandPaletteDialog> createState() =>
+      _GlobalCommandPaletteDialogState();
+}
+
+class _GlobalCommandPaletteDialogState
+    extends State<_GlobalCommandPaletteDialog> {
+  final TextEditingController _ctrl = TextEditingController();
+  final FocusNode _focus = FocusNode();
+  int _selectedIdx = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  List<({String title, String hint, IconData icon, Map<String, dynamic> payload})>
+      _buildEntries() {
+    final q = _ctrl.text.trim();
+    final ql = q.toLowerCase();
+    final items =
+        <({String title, String hint, IconData icon, Map<String, dynamic> payload})>[];
+
+    final portNum = int.tryParse(q.replaceAll(':', ''));
+    if (portNum != null && portNum >= 1 && portNum <= 65535) {
+      items.add((
+        title: '立即转发本地端口 :$portNum（支持 WebSocket HMR）',
+        hint: '回车秒享',
+        icon: Icons.podcasts_rounded,
+        payload: {'action': 'share_direct', 'target': '$portNum'},
+      ));
+    } else if (q.contains(r'\') ||
+        q.contains('/') ||
+        ql.endsWith('.html') ||
+        ql.endsWith('.htm')) {
+      items.add((
+        title: '立即生成外链分享：$q',
+        hint: '回车秒享',
+        icon: Icons.add_link_rounded,
+        payload: {'action': 'share_direct', 'target': q},
+      ));
+    }
+
+    final presets = <({String title, String hint, IconData icon, Map<String, dynamic> payload})>[
+      (
+        title: '前往外网与分享（文件 / 文件夹 / 静态网站 / 端口）',
+        hint: '外网分享',
+        icon: Icons.link_rounded,
+        payload: {'action': 'tab', 'index': 2},
+      ),
+      (
+        title: '切换本机服务或远程电脑 / 手机节点（当前：${widget.activeNodeName}）',
+        hint: '节点管理',
+        icon: Icons.dns_rounded,
+        payload: {'action': 'nodes'},
+      ),
+      (
+        title: '平滑重启 MCP 服务',
+        hint: '服务控制',
+        icon: Icons.restart_alt_rounded,
+        payload: {'action': 'restart'},
+      ),
+      (
+        title: widget.isDark ? '切换至暖纸浅色主题' : '切换至深岩暗色主题',
+        hint: '外观',
+        icon: widget.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+        payload: {'action': 'toggle_theme'},
+      ),
+      (
+        title: '前往子 MCP 网关（粘贴 mcpServers JSON）',
+        hint: '子网关',
+        icon: Icons.layers_rounded,
+        payload: {'action': 'tab', 'index': 1},
+      ),
+      (
+        title: '前往服务配置（接入入口 / 外网隧道 / 存储清理）',
+        hint: '服务配置',
+        icon: Icons.tune_rounded,
+        payload: {'action': 'tab', 'index': 3},
+      ),
+      (
+        title: '前往活动与调用流',
+        hint: '调用流',
+        icon: Icons.bolt_rounded,
+        payload: {'action': 'tab', 'index': 0},
+      ),
+    ];
+
+    if (ql.isEmpty) {
+      items.addAll(presets);
+    } else {
+      for (final p in presets) {
+        if ('${p.title} ${p.hint}'.toLowerCase().contains(ql)) {
+          items.add(p);
+        }
+      }
+    }
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final entries = _buildEntries();
+    if (_selectedIdx >= entries.length) _selectedIdx = 0;
+
+    return Dialog(
+      backgroundColor: c.paper2,
+      elevation: 0,
+      alignment: const Alignment(0, -0.45),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: claudeSuperellipse(18),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Focus(
+          onKeyEvent: (_, KeyEvent ev) {
+            if (ev is! KeyDownEvent) return KeyEventResult.ignored;
+            if (ev.logicalKey == LogicalKeyboardKey.arrowDown &&
+                entries.isNotEmpty) {
+              setState(() {
+                _selectedIdx = (_selectedIdx + 1).clamp(0, entries.length - 1);
+              });
+              return KeyEventResult.handled;
+            }
+            if (ev.logicalKey == LogicalKeyboardKey.arrowUp &&
+                entries.isNotEmpty) {
+              setState(() {
+                _selectedIdx = (_selectedIdx - 1).clamp(0, entries.length - 1);
+              });
+              return KeyEventResult.handled;
+            }
+            if (ev.logicalKey == LogicalKeyboardKey.enter &&
+                entries.isNotEmpty) {
+              Navigator.of(context).pop(entries[_selectedIdx].payload);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, size: 17, color: c.meta),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _ctrl,
+                        focusNode: _focus,
+                        onChanged: (_) => setState(() => _selectedIdx = 0),
+                        onSubmitted: (_) {
+                          if (entries.isNotEmpty) {
+                            Navigator.of(context).pop(entries[_selectedIdx].payload);
+                          }
+                        },
+                        style: sansStyle(c, size: 14, color: c.ink),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          hintText: '输入指令，或直接粘贴路径 / 端口号回车秒享…',
+                          hintStyle: sansStyle(c, size: 13.5, color: c.meta),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.recessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: c.hairline),
+                      ),
+                      child: Text('ESC', style: monoStyle(c, size: 10.5, color: c.meta)),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: c.hairline),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: entries.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          '未找到匹配指令',
+                          style: sansStyle(c, size: 13, color: c.muted),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(6),
+                        itemCount: entries.length,
+                        itemBuilder: (ctx, i) {
+                          final it = entries[i];
+                          final sel = i == _selectedIdx;
+                          return Material(
+                            color: sel
+                                ? c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(9),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(9),
+                              onTap: () => Navigator.of(context).pop(it.payload),
+                              onHover: (h) {
+                                if (h && _selectedIdx != i) {
+                                  setState(() => _selectedIdx = i);
+                                }
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      it.icon,
+                                      size: 16,
+                                      color: sel ? c.clay : c.muted,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        it.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: sansStyle(
+                                          c,
+                                          size: 13,
+                                          weight: sel ? FontWeight.w600 : FontWeight.w500,
+                                          color: sel ? c.ink : c.inkSoft,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      it.hint,
+                                      style: sansStyle(c, size: 11.5, color: c.meta),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
         ),
       ),

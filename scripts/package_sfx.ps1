@@ -1,6 +1,6 @@
 param(
     [switch]$SkipBuild,
-    [string]$Version = "2.2.0"
+    [string]$Version = "2.3.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -104,7 +104,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Agent MCP Self-Extracting Setup")]
 [assembly: AssemblyProduct("Agent MCP Console")]
-[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyVersion("2.3.0.0")]
 
 namespace AgentMcpSfx {
     internal static class Program {
@@ -357,8 +357,8 @@ namespace AgentMcpSfx {
 }
 '@
 
-$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "2.2.0.0" }
-[System.IO.File]::WriteAllText($csFile, $csSource.Replace('AssemblyVersion("2.2.0.0")', "AssemblyVersion(`"$asmVer`")"), (New-Object System.Text.UTF8Encoding($true)))
+$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "2.3.0.0" }
+[System.IO.File]::WriteAllText($csFile, $csSource.Replace('AssemblyVersion("2.3.0.0")', "AssemblyVersion(`"$asmVer`")"), (New-Object System.Text.UTF8Encoding($true)))
 if (Test-Path $sfxOutPath) { Remove-Item -Force $sfxOutPath }
 
 & $csc /nologo /target:winexe /optimize+ `

@@ -93,7 +93,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
         'ok': true,
         'authenticated': true,
         'server_name': 'Omen Desktop Mcp',
-        'version': '2.2.0',
+        'version': '2.3.0',
         'dashboard_mode': false,
       };
 
@@ -106,7 +106,7 @@ class _FakeConsoleBackend extends ConsoleBackend {
   @override
   Future<Map<String, dynamic>> getStatus() async => {
         'running': true,
-        'version': '2.2.0',
+        'version': '2.3.0',
         'dashboard_mode': false,
         'tunnels': {
           'installed': true,
@@ -863,5 +863,40 @@ void main() {
     await tester.tap(find.text('单个视频 / 文件'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('1次即焚'), findsOneWidget);
+  });
+
+  testWidgets(
+      'v2.3 Swiss Craft UI: Ctrl+K command palette routes direct port/path share & static site offers dual HTML/folder pickers',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 960);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+
+    expect(find.text('Ctrl K'), findsOneWidget);
+    await tester.tap(find.text('Ctrl K'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('输入指令，或直接粘贴路径 / 端口号回车秒享…'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).last, '5173');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('立即转发本地端口 :5173（支持 WebSocket HMR）'), findsOneWidget);
+    await tester.tap(find.text('立即转发本地端口 :5173（支持 WebSocket HMR）'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('新建外网映射与分享'), findsOneWidget);
+
+    await tester.tap(find.text('静态网站 / HTML'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('选 HTML 文件'), findsOneWidget);
+    expect(find.text('选网站文件夹'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
