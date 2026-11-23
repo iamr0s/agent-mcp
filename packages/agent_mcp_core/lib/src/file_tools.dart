@@ -209,7 +209,7 @@ void registerFileTools(
   final fileMutex = FileAsyncMutex();
 
   String resolveTarget(String rawPath) {
-    final roots = getEffectivePolicy(config).roots;
+    final roots = getEffectivePolicy(config).effectiveRoots;
     return normalizePath(rawPath, roots);
   }
 

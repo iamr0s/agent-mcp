@@ -25,6 +25,10 @@ class StoragePaths {
       File(p.join(dataDir.path, 'window_state.json'));
   late final File tunnelStateFile =
       File(p.join(dataDir.path, 'tunnel_state.json'));
+  late final File subMcpTokensFile =
+      File(p.join(dataDir.path, 'sub_mcp_tokens.json'));
+  late final File exposuresStateFile =
+      File(p.join(dataDir.path, 'exposures_state.json'));
 
   StoragePaths(this.rootDir);
 
@@ -186,6 +190,7 @@ const List<String> secretFilenamePatterns = [
   'mcp_oauth_state.json',
   'oauth_state.json',
   'mcp_sub_servers.json',
+  'sub_mcp_tokens.json',
 ];
 
 const Set<String> secretDirParts = {
@@ -196,6 +201,70 @@ const Set<String> secretDirParts = {
   '.local-agent-mcp',
 };
 
+bool containsPathWildcard(String raw) => raw.contains('*') || raw.contains('?');
+
+/// Resolves CSS accent token hex strings from user-selected `accent_theme`
+/// so server-rendered HTML pages (OAuth login & 4-mode public share) match the console theme.
+({
+  String lightHex,
+  String lightHoverHex,
+  String lightRgba,
+  String darkHex,
+  String darkHoverHex,
+  String darkRgba,
+}) resolveServerAccentPalette(String? rawKey) {
+  return switch ((rawKey ?? 'indigo').trim().toLowerCase()) {
+    'jade' => (
+        lightHex: '#059669',
+        lightHoverHex: '#047857',
+        lightRgba: 'rgba(5,150,105,.10)',
+        darkHex: '#34D399',
+        darkHoverHex: '#6EE7B7',
+        darkRgba: 'rgba(52,211,153,.14)',
+      ),
+    'cobalt' => (
+        lightHex: '#2563EB',
+        lightHoverHex: '#1D4ED8',
+        lightRgba: 'rgba(37,99,235,.10)',
+        darkHex: '#60A5FA',
+        darkHoverHex: '#93C5FD',
+        darkRgba: 'rgba(96,165,250,.14)',
+      ),
+    'terracotta' => (
+        lightHex: '#D97757',
+        lightHoverHex: '#C25E3E',
+        lightRgba: 'rgba(217,119,87,.11)',
+        darkHex: '#F09A7E',
+        darkHoverHex: '#F6B8A3',
+        darkRgba: 'rgba(240,154,126,.14)',
+      ),
+    'violet' => (
+        lightHex: '#7C3AED',
+        lightHoverHex: '#6D28D9',
+        lightRgba: 'rgba(124,58,237,.10)',
+        darkHex: '#A78BFA',
+        darkHoverHex: '#C4B5FD',
+        darkRgba: 'rgba(167,139,250,.14)',
+      ),
+    'obsidian' => (
+        lightHex: '#18181B',
+        lightHoverHex: '#27272A',
+        lightRgba: 'rgba(24,24,27,.08)',
+        darkHex: '#E4E4E7',
+        darkHoverHex: '#FAFAFA',
+        darkRgba: 'rgba(228,228,231,.12)',
+      ),
+    _ => (
+        lightHex: '#4F46E5',
+        lightHoverHex: '#4338CA',
+        lightRgba: 'rgba(79,70,229,.09)',
+        darkHex: '#818CF8',
+        darkHoverHex: '#A5B4FC',
+        darkRgba: 'rgba(129,140,248,.13)',
+      ),
+  };
+}
+
 class AccessPolicy {
   final String profileId;
   final String profileName;
@@ -203,6 +272,11 @@ class AccessPolicy {
   final bool readOnly;
   final bool allowSecrets;
   final bool relaxedCommandAnnotations;
+  final bool allowAllRoots;
+  final bool allowCommands;
+  final bool allowProcesses;
+  final bool allowExposures;
+  final bool allowClipboardScreen;
   final List<String> roots;
 
   const AccessPolicy({
@@ -212,8 +286,20 @@ class AccessPolicy {
     this.readOnly = false,
     this.allowSecrets = false,
     this.relaxedCommandAnnotations = false,
+    bool? allowAllRoots,
+    this.allowCommands = true,
+    this.allowProcesses = true,
+    this.allowExposures = true,
+    this.allowClipboardScreen = true,
     this.roots = const [],
-  });
+  }) : allowAllRoots = allowAllRoots ?? (roots.length == 0);
+
+  List<String> get effectiveRoots => allowAllRoots ? const [] : roots;
+
+  List<String> get concreteRoots => effectiveRoots
+      .where((r) => !containsPathWildcard(r))
+      .map(expandAndResolvePath)
+      .toList();
 }
 
 const Object _policyZoneKey = #agentMcpAccessPolicy;
@@ -233,6 +319,11 @@ AccessPolicy getEffectivePolicy(ServerConfig config) {
     readOnly: config.readOnly,
     allowSecrets: config.allowSecrets,
     relaxedCommandAnnotations: config.relaxedCommandAnnotations,
+    allowAllRoots: config.allowAllRoots,
+    allowCommands: config.allowCommands,
+    allowProcesses: config.allowProcesses,
+    allowExposures: config.allowExposures,
+    allowClipboardScreen: config.allowClipboardScreen,
     roots: List<String>.unmodifiable(config.roots),
   );
 }
@@ -281,12 +372,18 @@ class ServerConfig {
   String? oauthTokenUrl;
   String? oauthJwksUrl;
   String? oauthLocalPasswordHash;
+  bool oauthAllowAllRedirects;
   List<String> oauthRedirectUris;
   List<Map<String, dynamic>> profiles;
+  bool allowAllRoots;
   List<String> roots;
   bool readOnly;
   bool allowSecrets;
   bool relaxedCommandAnnotations;
+  bool allowCommands;
+  bool allowProcesses;
+  bool allowExposures;
+  bool allowClipboardScreen;
   int maxReadChars;
   int maxCmdChars;
   int defaultTimeout;
@@ -313,12 +410,18 @@ class ServerConfig {
     this.oauthTokenUrl,
     this.oauthJwksUrl,
     this.oauthLocalPasswordHash,
+    bool? oauthAllowAllRedirects,
     List<String>? oauthRedirectUris,
     List<Map<String, dynamic>>? profiles,
+    bool? allowAllRoots,
     List<String>? roots,
     this.readOnly = false,
     this.allowSecrets = false,
     this.relaxedCommandAnnotations = false,
+    this.allowCommands = true,
+    this.allowProcesses = true,
+    this.allowExposures = true,
+    this.allowClipboardScreen = true,
     this.maxReadChars = 60000,
     this.maxCmdChars = 15000,
     this.defaultTimeout = 60,
@@ -331,23 +434,40 @@ class ServerConfig {
         host = parseBindHosts(hosts, host).first,
         oauthBaseUrls = oauthBaseUrls ?? [],
         oauthRedirectUris = oauthRedirectUris ?? [],
+        oauthAllowAllRedirects = oauthAllowAllRedirects ??
+            ((oauthRedirectUris == null || oauthRedirectUris.isEmpty)),
         profiles = profiles ?? [],
         roots = roots ?? [],
+        allowAllRoots = allowAllRoots ?? (roots == null || roots.isEmpty),
         configFile = configFile ?? StoragePaths.instance.defaultConfigFile;
 
-  bool get unrestricted => roots.isEmpty;
+  bool get unrestricted => allowAllRoots || roots.isEmpty;
+
+  List<String> get effectiveRoots => allowAllRoots ? const [] : roots;
 
   factory ServerConfig.fromSavedMap(
     Map<String, dynamic> saved, {
     File? configFile,
   }) {
     final profs = ensureProfilesInConfig(saved);
-    final rawRoots = (saved['roots'] as List?) ?? const [];
-    final resolvedRoots = rawRoots
+    final rawRoots = ((saved['roots'] as List?) ?? const [])
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
-        .map(expandAndResolvePath)
         .toList();
+    final resolvedRoots = rawRoots
+        .map((r) => containsPathWildcard(r) ? expandUserPath(r) : expandAndResolvePath(r))
+        .toList();
+    final allowAllRoots = saved.containsKey('allow_all_roots')
+        ? saved['allow_all_roots'] == true
+        : resolvedRoots.isEmpty;
+
+    final rawRedirects = ((saved['oauth_redirect_uris'] as List?) ?? const [])
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final allowAllRedirects = saved.containsKey('oauth_allow_all_redirects')
+        ? saved['oauth_allow_all_redirects'] == true
+        : rawRedirects.isEmpty;
 
     final bindHosts = parseBindHosts(saved['hosts'], saved['host']);
 
@@ -374,15 +494,18 @@ class ServerConfig {
       oauthJwksUrl: _nonEmptyOrNull(saved['oauth_jwks_url']),
       oauthLocalPasswordHash:
           _nonEmptyOrNull(saved['oauth_local_password_hash']),
-      oauthRedirectUris: ((saved['oauth_redirect_uris'] as List?) ?? const [])
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
-          .toList(),
+      oauthAllowAllRedirects: allowAllRedirects,
+      oauthRedirectUris: rawRedirects,
       profiles: profs,
+      allowAllRoots: allowAllRoots,
       roots: resolvedRoots,
       readOnly: saved['read_only'] == true,
       allowSecrets: saved['allow_secrets'] == true,
       relaxedCommandAnnotations: saved['relaxed_command_annotations'] == true,
+      allowCommands: saved['allow_commands'] != false,
+      allowProcesses: saved['allow_processes'] != false,
+      allowExposures: saved['allow_exposures'] != false,
+      allowClipboardScreen: saved['allow_clipboard_screen'] != false,
       defaultTimeout:
           (int.tryParse('${saved['default_timeout'] ?? 60}') ?? 60).clamp(1, 600),
       logLevel: (saved['log_level'] ?? 'INFO').toString().toUpperCase(),
@@ -692,6 +815,16 @@ Map<String, dynamic> normalizeProfile(
     primaryBaseUrl = baseUrls.isNotEmpty ? baseUrls.first : '';
   }
 
+  final parsedRedirects = parseStringList(raw['oauth_redirect_uris']);
+  final oauthAllowAllRedirects = raw.containsKey('oauth_allow_all_redirects')
+      ? raw['oauth_allow_all_redirects'] == true
+      : parsedRedirects.isEmpty;
+
+  final parsedRoots = parseStringList(raw['roots']);
+  final allowAllRoots = raw.containsKey('allow_all_roots')
+      ? raw['allow_all_roots'] == true
+      : parsedRoots.isEmpty;
+
   return <String, dynamic>{
     'id': pid,
     'name': name,
@@ -705,7 +838,8 @@ Map<String, dynamic> normalizeProfile(
     'api_key': _nonEmptyOrNull(raw['api_key']),
     'oauth_client_id': _nonEmptyOrNull(raw['oauth_client_id']),
     'oauth_client_secret': _nonEmptyOrNull(raw['oauth_client_secret']),
-    'oauth_redirect_uris': parseStringList(raw['oauth_redirect_uris']),
+    'oauth_allow_all_redirects': oauthAllowAllRedirects,
+    'oauth_redirect_uris': parsedRedirects,
     'tunnel_mode': tunnelMode,
     'tunnel_token': _nonEmptyOrNull(raw['tunnel_token']),
     'tunnel_auto_start': raw['tunnel_auto_start'] == null
@@ -717,7 +851,12 @@ Map<String, dynamic> normalizeProfile(
     'read_only': raw['read_only'] == true,
     'allow_secrets': raw['allow_secrets'] == true,
     'relaxed_command_annotations': raw['relaxed_command_annotations'] == true,
-    'roots': parseStringList(raw['roots']),
+    'allow_commands': raw['allow_commands'] != false,
+    'allow_processes': raw['allow_processes'] != false,
+    'allow_exposures': raw['allow_exposures'] != false,
+    'allow_clipboard_screen': raw['allow_clipboard_screen'] != false,
+    'allow_all_roots': allowAllRoots,
+    'roots': parsedRoots,
   };
 }
 
@@ -768,12 +907,18 @@ List<Map<String, dynamic>> ensureProfilesInConfig(Map<String, dynamic> data) {
           'api_key': data['api_key'],
           'oauth_client_id': data['oauth_client_id'],
           'oauth_client_secret': data['oauth_client_secret'],
+          'oauth_allow_all_redirects': data['oauth_allow_all_redirects'],
           'oauth_redirect_uris': data['oauth_redirect_uris'] ?? const [],
           'inherit_permissions': true,
           'read_only': data['read_only'] == true,
           'allow_secrets': data['allow_secrets'] == true,
           'relaxed_command_annotations':
               data['relaxed_command_annotations'] == true,
+          'allow_commands': data['allow_commands'] != false,
+          'allow_processes': data['allow_processes'] != false,
+          'allow_exposures': data['allow_exposures'] != false,
+          'allow_clipboard_screen': data['allow_clipboard_screen'] != false,
+          'allow_all_roots': data['allow_all_roots'],
           'roots': data['roots'] ?? const [],
         },
         idx,
@@ -846,12 +991,54 @@ String normalizePath(String rawPath, List<String> roots) {
     candidate = expanded;
   } else {
     var base = Directory.current.absolute.path;
-    if (roots.isNotEmpty && !roots.any((r) => isWithin(base, r))) {
-      base = roots.first;
+    final concrete = roots
+        .where((r) => !containsPathWildcard(r))
+        .map(expandAndResolvePath)
+        .toList();
+    if (concrete.isNotEmpty && !concrete.any((r) => isWithin(base, r))) {
+      base = concrete.first;
     }
     candidate = p.join(base, expanded);
   }
   return expandAndResolvePath(candidate);
+}
+
+/// Evaluates whether [resolvedTarget] satisfies an allowed root rule,
+/// supporting both subtree directory inheritance and glob wildcards (`*`, `**`, `?`).
+bool matchesRootWhitelistRule(String resolvedTarget, String rawRule) {
+  final trimmed = rawRule.trim();
+  if (trimmed.isEmpty) return false;
+  if (trimmed == '*' || trimmed == '**') return true;
+  if (!containsPathWildcard(trimmed)) {
+    return isWithin(resolvedTarget, expandAndResolvePath(trimmed));
+  }
+
+  String normSlashes(String s) {
+    var out = s.replaceAll('\\', '/');
+    while (out.length > 1 && out.endsWith('/')) {
+      out = out.substring(0, out.length - 1);
+    }
+    return out;
+  }
+
+  final expandedPat = expandUserPath(trimmed);
+  final absPat = p.isAbsolute(expandedPat)
+      ? expandedPat
+      : p.join(Directory.current.absolute.path, expandedPat);
+  final targetNorm = normSlashes(p.normalize(p.absolute(resolvedTarget)));
+  final patNorm = normSlashes(absPat);
+  final cs = !Platform.isWindows;
+
+  if (wildcardMatch(targetNorm, patNorm, caseSensitive: cs)) {
+    return true;
+  }
+  // A directory wildcard such as `D:/Projects/*` also permits files inside matched subdirectories (`D:/Projects/*/sub/file.dart`).
+  if (!patNorm.endsWith('/**')) {
+    if (wildcardMatch(targetNorm, '$patNorm/**', caseSensitive: cs)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool wildcardMatch(String text, String pattern, {bool caseSensitive = true}) {
@@ -927,11 +1114,15 @@ bool isBlockedSecretPath(String targetPath, {ServerConfig? config}) =>
 String? checkAccess(String targetPath, ServerConfig config) {
   final policy = getEffectivePolicy(config);
   final resolved = expandAndResolvePath(targetPath);
-  final roots = policy.roots.map(expandAndResolvePath).toList();
 
-  if (roots.isNotEmpty && !roots.any((r) => isWithin(resolved, r))) {
-    final allowed = roots.join(', ');
-    return "Access denied: '$resolved' is outside allowed roots [$allowed] for profile '${policy.profileName}'.";
+  if (!policy.allowAllRoots) {
+    if (policy.roots.isEmpty) {
+      return "Access denied: directory whitelist is enabled with 0 allowed rules for profile '${policy.profileName}'.";
+    }
+    if (!policy.roots.any((r) => matchesRootWhitelistRule(resolved, r))) {
+      final allowed = policy.roots.join(', ');
+      return "Access denied: '$resolved' does not match allowed root rules [$allowed] for profile '${policy.profileName}'.";
+    }
   }
 
   if (!policy.allowSecrets) {

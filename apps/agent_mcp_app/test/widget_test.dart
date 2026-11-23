@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:agent_mcp_app/main.dart';
 import 'package:agent_mcp_app/services/console_backend_interface.dart';
 import 'package:agent_mcp_app/theme/prism_theme.dart';
+import 'package:agent_mcp_app/theme/qr_code_painter.dart';
+import 'package:agent_mcp_app/views/installer_wizard.dart';
+import 'package:agent_mcp_app/views/prism_structured_editors.dart';
 import 'package:agent_mcp_app/views/profile_endpoints_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -1185,8 +1188,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.4.2'), findsOneWidget);
-    await tester.tap(find.text('v3.4.2'));
+    expect(find.text('v3.5.0'), findsOneWidget);
+    await tester.tap(find.text('v3.5.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1286,7 +1289,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.2'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2003,6 +2006,128 @@ void main() {
     }
     await tester.pump(const Duration(milliseconds: 260));
     expect(tester.getSize(dialogFinder).height, closeTo(hStep1, 1.5));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.5.0 Native Flutter --installer Wizard (660x520), Switch-Driven Wildcard Rule List Preservation & Offline Vector QR',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    // 1. True Dart / Flutter --installer Setup Wizard at exact 660x520 desktop dimensions
+    tester.view.physicalSize = const Size(660, 520);
+    tester.view.devicePixelRatio = 1.0;
+
+    expect(
+      isInstallerLaunchArgs(['--installer', '--payload-dir', r'C:\Temp\pkg']),
+      isTrue,
+    );
+    expect(isInstallerLaunchArgs(['--show']), isFalse);
+
+    await tester.pumpWidget(
+      buildInstallerWizardApp([
+        '--installer',
+        '--payload-dir',
+        r'C:\Temp\NonExistentPayload',
+        '--dir',
+        r'C:\Users\demo\AppData\Local\AgentMCP',
+      ]),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.takeException(), isNull);
+
+    expect(find.text('Agent MCP 安装向导'), findsOneWidget);
+    expect(find.text('v3.5.0'), findsOneWidget);
+    expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
+    expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
+    expect(find.byKey(const ValueKey('installer-launch-switch')), findsOneWidget);
+    expect(find.byKey(const ValueKey('installer-submit-btn')), findsOneWidget);
+
+    // Toggle theme inside installer wizard -> point-of-click ripple animates cleanly with zero overflow!
+    await tester.tap(find.byKey(const ValueKey('installer-theme-toggle')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(tester.takeException(), isNull);
+
+    // 2. Switch-driven Wildcard Rule List (`PrismWildcardRuleListCard`) + Offline Vector QR (`PrismQrCodeBox`)
+    tester.view.physicalSize = const Size(960, 760);
+    var allowAllRedirects = true;
+    var savedRules = <String>['http://127.0.0.1:*/callback'];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (ctx, setState) {
+          return MaterialApp(
+            theme: buildPrismTheme(PrismPalette.light),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    PrismWildcardRuleListCard(
+                      switchKey: const ValueKey('test-allow-all-switch'),
+                      switchTitle: '允许所有 OAuth 回调地址',
+                      switchSubtitleOn: '已放行任意合法回调地址',
+                      switchSubtitleOff: '仅允许匹配下方通配符规则的回调地址',
+                      allowAll: allowAllRedirects,
+                      onAllowAllChanged: (v) =>
+                          setState(() => allowAllRedirects = v),
+                      rules: savedRules,
+                      onRulesChanged: (next) =>
+                          setState(() => savedRules = next),
+                      rowHintText: 'https://*.claude.ai/**',
+                      quickPresets: const [
+                        ('Claude AI', 'https://*.claude.ai/**'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const PrismQrCodeBox(
+                      key: ValueKey('test-vector-qr'),
+                      data: 'https://omen-mcp.iamr0s.de5.net/mcp',
+                      size: 160,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(tester.takeException(), isNull);
+
+    // Default ON: no TextFields shown, QR box rendered at 160x160
+    expect(find.byType(TextField), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('test-vector-qr'))),
+      equals(const Size(160, 160)),
+    );
+
+    // Flip switch OFF -> unfolds existing rule row + quick preset chip
+    await tester.tap(find.byKey(const ValueKey('test-allow-all-switch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(allowAllRedirects, isFalse);
+    expect(find.byType(TextField), findsOneWidget);
+
+    // Tap quick preset 'Claude AI' -> appends 2nd wildcard row
+    await tester.tap(find.textContaining('Claude AI'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(savedRules, contains('https://*.claude.ai/**'));
+    expect(savedRules.length, equals(2));
+
+    // Flip switch back ON -> hides rows visually while preserving both saved rules!
+    await tester.tap(find.byKey(const ValueKey('test-allow-all-switch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(allowAllRedirects, isTrue);
+    expect(savedRules.length, equals(2));
     expect(tester.takeException(), isNull);
   });
 }

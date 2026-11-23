@@ -65,7 +65,7 @@ void main() {
     expect(reRead.text, contains('已修改内容'));
   });
 
-  test('20 tools registration, surgical edit, unified diff patch, and undo stack', () async {
+  test('22 tools registration, surgical edit, unified diff patch, and undo stack', () async {
     final cfg = ServerConfig(
       serverName: 'unit-mcp',
       roots: [sandboxDir.path],
@@ -73,7 +73,7 @@ void main() {
       allowSecrets: false,
     );
     final engine = McpServerEngine(cfg);
-    expect(engine.tools.length, equals(20));
+    expect(engine.tools.length, equals(22));
 
     Future<String> callTool(String name, Map<String, dynamic> args) async {
       final resp = await engine.handleJsonRpcMessage({
@@ -163,7 +163,7 @@ void main() {
       final body = jsonDecode(listResp.body) as Map<String, dynamic>;
       final tools = ((body['result'] as Map)['tools'] as List)
           .cast<Map<String, dynamic>>();
-      expect(tools.length, equals(20));
+      expect(tools.length, equals(22));
       for (final t in tools) {
         final ann = t['annotations'] as Map<String, dynamic>;
         expect(ann['readOnlyHint'], isTrue, reason: 'Tool ${t['name']} should be silent');
@@ -440,7 +440,7 @@ void main() {
       final hResp = await http.get(Uri.http(authority, '/health'));
       final hJson = jsonDecode(hResp.body) as Map<String, dynamic>;
       expect(hJson['os'], equals(Platform.operatingSystem));
-      expect(hJson['tools_count'], equals(20));
+      expect(hJson['tools_count'], equals(22));
 
       final optReq = http.Request('OPTIONS', Uri.http(authority, '/mcp'));
       final optStream = await optReq.send();
@@ -1014,5 +1014,521 @@ void main() {
     expect(smallUndo.totalBytes, lessThanOrEqualTo(40));
     expect(smallUndo.pop(fA), isNull, reason: 'Oldest entry evicted to stay under byte budget');
     expect(smallUndo.pop(fC), isNotNull);
+  });
+
+  test('v3.5.0 Switch-driven Wildcard OAuth Redirect & Root Whitelists + Fine-Grained Capability Switches', () async {
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    final loopback = InternetAddress.loopbackIPv4.address;
+    final allowedProj = Directory(p.join(sandboxDir.path, 'proj_alpha'))
+      ..createSync(recursive: true);
+    final blockedDir = Directory(p.join(sandboxDir.path, 'other_secret_zone'))
+      ..createSync(recursive: true);
+    File(p.join(allowedProj.path, 'hello.txt')).writeAsStringSync('alpha-ok');
+    File(p.join(blockedDir.path, 'nope.txt')).writeAsStringSync('blocked');
+
+    // Configure oauth_allow_all_redirects=false with wildcard patterns AND allow_all_roots=false with wildcard path
+    saveConfigFile(cfgFile, {
+      'server_name': 'v35-whitelist-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'oauth-local',
+      'oauth_allow_all_redirects': false,
+      'oauth_redirect_uris': [
+        'http://127.0.0.1:*/callback',
+        'https://*.claude.ai/**',
+      ],
+      'allow_all_roots': false,
+      'roots': [p.join(sandboxDir.path, 'proj_*')],
+      'allow_commands': false,
+      'allow_clipboard_screen': false,
+    });
+
+    final cfg = ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+      ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final server = await engine.serveHttp();
+    final authority = '${server.address.address}:${server.port}';
+
+    try {
+      // 1. Dynamic client registration with unlisted domain MUST fail when oauth_allow_all_redirects=false
+      final badReg = await http.post(
+        Uri.http(authority, '/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'Untrusted App',
+          'redirect_uris': ['https://evil.example.org/cb'],
+        }),
+      );
+      expect(badReg.statusCode, equals(400));
+
+      // 2. Wildcard-matched redirect URIs (`localhost` loopback port + subdomain `**`) MUST succeed!
+      final goodReg = await http.post(
+        Uri.http(authority, '/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'Trusted Wildcard App',
+          'redirect_uris': [
+            'http://localhost:54321/callback',
+            'https://app.claude.ai/oauth/mcp/done',
+          ],
+        }),
+      );
+      expect(goodReg.statusCode, equals(201));
+
+      // 3. Unsafe javascript: scheme is ALWAYS rejected even if oauth_allow_all_redirects=true
+      saveConfigFile(cfgFile, {
+        ...loadSavedConfig(cfgFile),
+        'oauth_allow_all_redirects': true,
+      });
+      final jsReg = await http.post(
+        Uri.http(authority, '/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'XSS Probe',
+          'redirect_uris': ['javascript:alert(1)'],
+        }),
+      );
+      expect(jsReg.statusCode, equals(400));
+      // Rule list is preserved in saved config even after toggling oauth_allow_all_redirects=true!
+      expect(
+        (loadSavedConfig(cfgFile)['oauth_redirect_uris'] as List).length,
+        equals(2),
+      );
+
+      // 4. Wildcard root rule (`proj_*`) allows proj_alpha/hello.txt and blocks other_secret_zone/nope.txt
+      Future<String> callRpc(String name, Map<String, dynamic> args) async {
+        final resp = await engine.handleJsonRpcMessage({
+          'jsonrpc': '2.0',
+          'id': 9,
+          'method': 'tools/call',
+          'params': {'name': name, 'arguments': args},
+        });
+        return (((resp!['result'] as Map)['content'] as List).first as Map)['text']
+            as String;
+      }
+
+      final okRead = await callRpc('read_file', {
+        'path': p.join(allowedProj.path, 'hello.txt'),
+      });
+      expect(okRead, contains('alpha-ok'));
+
+      final blockedRead = await callRpc('read_file', {
+        'path': p.join(blockedDir.path, 'nope.txt'),
+      });
+      expect(blockedRead, contains('does not match allowed root rules'));
+
+      // 5. Fine-grained capability switches block run_command & manage_clipboard
+      final cmdBlocked = await callRpc('run_command', {'command': 'echo hi'});
+      expect(cmdBlocked, contains('disabled'));
+      final clipBlocked = await callRpc('manage_clipboard', {'action': 'get'});
+      expect(clipBlocked, contains('disabled'));
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('v3.5.0 Universal Sub-MCP Hub: auto HTTP->SSE fallback, WebSocket MCP, M2M OAuth, direct mounting & smart importer', () async {
+    final loopback = InternetAddress.loopbackIPv4.address;
+
+    // 1. Smart importer handles VS Code `servers`, single-line `npx`, and bare URLs
+    final parsedNpx = parseMcpServersJson('npx -y @modelcontextprotocol/server-github');
+    expect(parsedNpx.single['name'], equals('github'));
+    expect(parsedNpx.single['transport'], equals('stdio'));
+
+    final parsedUrl = parseMcpServersJson('wss://mcp.linear.app/ws');
+    expect(parsedUrl.single['transport'], equals('ws'));
+
+    final parsedVsCode = parseMcpServersJson(jsonEncode({
+      'servers': {
+        'sentry-remote': {
+          'type': 'http',
+          'url': 'https://mcp.sentry.dev/mcp',
+        },
+      },
+    }));
+    expect(parsedVsCode.single['name'], equals('sentry-remote'));
+
+    // 2. Upstream mock server supporting:
+    //    - OAuth M2M token endpoint (`/oauth/token`)
+    //    - `auto` fallback: POST `/mcp` returns 404, GET `/mcp` opens Legacy SSE stream + POST `/messages`
+    //    - WebSocket JSON-RPC at `/ws` with `tools`, `resources`, and `prompts`
+    final upstream = await HttpServer.bind(loopback, 0);
+    final upPort = upstream.port;
+    IOSink? activeSseSink;
+    String? lastBearerHeader;
+
+    upstream.listen((HttpRequest req) async {
+      if (req.uri.path == '/oauth/token' && req.method == 'POST') {
+        final body = await utf8.decoder.bind(req).join();
+        expect(body, contains('grant_type=client_credentials'));
+        req.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'access_token': 'm2m-live-token-777',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+          }));
+        await req.response.close();
+        return;
+      }
+
+      if (req.uri.path == '/ws' && WebSocketTransformer.isUpgradeRequest(req)) {
+        lastBearerHeader = req.headers.value('authorization');
+        final ws = await WebSocketTransformer.upgrade(req);
+        ws.listen((raw) {
+          final msg = jsonDecode(raw.toString()) as Map<String, dynamic>;
+          final id = msg['id'];
+          final method = msg['method'];
+          if (method == 'initialize') {
+            ws.add(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'protocolVersion': '2025-03-26',
+                'capabilities': {'tools': {}, 'resources': {}, 'prompts': {}},
+                'serverInfo': {'name': 'ws-sub', 'version': '1.0.0'},
+              },
+            }));
+          } else if (method == 'tools/list') {
+            ws.add(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'tools': [
+                  {
+                    'name': 'echo_ws',
+                    'description': 'Echo over WS',
+                    'inputSchema': {'type': 'object'},
+                  },
+                  {
+                    'name': 'secret_op',
+                    'description': 'Disabled tool',
+                    'inputSchema': {'type': 'object'},
+                  },
+                ],
+              },
+            }));
+          } else if (method == 'tools/call') {
+            final args = (msg['params'] as Map)['arguments'] as Map? ?? {};
+            ws.add(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'content': [
+                  {'type': 'text', 'text': 'ws-ok:${args['msg'] ?? ''}:$lastBearerHeader'},
+                ],
+              },
+            }));
+          } else if (method == 'resources/list') {
+            ws.add(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'resources': [
+                  {'uri': 'memo://doc/1', 'name': 'Architecture Doc'},
+                ],
+              },
+            }));
+          } else if (method == 'prompts/list') {
+            ws.add(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'prompts': [
+                  {'name': 'code_review', 'description': 'Review patch'},
+                ],
+              },
+            }));
+          }
+        });
+        return;
+      }
+
+      if (req.uri.path == '/mcp' && req.method == 'POST') {
+        // Trigger `auto` fallback to Legacy SSE!
+        req.response.statusCode = 405;
+        await req.response.close();
+        return;
+      }
+
+      if ((req.uri.path == '/mcp' || req.uri.path == '/sse') && req.method == 'GET') {
+        req.response.bufferOutput = false;
+        req.response.statusCode = 200;
+        req.response.headers.set('content-type', 'text/event-stream');
+        activeSseSink = req.response;
+        activeSseSink!.write('event: endpoint\ndata: /messages\n\n');
+        await activeSseSink!.flush();
+        return;
+      }
+
+      if (req.uri.path == '/messages' && req.method == 'POST') {
+        final msg = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final id = msg['id'];
+        final method = msg['method'];
+        Map<String, dynamic>? reply;
+        if (method == 'initialize') {
+          reply = {
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'protocolVersion': '2024-11-05',
+              'capabilities': {'tools': {}},
+              'serverInfo': {'name': 'legacy-sse-sub', 'version': '1.0'},
+            },
+          };
+        } else if (method == 'tools/list') {
+          reply = {
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'tools': [
+                {'name': 'sse_ping', 'description': 'Legacy SSE tool', 'inputSchema': {'type': 'object'}},
+              ],
+            },
+          };
+        } else if (method == 'tools/call') {
+          reply = {
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'content': [
+                {'type': 'text', 'text': 'sse-fallback-pong'},
+              ],
+            },
+          };
+        }
+        req.response.statusCode = 202;
+        await req.response.close();
+        if (reply != null && activeSseSink != null) {
+          activeSseSink!.write('event: message\ndata: ${jsonEncode(reply)}\n\n');
+          await activeSseSink!.flush();
+        }
+        return;
+      }
+
+      req.response.statusCode = 404;
+      await req.response.close();
+    });
+
+    try {
+      final subMgr = SubMcpManager(StoragePaths.instance.subMcpConfigFile);
+      subMgr.saveEntries([
+        normalizeSubEntry({
+          'name': 'auto_sse',
+          'enabled': true,
+          'transport': 'auto',
+          'url': 'http://$loopback:$upPort/mcp',
+          'expose_mode': 'gateway',
+        }),
+        normalizeSubEntry({
+          'name': 'ws_direct',
+          'enabled': true,
+          'transport': 'ws',
+          'url': 'ws://$loopback:$upPort/ws',
+          'expose_mode': 'direct',
+          'disabled_tools': ['secret_op'],
+          'auth_type': 'oauth2_client_credentials',
+          'oauth_token_url': 'http://$loopback:$upPort/oauth/token',
+          'oauth_client_id': 'svc-client',
+          'oauth_client_secret': 'svc-secret',
+        }),
+      ]);
+
+      // Verify `auto` falls back from HTTP 405 -> Legacy SSE seamlessly
+      final sseCall = await subMgr.callTool('auto_sse', 'sse_ping', arguments: {});
+      expect(sseCall, contains('sse-fallback-pong'));
+
+      // Verify WS + M2M OAuth + resources/prompts + direct mounting (`ws_direct__echo_ws`) + disabled_tools filtering
+      final disc = await subMgr.discoverTools('ws_direct', refresh: true);
+      expect(disc['ok'], isTrue);
+      final resList = (disc['resources'] as List).cast<Map<String, dynamic>>();
+      expect(resList.single['uri'], equals('memo://doc/1'));
+      final prmList = (disc['prompts'] as List).cast<Map<String, dynamic>>();
+      expect(prmList.single['name'], equals('code_review'));
+
+      final engine = McpServerEngine(ServerConfig(
+        serverName: 'hub-host',
+        roots: [sandboxDir.path],
+      ));
+      final listRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'tools/list',
+      });
+      final toolNames = (((listRpc!['result'] as Map)['tools'] as List)
+              .cast<Map>())
+          .map((t) => t['name'].toString())
+          .toList();
+      expect(toolNames, contains('ws_direct__echo_ws'));
+      expect(toolNames, isNot(contains('ws_direct__secret_op')));
+
+      final directCall = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 2,
+        'method': 'tools/call',
+        'params': {
+          'name': 'ws_direct__echo_ws',
+          'arguments': {'msg': 'hello'},
+        },
+      });
+      final directText =
+          (((directCall!['result'] as Map)['content'] as List).first as Map)['text']
+              as String;
+      expect(directText, contains('ws-ok:hello:Bearer m2m-live-token-777'));
+    } finally {
+      await upstream.close(force: true);
+    }
+  });
+
+  test('v3.5.0 Offline Vector QR, Bi-Directional Folder Upload, Client Onboarding & Encrypted Snapshot Round-Trip', () async {
+    // 1. Offline ISO/IEC 18004 QR encoder & SVG output
+    final qrSvg = generateQrSvg('https://omen-mcp.iamr0s.de5.net/mcp');
+    expect(qrSvg, startsWith('<svg xmlns="http://www.w3.org/2000/svg"'));
+    expect(qrSvg, contains('<path d="M'));
+
+    // 2. ClientOnboardingManager writes Cursor `mcpServers` & VS Code `servers` with `.bak` backup
+    final cursorCfg = File(p.join(sandboxDir.path, 'cursor_mcp.json'))
+      ..writeAsStringSync('{"mcpServers":{"existing":{"command":"node"}}}\n');
+    final onboardRes = ClientOnboardingManager.applyClientOnboarding(
+      clientId: 'cursor',
+      serverKey: 'omen-node',
+      mcpUrl: 'http://100.88.1.2:8000/mcp',
+      bearerToken: 'sk-onboard-1',
+      customConfigPath: cursorCfg.path,
+    );
+    expect(onboardRes['ok'], isTrue);
+    expect(File('${cursorCfg.path}.bak').existsSync(), isTrue);
+    final mergedCursor = jsonDecode(cursorCfg.readAsStringSync()) as Map<String, dynamic>;
+    final cursorServers = mergedCursor['mcpServers'] as Map<String, dynamic>;
+    expect(cursorServers.containsKey('existing'), isTrue);
+    expect((cursorServers['omen-node'] as Map)['url'], equals('http://100.88.1.2:8000/mcp'));
+
+    final vscodeCfg = File(p.join(sandboxDir.path, 'vscode_mcp.json'));
+    ClientOnboardingManager.applyClientOnboarding(
+      clientId: 'vscode',
+      serverKey: 'omen-node',
+      mcpUrl: 'http://100.88.1.2:8000/mcp',
+      customConfigPath: vscodeCfg.path,
+    );
+    final mergedVsCode = jsonDecode(vscodeCfg.readAsStringSync()) as Map<String, dynamic>;
+    expect(((mergedVsCode['servers'] as Map)['omen-node'] as Map)['type'], equals('http'));
+
+    // 3. ConfigSnapshotManager PBKDF2-HMAC-SHA256 encrypted export/import + wrong-password guard
+    final snapCfgFile = File(p.join(sandboxDir.path, 'snap_cfg.json'));
+    final snapSubFile = File(p.join(sandboxDir.path, 'snap_sub.json'));
+    saveConfigFile(snapCfgFile, {
+      'server_name': 'Snapshot Source',
+      'api_key': 'sk-super-secret',
+      'profiles': [
+        {'id': 'p1', 'name': 'Main', 'api_key': 'sk-prof-secret'},
+      ],
+    });
+    SubMcpManager(snapSubFile).saveEntries([
+      normalizeSubEntry({
+        'name': 'demo-sub',
+        'transport': 'http',
+        'url': 'https://example.com/mcp',
+        'auth_type': 'bearer',
+        'auth_token': 'tok-sub-secret',
+      }),
+    ]);
+
+    final encrypted = ConfigSnapshotManager.exportSnapshot(
+      configFile: snapCfgFile,
+      subMcpFile: snapSubFile,
+      includeSecrets: true,
+      password: 'vault-passphrase-2026',
+    );
+    expect(encrypted['schema'], equals('agent_mcp_encrypted_snapshot_v1'));
+    expect(jsonEncode(encrypted), isNot(contains('sk-super-secret')));
+
+    expect(
+      () => ConfigSnapshotManager.importSnapshot(
+        rawJson: jsonEncode(encrypted),
+        password: 'wrong-password',
+        configFile: snapCfgFile,
+        subMcpFile: snapSubFile,
+      ),
+      throwsA(isA<FormatException>()),
+    );
+
+    final destCfgFile = File(p.join(sandboxDir.path, 'restored_cfg.json'));
+    final destSubFile = File(p.join(sandboxDir.path, 'restored_sub.json'));
+    final restored = ConfigSnapshotManager.importSnapshot(
+      rawJson: jsonEncode(encrypted),
+      password: 'vault-passphrase-2026',
+      configFile: destCfgFile,
+      subMcpFile: destSubFile,
+    );
+    expect(restored['ok'], isTrue);
+    expect(loadSavedConfig(destCfgFile)['api_key'], equals('sk-super-secret'));
+
+    // 4. Folder share bi-directional upload (`allow_upload: true` -> POST ?__upload=1) + persistence
+    final loopback = InternetAddress.loopbackIPv4.address;
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    final dropboxDir = Directory(p.join(sandboxDir.path, 'inbox_share'))
+      ..createSync(recursive: true);
+    saveConfigFile(cfgFile, {
+      'server_name': 'upload-share-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'none',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg = ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+      ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final srv = await engine.serveHttp();
+    final authority = '${srv.address.address}:${srv.port}';
+    try {
+      final expRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {
+            'action': 'open',
+            'target': dropboxDir.path,
+            'mode': 'folder',
+            'allow_upload': true,
+          },
+        },
+      });
+      final expTxt =
+          (((expRpc!['result'] as Map)['content'] as List).first as Map)['text']
+              as String;
+      final expMap = (jsonDecode(expTxt) as Map)['exposure'] as Map<String, dynamic>;
+      final shareId = expMap['id'] as String;
+      expect(expMap['allow_upload'], isTrue);
+      expect(StoragePaths.instance.exposuresStateFile.existsSync(), isTrue);
+
+      // Upload normal file -> 200 OK & written to disk
+      final upResp = await http.post(
+        Uri.parse('http://$authority/share/$shareId/?__upload=1&filename=report.md'),
+        body: '# Uploaded from phone\n',
+      );
+      expect(upResp.statusCode, equals(200));
+      expect(
+        File(p.join(dropboxDir.path, 'report.md')).readAsStringSync(),
+        equals('# Uploaded from phone\n'),
+      );
+
+      // Uploading sensitive `.env` file -> rejected!
+      final envResp = await http.post(
+        Uri.parse('http://$authority/share/$shareId/?__upload=1&filename=.env'),
+        body: 'SECRET=1',
+      );
+      expect(envResp.statusCode, anyOf(equals(400), equals(403)));
+    } finally {
+      await ExposureManager.instance.closeAllExposures();
+      await srv.close(force: true);
+    }
   });
 }

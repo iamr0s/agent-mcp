@@ -29,6 +29,9 @@ class _IoConsoleBackend extends ConsoleBackend {
   final ValueNotifier<int> _refreshSignal = ValueNotifier<int>(0);
 
   bool _initialized = false;
+  String _initialThemeModeKey = 'system';
+  String _initialAccentThemeKey = 'indigo';
+  bool _initialDynamicColor = false;
   bool? _lastSyncedDark;
   int? _lastSyncedAccentRgb;
   String _lastTraySig = '';
@@ -77,7 +80,20 @@ class _IoConsoleBackend extends ConsoleBackend {
   String get currentAppVersion => agentMcpVersion;
 
   @override
-  bool get supportsInAppUpgrade => Platform.isWindows || Platform.isAndroid;
+  String get initialThemeModeKey => _initialThemeModeKey;
+
+  @override
+  String get initialAccentThemeKey => _initialAccentThemeKey;
+
+  @override
+  bool get initialDynamicColor => _initialDynamicColor;
+
+  @override
+  bool get supportsInAppUpgrade =>
+      Platform.isWindows ||
+      Platform.isAndroid ||
+      Platform.isMacOS ||
+      Platform.isLinux;
 
   @override
   bool get supportsNodeSwitching => true;
@@ -201,6 +217,7 @@ class _IoConsoleBackend extends ConsoleBackend {
     required String name,
     required String baseUrl,
     String savedPassword = '',
+    String bearerToken = '',
   }) async {
     final cleanUrl = normalizeRemoteBaseUrl(baseUrl);
     final cleanName = name.trim().isEmpty ? cleanUrl : name.trim();
@@ -213,6 +230,7 @@ class _IoConsoleBackend extends ConsoleBackend {
         name: cleanName,
         baseUrl: cleanUrl,
         savedPassword: savedPassword,
+        bearerToken: bearerToken,
       );
       _remoteNodes[idx] = entry;
       if (_activeNodeId == entry.id) {
@@ -224,12 +242,69 @@ class _IoConsoleBackend extends ConsoleBackend {
         name: cleanName,
         baseUrl: cleanUrl,
         savedPassword: savedPassword,
+        bearerToken: bearerToken,
       );
       _remoteNodes.add(entry);
     }
     _saveNodesToDisk();
     _refreshSignal.value++;
     return entry;
+  }
+
+  @override
+  Future<Map<String, dynamic>> probeRemoteNodeHealth(
+    ConsoleNodeProfile node,
+  ) async {
+    if (node.isLocal) {
+      final running = _ctrl.isRunning;
+      final cfg = _ctrl.loadCurrentServerConfig();
+      return {
+        'ok': running,
+        'latency_ms': 0,
+        'version': agentMcpVersion,
+        'server_name': cfg.serverName,
+        'port': cfg.port,
+      };
+    }
+    final clean = normalizeRemoteBaseUrl(node.baseUrl);
+    if (clean.isEmpty) return const {'ok': false, 'error': '空地址'};
+    final sw = Stopwatch()..start();
+    final hc = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    try {
+      final req = await hc
+          .getUrl(Uri.parse('$clean/health'))
+          .timeout(const Duration(seconds: 4));
+      if (node.bearerToken.trim().isNotEmpty) {
+        req.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer ${node.bearerToken.trim()}',
+        );
+      }
+      final res = await req.close().timeout(const Duration(seconds: 4));
+      final body = await utf8.decodeStream(res).timeout(const Duration(seconds: 4));
+      sw.stop();
+      Map<String, dynamic> parsed = const {};
+      try {
+        final d = jsonDecode(body);
+        if (d is Map) parsed = Map<String, dynamic>.from(d);
+      } catch (_) {}
+      return {
+        'ok': res.statusCode >= 200 && res.statusCode < 300,
+        'status_code': res.statusCode,
+        'latency_ms': sw.elapsedMilliseconds,
+        'version': (parsed['version'] ?? '').toString(),
+        'server_name': (parsed['server_name'] ?? '').toString(),
+      };
+    } catch (e) {
+      sw.stop();
+      return {
+        'ok': false,
+        'latency_ms': sw.elapsedMilliseconds,
+        'error': '$e',
+      };
+    } finally {
+      hc.close(force: true);
+    }
   }
 
   @override
@@ -441,6 +516,9 @@ class _IoConsoleBackend extends ConsoleBackend {
 
     _loadSavedNodesFromDisk();
     final saved = loadSavedConfig(_ctrl.configFile);
+    _initialThemeModeKey = (saved['theme_mode'] ?? 'system').toString();
+    _initialAccentThemeKey = (saved['accent_theme'] ?? 'indigo').toString();
+    _initialDynamicColor = saved['dynamic_color'] == true;
 
     if (Platform.isAndroid) {
       final savedPrivMode =
@@ -1146,6 +1224,199 @@ class _IoConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<Map<String, dynamic>> startSubMcpOAuth(
+    String name, {
+    Map<String, dynamic>? draft,
+    String? scope,
+    bool autoOpenBrowser = true,
+  }) async {
+    Map<String, dynamic> res;
+    if (isRemoteNodeActive) {
+      res = await _guardRemote(
+        (c) => c.startSubMcpOAuth(name, draft: draft, scope: scope),
+      );
+    } else {
+      try {
+        res = await SubMcpManager.instance.startOAuthFlow(
+          name,
+          draftOverride: draft,
+          stepUpScope: scope,
+        );
+      } catch (e) {
+        res = {'ok': false, 'error': '$e'};
+      }
+    }
+    final authUrl = (res['authorization_url'] ?? '').toString().trim();
+    if (autoOpenBrowser && res['ok'] == true && authUrl.isNotEmpty) {
+      await openExternalUrl(authUrl);
+    }
+    return res;
+  }
+
+  @override
+  Future<Map<String, dynamic>> revokeSubMcpOAuth(String name) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.revokeSubMcpOAuth(name));
+    }
+    final ok = SubMcpManager.instance.revokeOAuth(name);
+    _refreshSignal.value++;
+    return {'ok': ok};
+  }
+
+  @override
+  Future<Map<String, dynamic>> callSubMcpPlayground({
+    required String name,
+    String kind = 'tool',
+    String toolName = '',
+    String uri = '',
+    Map<String, dynamic> arguments = const {},
+    int? timeoutSec,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.callSubMcpPlayground(
+          name: name,
+          kind: kind,
+          toolName: toolName,
+          uri: uri,
+          arguments: arguments,
+          timeoutSec: timeoutSec,
+        ),
+      );
+    }
+    final sw = Stopwatch()..start();
+    try {
+      String output;
+      if (kind == 'resource') {
+        output = await SubMcpManager.instance.readResource(
+          name,
+          uri.isNotEmpty ? uri : toolName,
+        );
+      } else if (kind == 'prompt') {
+        output = await SubMcpManager.instance.getPrompt(
+          name,
+          toolName,
+          arguments: arguments,
+        );
+      } else {
+        output = await SubMcpManager.instance.callTool(
+          name,
+          toolName,
+          arguments: arguments,
+          timeoutSec: timeoutSec,
+        );
+      }
+      sw.stop();
+      return {
+        'ok': !output.startsWith('Error:'),
+        'output': output,
+        'ms': double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1)),
+      };
+    } catch (e) {
+      sw.stop();
+      return {
+        'ok': false,
+        'error': '$e',
+        'ms': double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1)),
+      };
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getClientOnboardingTargets() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.getClientOnboardingTargets());
+    }
+    return {
+      'ok': true,
+      'targets': ClientOnboardingManager.detectTargets()
+          .map((t) => t.toJson())
+          .toList(),
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> applyClientOnboarding({
+    required String clientId,
+    required String serverKey,
+    required String mcpUrl,
+    String transport = 'http',
+    String? bearerToken,
+    String? customConfigPath,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.applyClientOnboarding(
+          clientId: clientId,
+          serverKey: serverKey,
+          mcpUrl: mcpUrl,
+          transport: transport,
+          bearerToken: bearerToken,
+          customConfigPath: customConfigPath,
+        ),
+      );
+    }
+    return ClientOnboardingManager.applyClientOnboarding(
+      clientId: clientId,
+      serverKey: serverKey,
+      mcpUrl: mcpUrl,
+      transport: transport,
+      bearerToken: bearerToken,
+      customConfigPath: customConfigPath,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> exportConfigSnapshot({
+    bool includeSecrets = false,
+    String? password,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.exportConfigSnapshot(
+          includeSecrets: includeSecrets,
+          password: password,
+        ),
+      );
+    }
+    try {
+      final snap = ConfigSnapshotManager.exportSnapshot(
+        configFile: _ctrl.configFile,
+        includeSecrets: includeSecrets,
+        password: password,
+      );
+      return {'ok': true, 'snapshot': snap};
+    } catch (e) {
+      return {'ok': false, 'error': '$e'};
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> importConfigSnapshot({
+    required String rawJson,
+    String? password,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.importConfigSnapshot(rawJson: rawJson, password: password),
+      );
+    }
+    try {
+      final res = ConfigSnapshotManager.importSnapshot(
+        rawJson: rawJson,
+        password: password,
+        configFile: _ctrl.configFile,
+      );
+      if (res['ok'] == true) {
+        _refreshSignal.value++;
+      }
+      return res;
+    } catch (e) {
+      return {'ok': false, 'error': '$e'};
+    }
+  }
+
+  @override
   Future<Map<String, dynamic>> getPrivilegeStatus() async {
     if (isRemoteNodeActive) {
       return _guardRemote((c) => c.getPrivilegeStatus());
@@ -1294,6 +1565,7 @@ class _IoConsoleBackend extends ConsoleBackend {
     String? pinCode,
     int? maxDownloads,
     bool spa = false,
+    bool allowUpload = false,
   }) async {
     if (isRemoteNodeActive) {
       return _guardRemote(
@@ -1307,6 +1579,7 @@ class _IoConsoleBackend extends ConsoleBackend {
           pinCode: pinCode,
           maxDownloads: maxDownloads,
           spa: spa,
+          allowUpload: allowUpload,
         ),
       );
     }
@@ -1325,6 +1598,7 @@ class _IoConsoleBackend extends ConsoleBackend {
         pinCode: pinCode,
         maxDownloads: maxDownloads,
         spa: spa,
+        allowUpload: allowUpload,
         validateWithPolicy: false,
       );
       _refreshSignal.value++;
@@ -1530,6 +1804,14 @@ class _IoConsoleBackend extends ConsoleBackend {
           return raw.map((k, v) => MapEntry('$k', v));
         }
         return const {'ok': false, 'error': '已下载至本地缓存，请在系统文件管理器中点击安装 APK'};
+      }
+      if (Platform.isMacOS) {
+        await Process.start('open', ['-R', filePath], mode: ProcessStartMode.detached);
+        return {'ok': true, 'mode': 'finder', 'dir': f.parent.path};
+      }
+      if (Platform.isLinux) {
+        await Process.start('xdg-open', [f.parent.path], mode: ProcessStartMode.detached);
+        return {'ok': true, 'mode': 'file_manager', 'dir': f.parent.path};
       }
       return const {'ok': false, 'error': '当前平台请手动解压或安装下载的包'};
     } catch (e) {

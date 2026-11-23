@@ -126,12 +126,67 @@ String normalizeOAuthRedirectUri(String raw) {
   return '$scheme://$host$portPart$path$queryPart';
 }
 
-bool isRedirectUriAllowed(List<String> allowedUris, String candidate) {
-  if (allowedUris.isEmpty) return true;
-  final normCandidate = normalizeOAuthRedirectUri(candidate);
+bool _isUnsafeRedirectScheme(String raw) {
+  final uri = Uri.tryParse(raw.trim());
+  if (uri == null || !uri.hasScheme) return true;
+  final s = uri.scheme.toLowerCase();
+  return s == 'javascript' || s == 'data' || s == 'vbscript' || s == 'file';
+}
+
+bool _matchesRedirectPattern(String patternRaw, String candidateRaw) {
+  final pat = patternRaw.trim();
+  if (pat.isEmpty) return false;
+  if (pat == '*' || pat == '**') return true;
+  if (!pat.contains('*') && !pat.contains('?')) {
+    return normalizeOAuthRedirectUri(pat) ==
+        normalizeOAuthRedirectUri(candidateRaw);
+  }
+
+  // Canonicalize loopback host aliases (`localhost` / `[::1]` -> `127.0.0.1`) so
+  // wildcard rules like `http://127.0.0.1:*/*` seamlessly match `http://localhost:54321/cb`.
+  String canonLoopbackInText(String input) {
+    return input.replaceFirstMapped(
+      RegExp(r'^(https?://)(localhost|\[::1\]|::1)(?=[:/?#]|$)', caseSensitive: false),
+      (m) => '${m.group(1)!.toLowerCase()}127.0.0.1',
+    );
+  }
+
+  final normCand = canonLoopbackInText(candidateRaw.trim());
+  final normPat = canonLoopbackInText(pat);
+
+  final buf = StringBuffer('^');
+  for (var i = 0; i < normPat.length; i++) {
+    final ch = normPat[i];
+    if (ch == '*') {
+      if (i + 1 < normPat.length && normPat[i + 1] == '*') {
+        buf.write('.*');
+        i++;
+      } else {
+        buf.write('.*');
+      }
+    } else if (ch == '?') {
+      buf.write('.');
+    } else if (r'.+^$()[]{}|\'.contains(ch)) {
+      buf.write('\\$ch');
+    } else {
+      buf.write(ch);
+    }
+  }
+  buf.write(r'$');
+  return RegExp(buf.toString(), caseSensitive: false).hasMatch(normCand);
+}
+
+bool isRedirectUriAllowed(
+  List<String> allowedUris,
+  String candidate, {
+  bool? allowAll,
+}) {
+  if (_isUnsafeRedirectScheme(candidate)) return false;
+  final effectiveAllowAll = allowAll ?? allowedUris.isEmpty;
+  if (effectiveAllowAll) return true;
+  if (allowedUris.isEmpty) return false;
   for (final allowed in allowedUris) {
-    if (allowed.trim() == '*' ||
-        normalizeOAuthRedirectUri(allowed) == normCandidate) {
+    if (_matchesRedirectPattern(allowed, candidate)) {
       return true;
     }
   }
@@ -197,6 +252,12 @@ class LocalOAuthProvider {
   final Map<String, Map<String, dynamic>> _accessTokens = {};
   final Map<String, Map<String, dynamic>> _refreshTokens = {};
 
+  bool _globalAllowAllRedirects = true;
+  List<String> _globalRedirectUris = const [];
+  String _accentThemeKey = 'indigo';
+  final Map<String, ({bool allowAll, List<String> uris})>
+      _profileRedirectPolicies = {};
+
   LocalOAuthProvider({
     required this.primaryBaseUrl,
     required this.passwordHash,
@@ -205,9 +266,13 @@ class LocalOAuthProvider {
     this.configFile,
     String? staticClientId,
     String? staticClientSecret,
+    bool? staticAllowAllRedirects,
     List<String>? staticRedirectUris,
     List<Map<String, dynamic>>? extraStaticClients,
   }) {
+    _globalRedirectUris = List<String>.unmodifiable(staticRedirectUris ?? const []);
+    _globalAllowAllRedirects =
+        staticAllowAllRedirects ?? _globalRedirectUris.isEmpty;
     _loadState();
     if (staticClientId != null &&
         staticClientId.isNotEmpty &&
@@ -218,23 +283,32 @@ class LocalOAuthProvider {
         clientSecret: staticClientSecret,
         clientName: 'Configured OAuth Client',
         redirectUris: staticRedirectUris ?? const [],
+        allowAllRedirects: _globalAllowAllRedirects,
       );
     }
     for (final sc in extraStaticClients ?? const <Map<String, dynamic>>[]) {
       final cid = (sc['client_id'] ?? '').toString().trim();
       final csec = (sc['client_secret'] ?? '').toString().trim();
+      final pid = sc['profile_id']?.toString();
+      final uris = ((sc['redirect_uris'] as List?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final allowAll = sc.containsKey('allow_all_redirects')
+          ? sc['allow_all_redirects'] == true
+          : uris.isEmpty;
+      if (pid != null && pid.isNotEmpty) {
+        _profileRedirectPolicies[pid] = (allowAll: allowAll, uris: uris);
+      }
       if (cid.isNotEmpty && csec.isNotEmpty) {
-        final uris = ((sc['redirect_uris'] as List?) ?? const [])
-            .map((e) => e.toString().trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
         _registerStaticClient(
           clientId: cid,
           clientSecret: csec,
           clientName:
               (sc['client_name'] ?? 'Configured OAuth Client').toString(),
           redirectUris: uris,
-          profileId: sc['profile_id']?.toString(),
+          allowAllRedirects: allowAll,
+          profileId: pid,
         );
       }
     }
@@ -247,6 +321,7 @@ class LocalOAuthProvider {
     required String clientSecret,
     required String clientName,
     required List<String> redirectUris,
+    bool allowAllRedirects = true,
     String? profileId,
   }) {
     _clients[clientId] = {
@@ -254,12 +329,24 @@ class LocalOAuthProvider {
       'client_secret': clientSecret,
       'client_name': clientName,
       'is_static': true,
+      'allow_all_redirects': allowAllRedirects,
       if (profileId != null && profileId.isNotEmpty) 'profile_id': profileId,
       if (redirectUris.isNotEmpty) 'redirect_uris': redirectUris,
       'grant_types': ['authorization_code', 'refresh_token'],
       'response_types': ['code'],
       'scope': 'mcp',
     };
+  }
+
+  ({bool allowAll, List<String> uris}) _effectiveRedirectPolicy(
+    String? profileId,
+  ) {
+    if (profileId != null &&
+        profileId.isNotEmpty &&
+        _profileRedirectPolicies.containsKey(profileId)) {
+      return _profileRedirectPolicies[profileId]!;
+    }
+    return (allowAll: _globalAllowAllRedirects, uris: _globalRedirectUris);
   }
 
   void _reloadPasswordHashFromDisk() {
@@ -274,6 +361,10 @@ class LocalOAuthProvider {
     final diskName = (saved['server_name'] ?? '').toString().trim();
     if (diskName.isNotEmpty) {
       serverName = diskName;
+    }
+    final accent = (saved['accent_theme'] ?? '').toString().trim();
+    if (accent.isNotEmpty) {
+      _accentThemeKey = accent;
     }
   }
 
@@ -290,21 +381,44 @@ class LocalOAuthProvider {
     if (newName.isNotEmpty) {
       serverName = newName;
     }
+    final accent = (saved['accent_theme'] ?? '').toString().trim();
+    if (accent.isNotEmpty) {
+      _accentThemeKey = accent;
+    }
+    final globalUris = ((saved['oauth_redirect_uris'] as List?) ?? const [])
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    _globalRedirectUris = globalUris;
+    _globalAllowAllRedirects = saved.containsKey('oauth_allow_all_redirects')
+        ? saved['oauth_allow_all_redirects'] == true
+        : globalUris.isEmpty;
+
+    _profileRedirectPolicies.clear();
     for (final p in profiles) {
-      if (p['enabled'] == false || p['auth_mode'] != 'oauth-local') continue;
+      if (p['enabled'] == false) continue;
+      final pid = (p['id'] ?? '').toString().trim();
+      final uris = ((p['oauth_redirect_uris'] as List?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final allowAll = p.containsKey('oauth_allow_all_redirects')
+          ? p['oauth_allow_all_redirects'] == true
+          : uris.isEmpty;
+      if (pid.isNotEmpty) {
+        _profileRedirectPolicies[pid] = (allowAll: allowAll, uris: uris);
+      }
+      if (p['auth_mode'] != 'oauth-local') continue;
       final cid = (p['oauth_client_id'] ?? '').toString().trim();
       final csec = (p['oauth_client_secret'] ?? '').toString().trim();
       if (cid.isNotEmpty && csec.isNotEmpty) {
-        final uris = ((p['oauth_redirect_uris'] as List?) ?? const [])
-            .map((e) => e.toString().trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
         _registerStaticClient(
           clientId: cid,
           clientSecret: csec,
           clientName: (p['name'] ?? 'OAuth Profile').toString(),
           redirectUris: uris,
-          profileId: p['id']?.toString(),
+          allowAllRedirects: allowAll,
+          profileId: pid.isEmpty ? null : pid,
         );
       }
     }
@@ -509,6 +623,17 @@ class LocalOAuthProvider {
         .where((s) => s.isNotEmpty)
         .toList();
 
+    final policy = _effectiveRedirectPolicy(targetProfileId);
+    for (final u in uris) {
+      if (!isRedirectUriAllowed(policy.uris, u, allowAll: policy.allowAll)) {
+        return _jsonResp(400, {
+          'error': 'invalid_redirect_uri',
+          'error_description':
+              "Redirect URI '$u' is not permitted by this MCP endpoint's callback whitelist.",
+        });
+      }
+    }
+
     final info = <String, dynamic>{
       'client_id': cid,
       if (csec != null) 'client_secret': csec,
@@ -582,22 +707,45 @@ class LocalOAuthProvider {
       );
     }
 
+    final resolvedProfileId =
+        targetProfileId ?? client['profile_id']?.toString();
+    final policy = _effectiveRedirectPolicy(resolvedProfileId);
+    if (!isRedirectUriAllowed(
+      policy.uris,
+      redirectUri,
+      allowAll: policy.allowAll,
+    )) {
+      return _htmlResp(
+        400,
+        '<h3>回调地址 (Redirect URI) 未在允许白名单中</h3>'
+        '<p>客户端 <code>${_esc(clientId)}</code> 请求的回调地址为：<br><code>${_esc(redirectUri)}</code></p>'
+        '<p>当前入口白名单规则为：<br><code>${_esc(policy.uris.isEmpty ? "(空列表)" : policy.uris.join(', '))}</code></p>'
+        '<p>请在 Agent MCP 控制台「服务配置 &rarr; 对应入口编辑 &rarr; 允许的回调地址」中打开「允许所有回调地址」开关，或添加匹配的规则（支持 <code>*</code> 通配符）。</p>',
+      );
+    }
+
+    final isStaticClient = client['is_static'] == true;
+    final clientAllowAll = client.containsKey('allow_all_redirects')
+        ? client['allow_all_redirects'] == true
+        : !isStaticClient;
     final allowedUris = ((client['redirect_uris'] as List?) ?? const [])
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    if (!isRedirectUriAllowed(allowedUris, redirectUri)) {
+    if (!isRedirectUriAllowed(
+      allowedUris,
+      redirectUri,
+      allowAll: clientAllowAll && allowedUris.isEmpty,
+    )) {
       return _htmlResp(
         400,
         '<h3>回调地址 (Redirect URI) 不匹配</h3>'
         '<p>客户端 <code>${_esc(clientId)}</code> 请求的回调地址为：<br><code>${_esc(redirectUri)}</code></p>'
-        '<p>当前白名单配置为：<br><code>${_esc(allowedUris.join(', '))}</code></p>'
-        '<p>请在 Agent MCP 控制台「服务配置 -> 对应入口编辑 -> 允许的回调 URI」中添加上述地址（或留空以允许动态匹配）。</p>',
+        '<p>当前客户端注册白名单为：<br><code>${_esc(allowedUris.join(', '))}</code></p>'
+        '<p>请在 Agent MCP 控制台「服务配置 &rarr; 对应入口编辑 &rarr; 允许的回调地址」中添加上述地址（支持 <code>*</code> 通配符）或开启允许所有回调地址。</p>',
       );
     }
 
-    final resolvedProfileId =
-        targetProfileId ?? client['profile_id']?.toString();
     final reqId = randomTokenUrlSafe(24);
     _pending[reqId] = _PendingAuthReq(
       client: client,
@@ -693,11 +841,12 @@ class LocalOAuthProvider {
           .toString(),
     );
     final sname = _esc(serverName);
+    final ac = resolveServerAccentPalette(_accentThemeKey);
     final page = '''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:#4F46E5;--clay-h:#4338CA;--on-clay:#FFFFFF;--clay-bg:rgba(79,70,229,.09);--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
-@media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:#818CF8;--clay-h:#A5B4FC;--on-clay:#0A0A0C;--clay-bg:rgba(129,140,248,.13);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
+:root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:${ac.lightHex};--clay-h:${ac.lightHoverHex};--on-clay:#FFFFFF;--clay-bg:${ac.lightRgba};--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
+@media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:${ac.darkHex};--clay-h:${ac.darkHoverHex};--on-clay:#0A0A0C;--clay-bg:${ac.darkRgba};--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
 .card{width:100%;max-width:404px;background:var(--card);border:1px solid var(--border);border-radius:28px;padding:28px 26px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
@@ -983,13 +1132,12 @@ LocalOAuthProvider buildOAuthProvider(ServerConfig config) {
       'http://${config.host}:${config.port}';
 
   final hash = config.oauthLocalPasswordHash ?? '';
-  final extraClients = oauthLocalProfiles
-      .where((p) =>
-          (p['oauth_client_id'] ?? '').toString().isNotEmpty &&
-          (p['oauth_client_secret'] ?? '').toString().isNotEmpty)
+  final extraClients = enabledProfiles
+      .where((p) => p['auth_mode'] == 'oauth-local')
       .map((p) => <String, dynamic>{
-            'client_id': p['oauth_client_id'],
-            'client_secret': p['oauth_client_secret'],
+            'client_id': p['oauth_client_id'] ?? '',
+            'client_secret': p['oauth_client_secret'] ?? '',
+            'allow_all_redirects': p['oauth_allow_all_redirects'] != false,
             'redirect_uris': p['oauth_redirect_uris'] ?? const [],
             'client_name': p['name'] ?? 'OAuth Profile',
             'profile_id': p['id'],
@@ -1004,6 +1152,7 @@ LocalOAuthProvider buildOAuthProvider(ServerConfig config) {
     configFile: config.configFile,
     staticClientId: config.oauthClientId,
     staticClientSecret: config.oauthClientSecret,
+    staticAllowAllRedirects: config.oauthAllowAllRedirects,
     staticRedirectUris: config.oauthRedirectUris,
     extraStaticClients: extraClients,
   );

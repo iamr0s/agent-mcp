@@ -7,6 +7,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import 'auth.dart';
+import 'clipboard_screen_tools.dart';
 import 'config.dart';
 import 'dashboard_api.dart';
 import 'exposure_tools.dart';
@@ -55,7 +56,7 @@ class McpServerEngine {
     final modeDesc = config.readOnly ? 'READ-ONLY' : 'READ-WRITE + EXEC';
     final scopeDesc = config.unrestricted
         ? 'UNRESTRICTED'
-        : 'SCOPED (${config.roots.length} roots)';
+        : 'SCOPED (${config.effectiveRoots.length} roots)';
     return "MCP server '${config.serverName}' on host '${Platform.localHostname}' ($modeDesc, $scopeDesc). "
         'Prefer stat_file before reading large files, use edit_file or apply_patch for '
         'surgical changes instead of rewriting whole files, use start_process + '
@@ -99,10 +100,18 @@ class McpServerEngine {
           'os': Platform.operatingSystem,
           'cwd': Directory.current.absolute.path,
           'profile': policy.profileName,
-          'access_mode': policy.roots.isEmpty ? 'unrestricted' : 'scoped',
-          'allowed_roots': policy.roots,
+          'access_mode':
+              policy.allowAllRoots || policy.effectiveRoots.isEmpty
+                  ? 'unrestricted'
+                  : 'scoped',
+          'allow_all_roots': policy.allowAllRoots,
+          'allowed_roots': policy.effectiveRoots,
           'read_only': policy.readOnly,
           'allow_secrets': policy.allowSecrets,
+          'allow_commands': policy.allowCommands,
+          'allow_processes': policy.allowProcesses,
+          'allow_exposures': policy.allowExposures,
+          'allow_clipboard_screen': policy.allowClipboardScreen,
           'relaxed_command_annotations': policy.relaxedCommandAnnotations,
           'auth_mode': config.authMode,
           'transport': config.transport,
@@ -117,6 +126,7 @@ class McpServerEngine {
     registerProcessTools(registerTool, config, processManager);
     registerSubMcpTools(registerTool, config);
     registerExposureTools(registerTool, config);
+    registerClipboardAndScreenTools(registerTool, config);
   }
 
   Future<Map<String, dynamic>?> handleJsonRpcMessage(
@@ -158,6 +168,8 @@ class McpServerEngine {
           'protocolVersion': negotiatedProto,
           'capabilities': {
             'tools': {'listChanged': false},
+            'resources': {'listChanged': false},
+            'prompts': {'listChanged': false},
           },
           'serverInfo': {
             'name': config.serverName,
@@ -184,10 +196,15 @@ class McpServerEngine {
       case 'tools/list':
         final policy = getEffectivePolicy(config);
         final silent = policy.relaxedCommandAnnotations;
+        final directSpecs =
+            await SubMcpManager.instance.resolveDirectMountedToolSpecs(
+          globalPrefix: _prefix,
+        );
         return ok({
-          'tools': _tools.values
-              .map((t) => t.toMcpJson(silentAnnotations: silent))
-              .toList(),
+          'tools': [
+            ..._tools.values.map((t) => t.toMcpJson(silentAnnotations: silent)),
+            ...directSpecs.map((t) => t.toMcpJson(silentAnnotations: silent)),
+          ],
         });
 
       case 'tools/call':
@@ -196,7 +213,14 @@ class McpServerEngine {
         final callArgs = rawArgs is Map
             ? Map<String, dynamic>.from(rawArgs)
             : <String, dynamic>{};
-        final spec = _tools[toolName];
+        var spec = _tools[toolName];
+        if (spec == null) {
+          final directSpecs =
+              await SubMcpManager.instance.resolveDirectMountedToolSpecs(
+            globalPrefix: _prefix,
+          );
+          spec = directSpecs.where((t) => t.name == toolName).firstOrNull;
+        }
         if (spec == null) {
           return fail(-32602, "Unknown tool: '$toolName'");
         }
@@ -266,6 +290,44 @@ class McpServerEngine {
       sw.stop();
       final elapsedMs =
           double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      if (resultText.startsWith(kMcpStructuredImagePrefix)) {
+        final rawJson = resultText.substring(kMcpStructuredImagePrefix.length);
+        final decoded = jsonDecode(rawJson) as Map<String, dynamic>;
+        final savedPath = decoded['saved_path']?.toString();
+        final summaryText =
+            'Captured screen #${decoded['display_index'] ?? 0} (${decoded['bytes'] ?? 0} bytes PNG${savedPath != null ? ', saved to $savedPath' : ''}).';
+        McpLogger.instance.info(
+          '[TOOL OK] [${policy.profileName}] ${spec.name} (${elapsedMs}ms) -> $summaryText',
+        );
+        StructuredEventBus.instance.emit({
+          'call_id': callId,
+          'status': 'done',
+          'kind': 'ok',
+          'badge': '完成',
+          'level': 'INFO',
+          'tool': spec.name,
+          'source': policy.profileName,
+          'source_host': policy.host,
+          'ms': elapsedMs,
+          'args': safeArgs,
+          'result': summaryText,
+          'summary': summaryText,
+        });
+        return {
+          'content': [
+            {
+              'type': 'image',
+              'data': (decoded['data'] ?? '').toString(),
+              'mimeType': (decoded['mimeType'] ?? 'image/png').toString(),
+            },
+            {
+              'type': 'text',
+              'text': summaryText,
+            },
+          ],
+          'isError': false,
+        };
+      }
       var preview = resultText.replaceAll('\r', '').replaceAll('\n', ' ');
       if (preview.length > 360) {
         preview =
@@ -922,6 +984,11 @@ class _LiveRoutingState {
   final bool globalReadOnly;
   final bool globalAllowSecrets;
   final bool globalRelaxedCmd;
+  final bool globalAllowAllRoots;
+  final bool globalAllowCommands;
+  final bool globalAllowProcesses;
+  final bool globalAllowExposures;
+  final bool globalAllowClipboardScreen;
   final List<String> globalRoots;
 
   const _LiveRoutingState({
@@ -935,6 +1002,11 @@ class _LiveRoutingState {
     required this.globalReadOnly,
     required this.globalAllowSecrets,
     required this.globalRelaxedCmd,
+    required this.globalAllowAllRoots,
+    required this.globalAllowCommands,
+    required this.globalAllowProcesses,
+    required this.globalAllowExposures,
+    required this.globalAllowClipboardScreen,
     required this.globalRoots,
   });
 
@@ -965,13 +1037,30 @@ class _LiveRoutingState {
     final gRelaxed = saved.containsKey('relaxed_command_annotations')
         ? saved['relaxed_command_annotations'] == true
         : config.relaxedCommandAnnotations;
+    final gAllowCmd = saved.containsKey('allow_commands')
+        ? saved['allow_commands'] != false
+        : config.allowCommands;
+    final gAllowProc = saved.containsKey('allow_processes')
+        ? saved['allow_processes'] != false
+        : config.allowProcesses;
+    final gAllowExp = saved.containsKey('allow_exposures')
+        ? saved['allow_exposures'] != false
+        : config.allowExposures;
+    final gAllowClip = saved.containsKey('allow_clipboard_screen')
+        ? saved['allow_clipboard_screen'] != false
+        : config.allowClipboardScreen;
     final gRoots = saved['roots'] is List
         ? (saved['roots'] as List)
             .map((e) => e.toString().trim())
             .where((s) => s.isNotEmpty)
-            .map(expandAndResolvePath)
+            .map((s) => containsPathWildcard(s) ? s : expandAndResolvePath(s))
             .toList()
         : List<String>.from(config.roots);
+    final gAllowAllRoots = saved.containsKey('allow_all_roots')
+        ? saved['allow_all_roots'] != false
+        : (saved['roots'] is List && gRoots.isNotEmpty
+            ? false
+            : config.allowAllRoots);
 
     void registerBase(String rawUrl, [Map<String, dynamic>? prof]) {
       final clean = rawUrl.trim().replaceAll(RegExp(r'/+$'), '');
@@ -1055,6 +1144,11 @@ class _LiveRoutingState {
       globalReadOnly: gRo,
       globalAllowSecrets: gSec,
       globalRelaxedCmd: gRelaxed,
+      globalAllowAllRoots: gAllowAllRoots,
+      globalAllowCommands: gAllowCmd,
+      globalAllowProcesses: gAllowProc,
+      globalAllowExposures: gAllowExp,
+      globalAllowClipboardScreen: gAllowClip,
       globalRoots: gRoots,
     );
   }
@@ -1068,14 +1162,22 @@ class _LiveRoutingState {
         readOnly: globalReadOnly,
         allowSecrets: globalAllowSecrets,
         relaxedCommandAnnotations: globalRelaxedCmd,
+        allowAllRoots: globalAllowAllRoots,
+        allowCommands: globalAllowCommands,
+        allowProcesses: globalAllowProcesses,
+        allowExposures: globalAllowExposures,
+        allowClipboardScreen: globalAllowClipboardScreen,
         roots: globalRoots,
       );
     }
     final customRoots = ((prof['roots'] as List?) ?? const [])
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
-        .map(expandAndResolvePath)
+        .map((s) => containsPathWildcard(s) ? s : expandAndResolvePath(s))
         .toList();
+    final pAllowAllRoots = prof.containsKey('allow_all_roots')
+        ? prof['allow_all_roots'] != false
+        : customRoots.isEmpty;
     return AccessPolicy(
       profileId: (prof['id'] ?? 'default').toString(),
       profileName: (prof['name'] ?? '主入口').toString(),
@@ -1083,6 +1185,11 @@ class _LiveRoutingState {
       readOnly: prof['read_only'] == true,
       allowSecrets: prof['allow_secrets'] == true,
       relaxedCommandAnnotations: prof['relaxed_command_annotations'] == true,
+      allowAllRoots: pAllowAllRoots,
+      allowCommands: prof['allow_commands'] != false,
+      allowProcesses: prof['allow_processes'] != false,
+      allowExposures: prof['allow_exposures'] != false,
+      allowClipboardScreen: prof['allow_clipboard_screen'] != false,
       roots: customRoots,
     );
   }
@@ -1098,6 +1205,11 @@ class _LiveRoutingState {
       readOnly: globalReadOnly,
       allowSecrets: globalAllowSecrets,
       relaxedCommandAnnotations: globalRelaxedCmd,
+      allowAllRoots: globalAllowAllRoots,
+      allowCommands: globalAllowCommands,
+      allowProcesses: globalAllowProcesses,
+      allowExposures: globalAllowExposures,
+      allowClipboardScreen: globalAllowClipboardScreen,
       roots: globalRoots,
     );
   }

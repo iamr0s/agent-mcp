@@ -1,11 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
+import '../theme/qr_code_painter.dart';
 import 'profile_endpoints_helper.dart';
 
 String inferShareModeFromPath(String rawPath) {
@@ -735,6 +734,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
     final hitCount = int.tryParse('${item['hit_count'] ?? 0}') ?? 0;
     final bytesHuman = (item['bytes_sent_human'] ?? '0 B').toString();
     final hasPin = item['has_pin'] == true;
+    final allowUpload = item['allow_upload'] == true;
     final pinCode = (item['pin_code'] ?? '').toString();
     final remDl = item['remaining_downloads'] is int
         ? item['remaining_downloads'] as int
@@ -920,6 +920,13 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                             fg: c.sage,
                             bg: c.sageBg,
                           ),
+                          if (allowUpload)
+                            PrismPill(
+                              text: '双向收件箱',
+                              mono: false,
+                              fg: c.clay,
+                              bg: c.clay.withValues(alpha: 0.12),
+                            ),
                           if (hasPin)
                             GestureDetector(
                               onTap: pinCode.isNotEmpty
@@ -1088,6 +1095,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   late int _ttlMinutes = widget.defaultTtlMinutes;
   int _maxDownloads = 0;
   bool _spa = false;
+  bool _allowUpload = false;
   bool _showAdvancedOptions = false;
   bool _editingRawPath = false;
   bool _picking = false;
@@ -1176,6 +1184,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         pinCode: pinText.isEmpty ? null : pinText,
         maxDownloads: _maxDownloads > 0 ? _maxDownloads : null,
         spa: _mode == 'site' && _spa,
+        allowUpload: _mode == 'folder' && _allowUpload,
       );
       if (!mounted) return;
       if (res['ok'] == true && res['exposure'] is Map) {
@@ -1959,6 +1968,15 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                       hintText: '可选备注名（留空自动按文件名或端口号生成）',
                                     ),
                                   ),
+                                  if (_mode == 'folder') ...[
+                                    const SizedBox(height: 10),
+                                    PrismCheckToggle(
+                                      value: _allowUpload,
+                                      label: '允许访客拖拽或选择文件上传到此目录（双向收件箱模式）',
+                                      onChanged: (v) =>
+                                          setState(() => _allowUpload = v),
+                                    ),
+                                  ],
                                   if (_mode == 'site') ...[
                                     const SizedBox(height: 10),
                                     PrismCheckToggle(
@@ -2071,8 +2089,6 @@ class _ShareQrDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = PrismPalette.of(context);
-    final qrImgUrl =
-        'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${Uri.encodeComponent(url)}';
 
     return Dialog(
       backgroundColor: c.paper,
@@ -2096,31 +2112,14 @@ class _ShareQrDialog extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               Text(
-                '手机相机扫一扫，或直接复制链接发给好友',
+                '本地离线生成矢量二维码 · 手机相机扫一扫直达',
                 style: sansStyle(c, size: 12, color: c.muted),
               ),
               const SizedBox(height: 16),
-              Container(
-                width: 196,
-                height: 196,
-                padding: const EdgeInsets.all(12),
-                decoration: ShapeDecoration(
-                  color: Colors.white,
-                  shape: prismSuperellipse(
-                    20,
-                    side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
-                  ),
-                ),
-                child: Image.network(
-                  qrImgUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => CustomPaint(
-                    painter: _OfflineMatrixBadgePainter(
-                      url.hashCode,
-                      const Color(0xFF0F172A),
-                    ),
-                  ),
-                ),
+              PrismQrCodeBox(
+                key: const ValueKey('share-qr-vector-box'),
+                data: url,
+                size: 196,
               ),
               const SizedBox(height: 14),
               Container(
@@ -2169,65 +2168,6 @@ class _ShareQrDialog extends StatelessWidget {
       ),
     );
   }
-}
-
-class _OfflineMatrixBadgePainter extends CustomPainter {
-  final int seed;
-  final Color color;
-  const _OfflineMatrixBadgePainter(this.seed, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = color;
-    const n = 15;
-    final cell = math.min(size.width, size.height) / n;
-    void finder(int ox, int oy) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(ox * cell, oy * cell, 4 * cell, 4 * cell),
-          const Radius.circular(4),
-        ),
-        p
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = cell * 0.8,
-      );
-      canvas.drawRect(
-        Rect.fromLTWH(
-          (ox + 1.2) * cell,
-          (oy + 1.2) * cell,
-          1.6 * cell,
-          1.6 * cell,
-        ),
-        p..style = PaintingStyle.fill,
-      );
-    }
-
-    finder(1, 1);
-    finder(n - 5, 1);
-    finder(1, n - 5);
-    var s = seed.abs() + 1337;
-    for (var y = 1; y < n - 1; y++) {
-      for (var x = 1; x < n - 1; x++) {
-        if ((x < 6 && y < 6) || (x > n - 7 && y < 6) || (x < 6 && y > n - 7)) {
-          continue;
-        }
-        s = (s * 1103515245 + 12345) & 0x7fffffff;
-        if (s % 3 == 0) {
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(
-              Rect.fromLTWH(x * cell, y * cell, cell * 0.82, cell * 0.82),
-              const Radius.circular(2),
-            ),
-            p..style = PaintingStyle.fill,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _OfflineMatrixBadgePainter oldDelegate) =>
-      oldDelegate.seed != seed || oldDelegate.color != color;
 }
 
 class TailscaleExposureSettingsCard extends StatefulWidget {

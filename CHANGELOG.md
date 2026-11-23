@@ -1,5 +1,21 @@
 # Changelog
 
+## [v3.5.0] — Native Flutter Setup Wizard, Universal Sub-MCP OAuth 2.1 Hub, Switch-Driven Wildcard Whitelists & Full-Platform Audit Upgrade
+
+- **真 Dart / Flutter 同源 Windows 安装向导（`--installer` 模式 + 极简零界面 SFX 引导壳）**：
+  - 彻底移除旧版 `.NET 4.0` WinForms/GDI+ 独立绘制窗口，改为无感解压临时载荷并拉起原生硬件加速 `agent_mcp_app.exe --installer` 向导窗口（`660×520` Windows 11 原生 `DWMWCP_ROUND` 圆角），完整复用主程序全套 **Prism 双维主题（浅色/暗色 × 6 款主题色实时点选预览 + 光标精确落点水波纹扩散）**、同心折射棱镜矢量徽标与 Windows 11 现代 `IFileOpenDialog` 目录选择器。
+  - 原生 C++ 启动层针对 `--installer` 自动绕过后台单实例互斥锁与托盘常驻钩子，避免后台托盘运行中双击安装包被静默吞没；自动识别已有安装目录切换「全新安装 / 无损覆盖升级」，遇到运行中实例时弹出毛玻璃确认卡片平滑关闭旧进程，完整保留 `config/`、`data/` 与 `logs/`，并在安装完成后通过独立自清理进程静默回收临时目录。
+- **全协议子 MCP 中枢（OAuth 2.1 动态授权 + 五态传输 + 直挂穿透 + 可视化调试台）**：
+  - **完整客户端侧 OAuth 2.1 授权引擎（`oauth2_pkce`）**：支持 `401 WWW-Authenticate` 自动探测 RFC 9728 受保护资源元数据、RFC 8414 / OIDC 双重授权发现、三级客户端身份协商（预设 Client ID → CIMD 元数据文档 → RFC 7591 动态客户端注册）、`S256` PKCE 浏览器回环一键登录、`resource` 受众绑定、`iss` 签发者校验、`403 insufficient_scope` 增量授权提示与后台静默 `refresh_token` 续期，令牌隔离存储于 `data/sub_mcp_tokens.json`；同步支持 `oauth2_client_credentials`（M2M）、`Bearer`、`API Key`（Header / Query）、`Basic` 与 `${ENV:VAR}` 环境变量占位注入。
+  - **全栈传输、全原语与双模式挂载**：支持 `auto`（Streamable HTTP 遇到 `404/405` 自动无感回退 Legacy SSE）、`stdio` 热驻留池、`http`（会话过期自动重握手）、`sse` 与 `ws`（WebSocket JSON-RPC），并支持单服务独立 HTTP 代理与自签名证书开关；除 `tools` 外全面打通 `resources` 与 `prompts` 原语，支持 **网关聚合（`gateway`）** 与 **直挂主工具列表（`direct`，`<subname>__<tool>`）** 双模式切换、单工具细粒度启停、多客户端格式智能粘贴导入（Claude Desktop / Cursor / VS Code / 单行 `npx` / `uvx` / URL）以及内置 **Sub-MCP Playground 可视化在线调试抽屉**。
+- **「默认全放行开关 + 逐行通配符列表」白名单交互重构**：
+  - **OAuth 回调地址白名单（`oauth_allow_all_redirects`）**：新增顶层总开关（默认开启，允许任意回调地址以兼容各类本地随机端口与 Web AI 客户端）；关闭后平滑展开逐行增删卡片，支持 `*` / `**` / `?` 通配符（如 `http://127.0.0.1:*/callback`、`https://*.claude.ai/**`）与常用预设一键填入，并在静态客户端、RFC 7591 `/register` 动态注册与 `/authorize` 全链路统一强制校验；重新打开总开关时自动保留已填规则不丢失。
+  - **目录访问白名单（`allow_all_roots`）**：全局设置与各独立接入入口（Profile）同步升级为「允许访问本机所有目录」总开关（默认开启）+ 关闭后逐行选择/输入目录或通配符规则（如 `D:\Projects\*`），每行均配原生文件夹浏览按钮，切换开关无损保留已有路径列表。
+- **全仓深度体验审计修复与生产力能力扩展（内置工具扩充至 22 项）**：
+  - **告别手写多行纯文本**：子 MCP 编辑弹窗的启动参数 `args`、环境变量 `env` 与自定义请求头 `headers` 全面升级为结构化逐行增删列表（自动对敏感密钥掩码显示），工作目录 `cwd` 补齐原生文件夹选择按钮。
+  - **零外网泄露矢量二维码 & 外网分享持久化 + 双向投递**：移除原先请求外部 `api.qrserver.com` 的隐私泄露隐患，自研纯 Dart 零依赖 ISO/IEC 18004 离线矢量二维码引擎（服务端 SVG + 客户端 `CustomPainter`）；活跃分享条目自动持久化至 `data/exposures_state.json`（重启自动恢复未过期分享），并为文件夹分享新增可选 **访客拖拽上传（`双向收件箱`）** 开关。
+  - **跨端细节打磨与生产力新特性**：修复启动首帧主题闪烁并将 6 款主题色同步至服务端 OAuth/分享网页；补齐 macOS 点击 Dock 重开窗口、Linux GTK 初始暗色背景适配与 macOS/Linux 应用内一键拉起升级包；新增细粒度高危能力开关（终端命令 / 后台进程 / 外网分享 / 剪贴板与截屏）、内置 `manage_clipboard` 与多模态 `capture_screen` 屏幕截图工具（共 **22 项**标准工具）、**AI 客户端一键写入向导**（Claude Desktop / Cursor / VS Code / Windsurf / Claude Code CLI）、**PBKDF2 + AES 加密/脱敏配置快照导入导出** 以及多节点并发 `/health` 毫秒级延迟心跳探测。
+
 ## [v3.4.2] — Continuous Dock-to-Pill Liquid Morph & Seamless Multi-Step Share Dialog Choreography
 
 - **移动端底栏单壳连续浓缩形变（告别双组件上下断层）**：将四栏液态玻璃导航坞与收起态迷你指示条合并为**同一个圆角玻璃胶囊壳体**；向下滚动收起时，外层胶囊宽度从整栏平滑向中心收缩至 `86px`、高度从 `58px` 连续压扁至 `26px`，四栏文字图标向内微缩淡出，而当前激活的液态透镜则同步滑向正中凝聚为迷你胶囊内芯并浮现 `━ ∧` 展开手柄；点按或向上轻拂迷你胶囊时以弹簧曲线（`snappySpring`）从中心原地撑开复原。

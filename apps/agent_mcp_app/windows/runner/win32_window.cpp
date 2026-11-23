@@ -365,13 +365,40 @@ bool Win32Window::Create(const std::wstring& title,
 
   ApplyFramelessStyle();
   SetDarkTheme(is_dark_mode_);
-  InitTrayIcon(title);
+  if (tray_enabled_) {
+    InitTrayIcon(title);
+  }
 
   return OnCreate();
 }
 
+void Win32Window::SetTrayEnabled(bool tray_enabled) {
+  tray_enabled_ = tray_enabled;
+  if (!tray_enabled_ && tray_added_) {
+    RemoveTrayIcon();
+  }
+}
+
+void Win32Window::CenterOnPrimaryMonitor() {
+  if (!window_handle_) return;
+  HMONITOR mon = MonitorFromWindow(window_handle_, MONITOR_DEFAULTTOPRIMARY);
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(mi);
+  if (!GetMonitorInfoW(mon, &mi)) return;
+  RECT wr{};
+  if (!GetWindowRect(window_handle_, &wr)) return;
+  const int win_w = wr.right - wr.left;
+  const int win_h = wr.bottom - wr.top;
+  const int work_w = mi.rcWork.right - mi.rcWork.left;
+  const int work_h = mi.rcWork.bottom - mi.rcWork.top;
+  const int x = mi.rcWork.left + max(0, (work_w - win_w) / 2);
+  const int y = mi.rcWork.top + max(0, (work_h - win_h) / 2);
+  SetWindowPos(window_handle_, nullptr, x, y, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 void Win32Window::InitTrayIcon(const std::wstring& tooltip) {
-  if (!window_handle_ || tray_added_) return;
+  if (!tray_enabled_ || !window_handle_ || tray_added_) return;
 
   ZeroMemory(&tray_nid_, sizeof(tray_nid_));
   tray_nid_.cbSize = sizeof(NOTIFYICONDATAW);
@@ -401,7 +428,7 @@ void Win32Window::InitTrayIcon(const std::wstring& tooltip) {
 }
 
 void Win32Window::SetTrayTooltip(const std::wstring& tooltip) {
-  if (!window_handle_) return;
+  if (!tray_enabled_ || !window_handle_) return;
   if (!tray_added_) {
     InitTrayIcon(tooltip);
     return;
@@ -1200,9 +1227,11 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   if (taskbar_created_msg_ != 0 && message == taskbar_created_msg_) {
-    tray_added_ = (Shell_NotifyIconW(NIM_ADD, &tray_nid_) != FALSE);
-    if (tray_added_) {
-      PromoteTrayIconOnWindows11Once();
+    if (tray_enabled_) {
+      tray_added_ = (Shell_NotifyIconW(NIM_ADD, &tray_nid_) != FALSE);
+      if (tray_added_) {
+        PromoteTrayIconOnWindows11Once();
+      }
     }
     return 0;
   }

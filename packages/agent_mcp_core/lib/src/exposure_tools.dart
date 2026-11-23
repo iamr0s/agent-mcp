@@ -14,6 +14,7 @@ import 'config.dart';
 import 'logging_utils.dart';
 import 'privileged_exec.dart';
 import 'process_tools.dart';
+import 'qr_svg.dart';
 import 'tool_types.dart';
 import 'tunnel.dart';
 
@@ -426,33 +427,113 @@ Future<List<int>> scanActiveLocalDevPorts({
   return resolved;
 }
 
-/// Opens a native OS file or folder dialog on Desktop (Windows/macOS/Linux)
+/// Opens a native modern OS file or folder dialog on Desktop (Windows 11 IFileOpenDialog / macOS / Linux)
 /// without requiring any third-party native Flutter plugin dependencies.
-Future<String?> pickNativeLocalPath({required bool directory}) async {
+Future<String?> pickNativeLocalPath({
+  required bool directory,
+  String? title,
+  String? initialDirectory,
+}) async {
   if (Platform.isAndroid || Platform.isIOS) return null;
   try {
     if (Platform.isWindows) {
+      final dlgTitle = (title ?? (directory ? '选择文件夹' : '选择要分享的文件或网页'))
+          .replaceAll("'", "''");
+      final initDir = (initialDirectory ?? '').trim().replaceAll("'", "''");
       final script = directory
-          ? r'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "选择要分享的文件夹"; if ($f.ShowDialog() -eq "OK") { [Console]::Out.Write($f.SelectedPath) }'
-          : r'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = "选择要分享的文件或网页"; if ($f.ShowDialog() -eq "OK") { [Console]::Out.Write($f.FileName) }';
+          ? '''
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+namespace Win32ModernPicker {
+  [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+  internal class FileOpenDialogRCW {}
+  [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  internal interface IFileOpenDialog {
+    [PreserveSig] int Show(IntPtr parent);
+    void SetFileTypes(uint cFileTypes, IntPtr rgFilterSpec);
+    void SetFileTypeIndex(uint iFileType);
+    void Advise(IntPtr pfde, out uint pdwCookie);
+    void Unadvise(uint dwCookie);
+    void SetOptions(uint fos);
+    void GetOptions(out uint pfos);
+    void SetDefaultFolder(IShellItem psi);
+    void SetFolder(IShellItem psi);
+    void GetFolder(out IShellItem ppsi);
+    void GetCurrentSelection(out IShellItem ppsi);
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+    void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+    void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string pszText);
+    void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+    void GetResult(out IShellItem ppsi);
+  }
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  internal interface IShellItem {
+    void BindToHandler(IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid bhid, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IntPtr ppv);
+    void GetParent(out IShellItem ppsi);
+    void GetDisplayName(uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+    void GetAttributes(uint sfgaoMask, out uint psfgaoAttribs);
+    void Compare(IShellItem psi, uint hint, out int piOrder);
+  }
+  public static class FolderPicker {
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHCreateItemFromParsingName(string pszPath, IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IShellItem ppv);
+    public static string Pick(string title, string initDir) {
+      var dlg = (IFileOpenDialog)(new FileOpenDialogRCW());
+      uint opts;
+      dlg.GetOptions(out opts);
+      dlg.SetOptions(opts | 0x20u | 0x40u | 0x08u);
+      if (!string.IsNullOrEmpty(title)) dlg.SetTitle(title);
+      if (!string.IsNullOrEmpty(initDir) && System.IO.Directory.Exists(initDir)) {
+        IShellItem folder;
+        if (SHCreateItemFromParsingName(initDir, IntPtr.Zero, typeof(IShellItem).GUID, out folder) == 0 && folder != null) {
+          dlg.SetFolder(folder);
+        }
+      }
+      int hr = dlg.Show(IntPtr.Zero);
+      if (hr != 0) return "";
+      IShellItem item;
+      dlg.GetResult(out item);
+      string path;
+      item.GetDisplayName(0x80058000u, out path);
+      return path ?? "";
+    }
+  }
+}
+"@ -ErrorAction Stop
+\$picked = [Win32ModernPicker.FolderPicker]::Pick('$dlgTitle', '$initDir')
+if (\$picked) { [Console]::Out.Write(\$picked) }
+'''
+          : '''
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+\$f = New-Object System.Windows.Forms.OpenFileDialog
+\$f.Title = '$dlgTitle'
+if ('$initDir' -ne '' -and (Test-Path '$initDir')) { \$f.InitialDirectory = '$initDir' }
+if (\$f.ShowDialog() -eq 'OK') { [Console]::Out.Write(\$f.FileName) }
+''';
       final res = await Process.run(
-        'powershell',
+        'powershell.exe',
         ['-NoProfile', '-STA', '-Command', script],
       ).timeout(const Duration(minutes: 3));
       final picked = res.stdout.toString().trim();
       return picked.isEmpty ? null : picked;
     } else if (Platform.isMacOS) {
+      final label = (title ?? (directory ? '选择文件夹' : '选择文件')).replaceAll('"', '');
       final prompt = directory
-          ? 'POSIX path of (choose folder with prompt "选择要分享的文件夹")'
-          : 'POSIX path of (choose file with prompt "选择要分享的文件")';
+          ? 'POSIX path of (choose folder with prompt "$label")'
+          : 'POSIX path of (choose file with prompt "$label")';
       final res = await Process.run('osascript', ['-e', prompt])
           .timeout(const Duration(minutes: 3));
       final picked = res.stdout.toString().trim();
       return (res.exitCode == 0 && picked.isNotEmpty) ? picked : null;
     } else if (Platform.isLinux) {
+      final label = title ?? (directory ? '选择文件夹' : '选择文件');
       final args = directory
-          ? ['--file-selection', '--directory', '--title=选择要分享的文件夹']
-          : ['--file-selection', '--title=选择要分享的文件'];
+          ? ['--file-selection', '--directory', '--title=$label']
+          : ['--file-selection', '--title=$label'];
       final res = await Process.run('zenity', args)
           .timeout(const Duration(minutes: 3));
       final picked = res.stdout.toString().trim();
@@ -548,6 +629,7 @@ class ExposureItem {
   final String label;
   final String scope; // 'auto' | 'tailscale' | 'public' | 'lan'
   final bool spa;
+  final bool allowUpload;
   final String? pinCode;
   final int? maxDownloads;
   final int createdAtMs;
@@ -574,11 +656,57 @@ class ExposureItem {
     required this.label,
     required this.scope,
     this.spa = false,
+    this.allowUpload = false,
     this.pinCode,
     this.maxDownloads,
     required this.createdAtMs,
     this.expiresAtMs,
   });
+
+  Map<String, dynamic> toPersistedJson() => {
+        'id': id,
+        'kind': kind,
+        'target': target,
+        'target_is_directory': targetIsDirectory,
+        if (targetPort != null) 'target_port': targetPort,
+        'label': label,
+        'scope': scope,
+        'spa': spa,
+        'allow_upload': allowUpload,
+        if (pinCode != null && pinCode!.isNotEmpty) 'pin_code': pinCode,
+        if (maxDownloads != null) 'max_downloads': maxDownloads,
+        'created_at_ms': createdAtMs,
+        if (expiresAtMs != null) 'expires_at_ms': expiresAtMs,
+        'hit_count': hitCount,
+        'download_count': downloadCount,
+        'bytes_sent': bytesSent,
+        if (lastAccessAtMs != null) 'last_access_at_ms': lastAccessAtMs,
+      };
+
+  factory ExposureItem.fromPersistedJson(Map<String, dynamic> m) {
+    final item = ExposureItem(
+      id: (m['id'] ?? '').toString(),
+      kind: (m['kind'] ?? 'file').toString(),
+      target: (m['target'] ?? '').toString(),
+      targetIsDirectory: m['target_is_directory'] == true,
+      targetPort: int.tryParse('${m['target_port'] ?? ''}'),
+      label: (m['label'] ?? '分享项').toString(),
+      scope: (m['scope'] ?? 'auto').toString(),
+      spa: m['spa'] == true,
+      allowUpload: m['allow_upload'] == true,
+      pinCode: (m['pin_code'] ?? '').toString().isEmpty
+          ? null
+          : m['pin_code'].toString(),
+      maxDownloads: int.tryParse('${m['max_downloads'] ?? ''}'),
+      createdAtMs: int.tryParse('${m['created_at_ms'] ?? 0}') ?? 0,
+      expiresAtMs: int.tryParse('${m['expires_at_ms'] ?? ''}'),
+    );
+    item.hitCount = int.tryParse('${m['hit_count'] ?? 0}') ?? 0;
+    item.downloadCount = int.tryParse('${m['download_count'] ?? 0}') ?? 0;
+    item.bytesSent = int.tryParse('${m['bytes_sent'] ?? 0}') ?? 0;
+    item.lastAccessAtMs = int.tryParse('${m['last_access_at_ms'] ?? ''}');
+    return item;
+  }
 
   bool get needsTrailingSlash => kind == 'folder' || kind == 'site';
 
@@ -611,11 +739,53 @@ class ExposureManager {
 
   final Map<String, ExposureItem> _items = {};
   Timer? _sweepTimer;
+  String? _hydratedStatePath;
 
   TailscaleRuntimeStatus? _cachedTsStatus;
   int _cachedTsAtMs = 0;
 
+  void _ensureHydrated() {
+    final stateFile = StoragePaths.instance.exposuresStateFile;
+    if (_hydratedStatePath == stateFile.path) return;
+    _hydratedStatePath = stateFile.path;
+    _items.clear();
+    if (!stateFile.existsSync()) return;
+    try {
+      final decoded = jsonDecode(stateFile.readAsStringSync());
+      final list = decoded is Map
+          ? ((decoded['items'] as List?) ?? const [])
+          : (decoded is List ? decoded : const []);
+      for (final raw in list) {
+        if (raw is Map) {
+          final item = ExposureItem.fromPersistedJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (item.id.isNotEmpty && !item.isExpired) {
+            _items[item.id] = item;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _persistState() {
+    try {
+      final stateFile = StoragePaths.instance.exposuresStateFile;
+      stateFile.parent.createSync(recursive: true);
+      final itemsJson = _items.values
+          .where((e) => !e.isExpired)
+          .map((e) => e.toPersistedJson())
+          .toList();
+      const enc = JsonEncoder.withIndent('  ');
+      stateFile.writeAsStringSync(
+        '${enc.convert({'version': 1, 'items': itemsJson})}\n',
+        flush: true,
+      );
+    } catch (_) {}
+  }
+
   int get activeCount {
+    _ensureHydrated();
     _purgeExpiredSync();
     return _items.length;
   }
@@ -1042,6 +1212,7 @@ class ExposureManager {
       if (item.targetPort != null) 'port': item.targetPort,
       'scope': item.scope,
       'spa': item.spa,
+      'allow_upload': item.allowUpload,
       'has_pin': item.hasPin,
       if (item.hasPin) 'pin_code': item.pinCode,
       if (item.maxDownloads != null && item.maxDownloads! > 0) ...{
@@ -1050,6 +1221,7 @@ class ExposureManager {
         'remaining_downloads': item.remainingDownloads,
       },
       'primary_url': primaryUrl,
+      'qr_svg': generateQrSvg(primaryUrl),
       if (directMediaUrl != null) 'direct_file_url': directMediaUrl,
       'public_urls': publicUrls,
       'tailscale_urls': tailscaleUrls,
@@ -1076,10 +1248,12 @@ class ExposureManager {
     String? label,
     int? ttlMinutes,
     bool spa = false,
+    bool allowUpload = false,
     String? pinCode,
     int? maxDownloads,
     bool validateWithPolicy = true,
   }) async {
+    _ensureHydrated();
     _ensureSweepTimer();
     await purgeExpired();
 
@@ -1134,7 +1308,7 @@ class ExposureManager {
         throw ArgumentError('请选择或拖入要分享的文件、文件夹、静态网页或本地端口号（如 5173）。');
       }
       final policy = getEffectivePolicy(config);
-      final checkedPath = normalizePath(rawPath, policy.roots);
+      final checkedPath = normalizePath(rawPath, policy.effectiveRoots);
       if (validateWithPolicy) {
         final deny = checkAccess(checkedPath, config);
         if (deny != null) throw FileSystemException(deny, checkedPath);
@@ -1188,6 +1362,7 @@ class ExposureManager {
           (label != null && label.trim().isNotEmpty) ? label.trim() : defaultLabel,
       scope: effectiveScope,
       spa: spa,
+      allowUpload: kind == 'folder' && allowUpload,
       pinCode: cleanPin.isEmpty ? null : cleanPin,
       maxDownloads: effMaxDl,
       createdAtMs: nowMs,
@@ -1241,6 +1416,7 @@ class ExposureManager {
     }
 
     _items[id] = item;
+    _persistState();
 
     final serialized = await serializeItem(
       item,
@@ -1261,8 +1437,10 @@ class ExposureManager {
   }
 
   Future<bool> closeExposure(String id, {String reason = 'manual'}) async {
+    _ensureHydrated();
     final item = _items.remove(id.trim());
     if (item == null) return false;
+    _persistState();
 
     if (item.cloudflaredProc != null) {
       try {
@@ -1310,6 +1488,7 @@ class ExposureManager {
     ServerConfig config, {
     bool forcePortScan = false,
   }) async {
+    _ensureHydrated();
     await purgeExpired();
     final saved = loadSavedConfig(config.configFile);
     final livePort =
@@ -1361,6 +1540,7 @@ class ExposureManager {
     if (path != 'share' && !path.startsWith('share/')) {
       return null;
     }
+    _ensureHydrated();
 
     final saved = loadSavedConfig(config.configFile);
     if (!isExposureEnabledInSaved(saved)) {
@@ -1608,6 +1788,77 @@ class ExposureManager {
 
     final candStat = await PrivFs.stat(safePath);
     if (candStat.isDirectory) {
+      if (req.method == 'POST' && req.url.queryParameters['__upload'] == '1') {
+        if (!item.allowUpload) {
+          return Response.forbidden(
+            jsonEncode({'ok': false, 'error': '该分享未开启访客上传权限'}),
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        final rawFileName = Uri.decodeComponent(
+          req.url.queryParameters['filename'] ??
+              req.headers['x-upload-filename'] ??
+              '',
+        ).trim();
+        final cleanLeaf = p.basename(rawFileName);
+        if (cleanLeaf.isEmpty ||
+            cleanLeaf == '.' ||
+            cleanLeaf == '..' ||
+            cleanLeaf.startsWith('.')) {
+          return Response(
+            400,
+            body: jsonEncode({'ok': false, 'error': '无效的文件名'}),
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        final uploadDest = await _resolveSafeSharePath(
+          item.target,
+          [...relParts, cleanLeaf],
+          config: config,
+          allowMissingLeaf: true,
+        );
+        if (uploadDest == null ||
+            _isSensitiveShareFile(uploadDest, config: config)) {
+          return Response.forbidden(
+            jsonEncode({'ok': false, 'error': '禁止上传敏感后缀或越界路径文件'}),
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        var finalDest = uploadDest;
+        if (File(finalDest).existsSync()) {
+          final stem = p.basenameWithoutExtension(cleanLeaf);
+          final ext = p.extension(cleanLeaf);
+          final stamp = DateTime.now().millisecondsSinceEpoch % 100000;
+          finalDest = p.join(p.dirname(uploadDest), '${stem}_$stamp$ext');
+        }
+        final outSink = File(finalDest).openWrite();
+        var writtenBytes = 0;
+        try {
+          await for (final chunk in req.read()) {
+            writtenBytes += chunk.length;
+            outSink.add(chunk);
+          }
+          await outSink.flush();
+        } finally {
+          await outSink.close();
+        }
+        _persistState();
+        StructuredEventBus.instance.emit({
+          'kind': 'ok',
+          'badge': '快传收件',
+          'level': 'INFO',
+          'summary':
+              '收到访客上传文件 ${p.basename(finalDest)} (${_formatHumanBytes(writtenBytes)}) -> [${item.label}]',
+        });
+        return Response.ok(
+          jsonEncode({
+            'ok': true,
+            'filename': p.basename(finalDest),
+            'bytes': writtenBytes,
+          }),
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
       final rawReqPath = req.requestedUri.path;
       if (!rawReqPath.endsWith('/')) {
         final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
@@ -1972,28 +2223,42 @@ class ExposureManager {
       );
     }
 
+    final uploadControls = item.allowUpload
+        ? '<input type="file" id="upIn" multiple style="display:none" onchange="uploadFiles(this.files)">'
+            '<button type="button" class="btn" id="upBtn" onclick="document.getElementById(\'upIn\').click()">'
+            '<span class="btn-spin" id="upSpin" style="display:none"></span>'
+            '<span id="upTxt">上传文件</span></button>'
+        : '';
+    final uploadScript = item.allowUpload
+        ? 'async function uploadFiles(fl){if(!fl||!fl.length)return;var s=document.getElementById("upSpin"),t=document.getElementById("upTxt");if(s)s.style.display="inline-block";for(var i=0;i<fl.length;i++){var f=fl[i];if(t)t.textContent="上传中 ("+(i+1)+"/"+fl.length+")...";var r=await fetch("?__upload=1&filename="+encodeURIComponent(f.name),{method:"POST",body:f});if(!r.ok){var e=await r.text();alert("上传失败: "+e);break;}}location.reload();}'
+            'document.body.addEventListener("dragover",function(e){e.preventDefault();});'
+            'document.body.addEventListener("drop",function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files)uploadFiles(e.dataTransfer.files);});'
+        : '';
+
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(item.label)} · 文件夹分享</title>'
-        '<style>$_shareArchitecturalCss</style></head><body class="page-body">'
+        '<style>${_buildShareCss(config)}</style></head><body class="page-body">'
         '<div class="shell">'
         '<div class="head">'
         '<div class="head-titles">'
-        '<div class="title-row"><h1>${_htmlEscape(item.label)}</h1><span class="badge">${entries.length} 项</span></div>'
+        '<div class="title-row"><h1>${_htmlEscape(item.label)}</h1><span class="badge">${entries.length} 项</span>${item.allowUpload ? '<span class="badge" style="color:var(--accent)">支持拖拽上传</span>' : ''}</div>'
         '<div class="crumbs">$crumbs</div>'
         '</div>'
         '<div class="tools">'
         '<input class="search-in" id="q" type="search" placeholder="筛选文件 (按 / 聚焦)..." oninput="flt(this.value)">'
+        '$uploadControls'
         '<a class="btn pri" id="zipBtn" href="?zip=1" onclick="startZip(this)">'
         '<span class="btn-spin" id="zipSpin" style="display:none"></span>'
         '<span id="zipTxt">打包下载 (.zip)</span></a>'
         '</div></div>'
-        '<div class="list-group" id="lst">${entries.isEmpty && relParts.isEmpty ? '<div class="empty">这个文件夹目前是空的</div>' : rows.toString()}</div>'
+        '<div class="list-group" id="lst">${entries.isEmpty && relParts.isEmpty ? '<div class="empty">${item.allowUpload ? "文件夹为空，可直接点击右上角「上传文件」或拖入文件" : "这个文件夹目前是空的"}</div>' : rows.toString()}</div>'
         '</div>'
         '<script>'
         'function flt(v){v=v.toLowerCase().trim();document.querySelectorAll(".item").forEach(el=>{const n=el.getAttribute("data-name")||"";el.style.display=(!v||n===".."||n.includes(v))?"flex":"none";});}'
         'function startZip(el){var s=document.getElementById("zipSpin"),t=document.getElementById("zipTxt");if(s)s.style.display="inline-block";if(t)t.textContent="正在流式打包...";setTimeout(function(){if(s)s.style.display="none";if(t)t.textContent="打包下载 (.zip)";},5000);}'
         'document.addEventListener("keydown",function(e){if(e.key==="/"&&document.activeElement!==document.getElementById("q")){e.preventDefault();document.getElementById("q").focus();}});'
+        '$uploadScript'
         '</script>'
         '</body></html>';
     final bytes = utf8.encode(html);
@@ -2116,7 +2381,7 @@ class ExposureManager {
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(displayTitle)} · 在线预览</title>'
-        '<style>$_shareArchitecturalCss</style></head><body class="page-body">'
+        '<style>${_buildShareCss()}</style></head><body class="page-body">'
         '<div class="shell preview-shell">$crumbBar<div class="head">'
         '<div class="head-titles">'
         '<div class="title">${_htmlEscape(displayTitle)}</div>'
@@ -2413,6 +2678,18 @@ class ExposureManager {
     }
   }
 
+  static String _buildShareCss([ServerConfig? config]) {
+    final saved = loadSavedConfig(config?.configFile);
+    final ac = resolveServerAccentPalette(saved['accent_theme']?.toString());
+    return _shareArchitecturalCss
+        .replaceAll('#4F46E5', ac.lightHex)
+        .replaceAll('#4338CA', ac.lightHoverHex)
+        .replaceAll('rgba(79,70,229,.09)', ac.lightRgba)
+        .replaceAll('#818CF8', ac.darkHex)
+        .replaceAll('#A5B4FC', ac.darkHoverHex)
+        .replaceAll('rgba(129,140,248,.13)', ac.darkRgba);
+  }
+
   static const String _shareArchitecturalCss =
       ':root{--outer:#FAFAFB;--card:#FFFFFF;--elev:#FAFAFC;--sheet:#F8F8FA;--head:#F2F2F5;--gutter:#F4F4F7;--hover:#F1F1F4;--line:#E6E6EA;--ink:#111113;--soft-ink:#27272A;--muted:#71717A;--accent:#4F46E5;--accent-h:#4338CA;--on-accent:#FFFFFF;--accent-bg:rgba(79,70,229,.09);--err:#DC2626;--err-bg:rgba(220,38,38,.09);--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.085),0 2px 6px rgba(9,9,11,.035)}'
       '@media(prefers-color-scheme:dark){:root{--outer:#0A0A0C;--card:#121216;--elev:#18181E;--sheet:#0D0D11;--head:#15151B;--gutter:#0B0B0F;--hover:#1B1B21;--line:#222228;--ink:#FAFAFA;--soft-ink:#D4D4D8;--muted:#8E8E98;--accent:#818CF8;--accent-h:#A5B4FC;--on-accent:#0A0A0C;--accent-bg:rgba(129,140,248,.13);--err:#F87171;--err-bg:rgba(248,113,113,.14);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}'
@@ -2609,6 +2886,12 @@ void registerExposureTools(
           'description':
               'Set true for single-page web app folders so unknown routes fall back to index.html.',
         },
+        'allow_upload': {
+          'type': 'boolean',
+          'default': false,
+          'description':
+              'Set true on folder shares to enable bi-directional visitor drag-and-drop file upload dropzone.',
+        },
       },
       'required': ['action'],
     },
@@ -2622,8 +2905,8 @@ void registerExposureTools(
         return const JsonEncoder.withIndent('  ').convert(summary);
       }
 
-      if (policy.readOnly) {
-        throw const FileSystemException('当前入口为只读模式，不允许创建或关闭外链分享。');
+      if (policy.readOnly || !policy.allowExposures) {
+        throw const FileSystemException('当前入口已禁用外链分享操作（只读或未开启允许外网分享权限）。');
       }
 
       if (action == 'open') {
@@ -2642,6 +2925,7 @@ void registerExposureTools(
             ? args['max_downloads'] as int
             : int.tryParse('${args['max_downloads'] ?? ''}');
         final spa = args['spa'] == true;
+        final allowUpload = args['allow_upload'] == true;
 
         final created = await ExposureManager.instance.openExposure(
           config: config,
@@ -2654,6 +2938,7 @@ void registerExposureTools(
           pinCode: pinCode,
           maxDownloads: maxDl,
           spa: spa,
+          allowUpload: allowUpload,
           validateWithPolicy: true,
         );
         return const JsonEncoder.withIndent('  ').convert({

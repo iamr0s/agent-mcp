@@ -22,10 +22,22 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
 
+  gboolean is_installer = FALSE;
+  if (self->dart_entrypoint_arguments != nullptr) {
+    for (int i = 0; self->dart_entrypoint_arguments[i] != nullptr; ++i) {
+      if (g_strcmp0(self->dart_entrypoint_arguments[i], "--installer") == 0) {
+        is_installer = TRUE;
+        break;
+      }
+    }
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
-  gtk_window_set_default_size(window, 1280, 820);
-  gtk_window_set_title(window, "Agent MCP Console");
+  gtk_window_set_default_size(window, is_installer ? 660 : 1280,
+                              is_installer ? 520 : 820);
+  gtk_window_set_title(window,
+                       is_installer ? "Agent MCP Setup" : "Agent MCP Console");
 
   // Load bundled Concentric Liquid Prism app icon if available next to binary.
   char exe_buf[PATH_MAX];
@@ -45,8 +57,14 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  GtkSettings* gtk_settings = gtk_settings_get_default();
+  gboolean prefer_dark = FALSE;
+  if (gtk_settings != nullptr) {
+    g_object_get(gtk_settings, "gtk-application-prefer-dark-theme",
+                 &prefer_dark, nullptr);
+  }
   GdkRGBA background_color;
-  gdk_rgba_parse(&background_color, "#0A0A0C");
+  gdk_rgba_parse(&background_color, prefer_dark ? "#0A0A0C" : "#EEF1F7");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));

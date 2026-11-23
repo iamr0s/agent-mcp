@@ -10,6 +10,7 @@ import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
 import 'android_privilege_card.dart';
 import 'exposure_page.dart';
+import 'prism_structured_editors.dart';
 import 'profile_dialogs.dart';
 import 'profile_endpoints_helper.dart';
 
@@ -155,6 +156,12 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   bool _writable = true;
   bool _allowSecrets = false;
   bool _relaxedCmd = false;
+  bool _allowCommands = true;
+  bool _allowProcesses = true;
+  bool _allowExposures = true;
+  bool _allowClipboardScreen = true;
+  bool _allowAllRoots = true;
+  List<String> _rootRules = <String>[];
   String _logLevel = 'INFO';
   bool _savingBasic = false;
   bool _restartingBasic = false;
@@ -184,12 +191,6 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   ];
 
   String _lastSyncedKey = '';
-
-  List<String> _parseLines(String raw) => raw
-      .split(RegExp(r'[\r\n,]+'))
-      .map((e) => e.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
 
   List<String> _normalizeHostItems(Iterable<String> rawItems) {
     final out = <String>[];
@@ -301,14 +302,23 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     if (_logFileCtrl.text.trim() != (cfg['log_file'] ?? '').toString().trim()) {
       return true;
     }
-    final curRoots = _parseLines(_rootsCtrl.text);
     final cfgRoots = ((cfg['roots'] as List?) ?? const [])
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    if (curRoots.length != cfgRoots.length) return true;
-    for (var i = 0; i < curRoots.length; i++) {
-      if (curRoots[i] != cfgRoots[i]) return true;
+    final cfgAllowAllRoots = cfg.containsKey('allow_all_roots')
+        ? cfg['allow_all_roots'] != false
+        : cfgRoots.isEmpty;
+    if (_allowAllRoots != cfgAllowAllRoots) return true;
+    if (_allowCommands != (cfg['allow_commands'] != false)) return true;
+    if (_allowProcesses != (cfg['allow_processes'] != false)) return true;
+    if (_allowExposures != (cfg['allow_exposures'] != false)) return true;
+    if (_allowClipboardScreen != (cfg['allow_clipboard_screen'] != false)) {
+      return true;
+    }
+    if (_rootRules.length != cfgRoots.length) return true;
+    for (var i = 0; i < _rootRules.length; i++) {
+      if (_rootRules[i] != cfgRoots[i]) return true;
     }
     return false;
   }
@@ -467,7 +477,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final cfg = widget.config;
     final cfgHostsKey = _savedConfigHosts(cfg).join(',');
     final key =
-        '${cfg['server_name']}|$cfgHostsKey|${cfg['port']}|${cfg['auto_start']}|${cfg['launch_at_startup']}|${cfg['silent_start']}|${cfg['window_effect']}|${cfg['read_only']}|${cfg['allow_secrets']}|${cfg['relaxed_command_annotations']}';
+        '${cfg['server_name']}|$cfgHostsKey|${cfg['port']}|${cfg['auto_start']}|${cfg['launch_at_startup']}|${cfg['silent_start']}|${cfg['window_effect']}|${cfg['read_only']}|${cfg['allow_secrets']}|${cfg['relaxed_command_annotations']}|${cfg['allow_all_roots']}|${cfg['allow_commands']}|${cfg['allow_processes']}|${cfg['allow_exposures']}|${cfg['allow_clipboard_screen']}';
     if (!force && key == _lastSyncedKey) return;
     _lastSyncedKey = key;
 
@@ -492,7 +502,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       _writable = cfg['read_only'] != true;
       _allowSecrets = cfg['allow_secrets'] == true;
       _relaxedCmd = cfg['relaxed_command_annotations'] == true;
-      _rootsCtrl.text = ((cfg['roots'] as List?) ?? const []).join('\n');
+      _allowCommands = cfg['allow_commands'] != false;
+      _allowProcesses = cfg['allow_processes'] != false;
+      _allowExposures = cfg['allow_exposures'] != false;
+      _allowClipboardScreen = cfg['allow_clipboard_screen'] != false;
+      _rootRules = ((cfg['roots'] as List?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _allowAllRoots = cfg.containsKey('allow_all_roots')
+          ? cfg['allow_all_roots'] != false
+          : _rootRules.isEmpty;
+      _rootsCtrl.text = _rootRules.join('\n');
       _logLevel = (cfg['log_level'] ?? 'INFO').toString().toUpperCase();
       if (!{'DEBUG', 'INFO', 'WARNING', 'ERROR'}.contains(_logLevel)) {
         _logLevel = 'INFO';
@@ -630,12 +651,16 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     setState(() => _savingPerm = true);
     try {
       await runWithMinDuration(() async {
-        final roots = _parseLines(_rootsCtrl.text);
         await widget.backend.saveConfig({
           'read_only': !_writable,
           'allow_secrets': _allowSecrets,
           'relaxed_command_annotations': _relaxedCmd,
-          'roots': roots,
+          'allow_commands': _allowCommands,
+          'allow_processes': _allowProcesses,
+          'allow_exposures': _allowExposures,
+          'allow_clipboard_screen': _allowClipboardScreen,
+          'allow_all_roots': _allowAllRoots,
+          'roots': _rootRules,
           'log_level': _logLevel,
           'log_file': _logFileCtrl.text.trim().isEmpty
               ? null
@@ -686,6 +711,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final edited = await showPrismDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => ProfileEditDialog(
+        backend: widget.backend,
         existing: existing,
         serverPort: portVal,
         ipOptions: ipOpts,
@@ -1256,7 +1282,6 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final curVer = widget.backend.currentAppVersion;
     final hasUpdate = widget.latestUpdate != null &&
         compareSemVer(widget.latestUpdate!.version, curVer) > 0;
-    final curRoots = _parseLines(_rootsCtrl.text);
     final listenSummary = _bindAllInterfaces
         ? '0.0.0.0:$curPort · 全网卡'
         : '${_effectiveHosts.join(", ")}:$curPort';
@@ -2058,89 +2083,86 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     },
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    PrismSettingsRow(
-                      title: '默认目录白名单',
-                      subtitle: curRoots.isEmpty
-                          ? '未限定根目录（允许访问本机任意路径）'
-                          : curRoots.take(2).join(' · '),
-                      onTap: () => _toggleInlineEdit('roots'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PrismPill(
-                            text: curRoots.isEmpty
-                                ? '全盘开放'
-                                : '已限定 ${curRoots.length} 个目录',
-                            mono: false,
-                            fg: curRoots.isEmpty ? c.muted : c.clay,
-                            bg: curRoots.isEmpty
-                                ? c.recessed
-                                : c.clay.withValues(alpha: 0.12),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            _activeInlineEdit == 'roots'
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.edit_outlined,
-                            size: 16,
-                            color:
-                                _activeInlineEdit == 'roots' ? c.clay : c.meta,
-                          ),
-                        ],
-                      ),
-                    ),
-                    PrismCollapsible(
-                      expanded: _activeInlineEdit == 'roots',
-                      builder: (_) => Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            TextField(
-                              controller: _rootsCtrl,
-                              maxLines: 3,
-                              onChanged: (_) => setState(() {}),
-                              style: monoStyle(c, size: 12.4, color: c.ink),
-                              decoration: const InputDecoration(
-                                isDense: true,
-                                hintText: '每行一个目录路径，留空允许全盘访问',
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PrismButton(
-                                  label: '取消',
-                                  compact: true,
-                                  variant: PrismBtnVariant.ghost,
-                                  onPressed: () => _toggleInlineEdit('roots'),
-                                ),
-                                const SizedBox(width: 6),
-                                PrismButton(
-                                  label: _savingPerm ? '保存中...' : '保存白名单',
-                                  compact: true,
-                                  loading: _savingPerm,
-                                  variant: PrismBtnVariant.clay,
-                                  onPressed: () async {
-                                    await _savePerm();
-                                    if (mounted) {
-                                      setState(
-                                        () => _activeInlineEdit = null,
-                                      );
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
+                PrismSettingsRow(
+                  title: '细粒度模块能力开关',
+                  subtitle: '按需启停终端命令、后台进程、外网分享及剪贴板/屏幕截图工具能力',
+                  bottomChild: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        PrismCheckToggle(
+                          value: _allowCommands,
+                          label: '允许终端命令执行',
+                          onChanged: (v) async {
+                            setState(() => _allowCommands = v);
+                            await _savePerm();
+                          },
                         ),
-                      ),
+                        PrismCheckToggle(
+                          value: _allowProcesses,
+                          label: '允许后台进程管理',
+                          onChanged: (v) async {
+                            setState(() => _allowProcesses = v);
+                            await _savePerm();
+                          },
+                        ),
+                        PrismCheckToggle(
+                          value: _allowExposures,
+                          label: '允许创建外网分享',
+                          onChanged: (v) async {
+                            setState(() => _allowExposures = v);
+                            await _savePerm();
+                          },
+                        ),
+                        PrismCheckToggle(
+                          value: _allowClipboardScreen,
+                          label: '允许剪贴板与截图',
+                          onChanged: (v) async {
+                            setState(() => _allowClipboardScreen = v);
+                            await _savePerm();
+                          },
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  child: PrismWildcardRuleListCard(
+                    switchKey:
+                        const ValueKey('global-allow-all-roots-switch'),
+                    switchTitle: '默认目录白名单 · 允许访问所有目录',
+                    switchSubtitleOn:
+                        '默认开启：允许访问本机任意工作目录（关闭后仅允许下方逐行指定的目录或通配路径）',
+                    switchSubtitleOff:
+                        '已启用目录白名单限制（支持 * 与 ** 通配符，修改后点击底部悬浮栏保存生效）',
+                    badgeOnText: '允许所有目录',
+                    badgeOffPrefix: '仅限指定目录',
+                    allowAll: _allowAllRoots,
+                    onAllowAllChanged: (v) async {
+                      setState(() => _allowAllRoots = v);
+                      await _savePerm();
+                    },
+                    rules: _rootRules,
+                    onRulesChanged: (next) {
+                      setState(() {
+                        _rootRules = next;
+                        _rootsCtrl.text = next.join('\n');
+                      });
+                    },
+                    rowHintText: r'如 D:\Projects\** 或 ~/workspace/*',
+                    addRowLabel: '添加目录路径',
+                    onPickDirectory: !isAndroidHost
+                        ? () => widget.backend
+                            .pickLocalSharePath(directory: true)
+                        : null,
+                    quickPresets: const [
+                      ('主目录 ~/**', '~/**'),
+                      ('当前目录 ./**', './**'),
+                    ],
+                  ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3094,7 +3116,8 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             if (p['allow_secrets'] == true) '允许敏感文件',
                             if (p['relaxed_command_annotations'] == true)
                               '免弹窗声明',
-                            ((p['roots'] as List?)?.isNotEmpty ?? false)
+                            (p['allow_all_roots'] == false &&
+                                    ((p['roots'] as List?)?.isNotEmpty ?? false))
                                 ? '限定 ${(p['roots'] as List).length} 个目录'
                                 : '全盘访问',
                           ].join(' · '),
@@ -3522,6 +3545,25 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           }
                         }
                       },
+              ),
+              PrismButton(
+                label: '配置快照备份 / 恢复',
+                compact: true,
+                variant: PrismBtnVariant.clay,
+                leading: const Icon(Icons.backup_outlined),
+                onPressed: () {
+                  showPrismDialog<void>(
+                    context: context,
+                    builder: (ctx) => ConfigSnapshotDialog(
+                      backend: widget.backend,
+                      onRestored: () async {
+                        await widget.onRefreshStatus();
+                        await widget.onRefreshStorage();
+                      },
+                      onToast: widget.onToast,
+                    ),
+                  );
+                },
               ),
             ],
           ),

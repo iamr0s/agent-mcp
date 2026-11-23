@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,13 +41,16 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
   final _nameCtrl = TextEditingController();
   final _urlCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
+  final _bearerCtrl = TextEditingController();
 
   bool _formOpen = false;
   String? _editingId;
   bool _probing = false;
+  bool _probingAll = false;
   bool _saving = false;
   String? _probeMsg;
   bool _probeOk = false;
+  final Map<String, Map<String, dynamic>> _nodeHeartbeats = {};
 
   @override
   void initState() {
@@ -53,6 +58,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     if (widget.backend.savedNodes.where((n) => !n.isLocal).isEmpty) {
       _formOpen = true;
     }
+    unawaited(_probeAllNodes());
   }
 
   @override
@@ -60,7 +66,26 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     _nameCtrl.dispose();
     _urlCtrl.dispose();
     _pwdCtrl.dispose();
+    _bearerCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _probeAllNodes() async {
+    if (_probingAll) return;
+    setState(() => _probingAll = true);
+    try {
+      final nodes = widget.backend.savedNodes;
+      await Future.wait(
+        nodes.map((node) async {
+          final res = await widget.backend.probeRemoteNodeHealth(node);
+          if (mounted) {
+            setState(() => _nodeHeartbeats[node.id] = res);
+          }
+        }),
+      );
+    } finally {
+      if (mounted) setState(() => _probingAll = false);
+    }
   }
 
   void _startAdd() {
@@ -69,6 +94,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
       _nameCtrl.clear();
       _urlCtrl.clear();
       _pwdCtrl.clear();
+      _bearerCtrl.clear();
       _probeMsg = null;
       _formOpen = true;
     });
@@ -80,6 +106,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
       _nameCtrl.text = node.name;
       _urlCtrl.text = node.baseUrl;
       _pwdCtrl.text = node.savedPassword;
+      _bearerCtrl.text = node.bearerToken;
       _probeMsg = null;
       _formOpen = true;
     });
@@ -99,16 +126,23 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
       _probeMsg = null;
     });
     try {
-      final res = await widget.backend.checkHealth('$cleanUrl/health');
+      final tempNode = ConsoleNodeProfile(
+        id: 'draft',
+        name: _nameCtrl.text.trim(),
+        baseUrl: cleanUrl,
+        savedPassword: _pwdCtrl.text,
+        bearerToken: _bearerCtrl.text.trim(),
+      );
+      final res = await widget.backend.probeRemoteNodeHealth(tempNode);
       final ok = res['ok'] == true;
       final ms = res['latency_ms'];
-      final code = res['status_code'];
+      final ver = (res['version'] ?? '').toString();
       if (mounted) {
         setState(() {
           _probeOk = ok;
           _probeMsg = ok
-              ? '连通成功 · HTTP ${code ?? 200}${ms != null ? " · ${ms}ms" : ""}'
-              : '未连通：${res['error'] ?? "HTTP ${code ?? "-"}"}';
+              ? '连通成功${ms != null ? " · ${ms}ms" : ""}${ver.isNotEmpty ? " · v$ver" : ""}'
+              : '未连通：${res['error'] ?? "HTTP ${res['status_code'] ?? "-"}"}';
         });
       }
     } catch (e) {
@@ -136,6 +170,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
         name: _nameCtrl.text.trim(),
         baseUrl: cleanUrl,
         savedPassword: _pwdCtrl.text,
+        bearerToken: _bearerCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -145,7 +180,10 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     }
   }
 
-  Future<void> _confirmDeleteNode(ConsoleNodeProfile node, String activeId) async {
+  Future<void> _confirmDeleteNode(
+    ConsoleNodeProfile node,
+    String activeId,
+  ) async {
     final ok = await showPrismConfirmDialog(
       context,
       title: '移除远程节点',
@@ -157,7 +195,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
     final wasActive = node.id == activeId;
     await widget.backend.deleteRemoteNode(node.id);
     if (!mounted) return;
-    setState(() {});
+    setState(() => _nodeHeartbeats.remove(node.id));
     widget.onToast('已移除节点「${node.name}」');
     if (wasActive) {
       await widget.onSwitchNode('local');
@@ -181,7 +219,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
           side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
         ),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
+          constraints: const BoxConstraints(maxWidth: 540, maxHeight: 700),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,15 +248,24 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '节点切换与远程连接档案',
+                            '节点切换与实时心跳监控',
                             style: serifTitleStyle(c, size: 17),
                           ),
                           Text(
-                            '在本机服务与多台远程服务器、电脑或手机节点间切换',
+                            '并行探测本机与多台远程服务器、电脑或手机节点的在线延迟',
                             style: sansStyle(c, size: 11.8, color: c.muted),
                           ),
                         ],
                       ),
+                    ),
+                    PrismButton(
+                      label: '',
+                      compact: true,
+                      loading: _probingAll,
+                      tooltip: '并行刷新全部节点心跳',
+                      variant: PrismBtnVariant.ghost,
+                      leading: const Icon(Icons.refresh_rounded, size: 17),
+                      onPressed: _probingAll ? null : _probeAllNodes,
                     ),
                     PrismButton(
                       label: '',
@@ -245,6 +292,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                               node: node,
                               isActive: node.id == activeId,
                               lanIps: node.isLocal ? lanIps : const [],
+                              heartbeat: _nodeHeartbeats[node.id],
                               onConnect: () async {
                                 Navigator.of(context).pop();
                                 await widget.onSwitchNode(node.id);
@@ -336,7 +384,12 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                               const SizedBox(height: 10),
                               PrismPasswordField(
                                 controller: _pwdCtrl,
-                                hintText: '管理密码或 API Key（可选保存，免重复输入）',
+                                hintText: '管理密码（可选保存，免重复登录）',
+                              ),
+                              const SizedBox(height: 10),
+                              PrismPasswordField(
+                                controller: _bearerCtrl,
+                                hintText: 'Bearer Token 网关令牌（可选，自动附带 Authorization 头）',
                               ),
                               if (_probeMsg != null) ...[
                                 const SizedBox(height: 10),
@@ -406,6 +459,7 @@ class _NodeProfileTile extends StatelessWidget {
   final ConsoleNodeProfile node;
   final bool isActive;
   final List<String> lanIps;
+  final Map<String, dynamic>? heartbeat;
   final VoidCallback onConnect;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -415,6 +469,7 @@ class _NodeProfileTile extends StatelessWidget {
     required this.node,
     required this.isActive,
     required this.lanIps,
+    this.heartbeat,
     required this.onConnect,
     required this.onCopyEndpoint,
     this.onEdit,
@@ -430,15 +485,39 @@ class _NodeProfileTile extends StatelessWidget {
             : '本机内置 Dart 原生 MCP 服务引擎')
         : node.baseUrl;
 
+    final hb = heartbeat;
+    final hbOk = hb?['ok'] == true;
+    final hbMs = hb?['latency_ms'];
+    final hbVer = (hb?['version'] ?? '').toString();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       color: isActive ? c.clay.withValues(alpha: 0.06) : Colors.transparent,
       child: Row(
         children: [
-          Icon(
-            node.isLocal ? Icons.dns_rounded : Icons.computer_rounded,
-            size: 18,
-            color: isActive ? c.clay : c.muted,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                node.isLocal ? Icons.dns_rounded : Icons.computer_rounded,
+                size: 18,
+                color: isActive ? c.clay : c.muted,
+              ),
+              if (hb != null)
+                Positioned(
+                  right: -3,
+                  bottom: -2,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: hbOk ? c.sage : c.danger,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.paper2, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -465,9 +544,22 @@ class _NodeProfileTile extends StatelessWidget {
                       fg: isActive ? c.clay : c.muted,
                       bg: c.paper3,
                     ),
-                    if (!node.isLocal && node.savedPassword.isNotEmpty)
+                    if (hb != null)
                       PrismPill(
-                        text: '免密记忆',
+                        text: hbOk
+                            ? (node.isLocal
+                                ? '运行中${hbVer.isNotEmpty ? " · v$hbVer" : ""}'
+                                : '${hbMs ?? 0}ms${hbVer.isNotEmpty ? " · v$hbVer" : ""}')
+                            : '离线',
+                        mono: !node.isLocal && hbOk,
+                        fg: hbOk ? c.sage : c.danger,
+                        bg: hbOk ? c.sageBg : c.dangerBg,
+                      ),
+                    if (!node.isLocal &&
+                        (node.savedPassword.isNotEmpty ||
+                            node.bearerToken.isNotEmpty))
+                      PrismPill(
+                        text: node.bearerToken.isNotEmpty ? 'Bearer' : '免密记忆',
                         mono: false,
                         fg: c.sage,
                         bg: c.sageBg,

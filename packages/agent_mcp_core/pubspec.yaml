@@ -1,6 +1,6 @@
 name: agent_mcp_core
-description: Cross-platform Agent MCP Execution Node & Gateway Core (20 Tools + Multi-Profile Router + OAuth 2.1 + Sub-MCP Bastion + 4-Mode Tailscale/Public Share)
-version: 3.4.2
+description: Cross-platform Agent MCP Execution Node & Gateway Core (22 Tools + Multi-Profile Router + OAuth 2.1 + Universal Sub-MCP Hub + 4-Mode Share)
+version: 3.5.0
 publish_to: none
 
 resolution: workspace

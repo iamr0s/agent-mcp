@@ -72,6 +72,7 @@ class ConsoleNodeProfile {
   final String name;
   final String baseUrl;
   final String savedPassword;
+  final String bearerToken;
   final bool isLocal;
 
   const ConsoleNodeProfile({
@@ -79,6 +80,7 @@ class ConsoleNodeProfile {
     required this.name,
     this.baseUrl = '',
     this.savedPassword = '',
+    this.bearerToken = '',
     this.isLocal = false,
   });
 
@@ -98,6 +100,7 @@ class ConsoleNodeProfile {
     String? name,
     String? baseUrl,
     String? savedPassword,
+    String? bearerToken,
     bool? isLocal,
   }) {
     return ConsoleNodeProfile(
@@ -105,6 +108,7 @@ class ConsoleNodeProfile {
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
       savedPassword: savedPassword ?? this.savedPassword,
+      bearerToken: bearerToken ?? this.bearerToken,
       isLocal: isLocal ?? this.isLocal,
     );
   }
@@ -114,6 +118,7 @@ class ConsoleNodeProfile {
         'name': name,
         'base_url': baseUrl,
         'saved_password': savedPassword,
+        if (bearerToken.isNotEmpty) 'bearer_token': bearerToken,
       };
 
   factory ConsoleNodeProfile.fromJson(Map<dynamic, dynamic> raw) {
@@ -125,6 +130,7 @@ class ConsoleNodeProfile {
       name: name.isEmpty ? (url.isEmpty ? '远程节点' : url) : name,
       baseUrl: url,
       savedPassword: (raw['saved_password'] ?? '').toString(),
+      bearerToken: (raw['bearer_token'] ?? '').toString(),
       isLocal: false,
     );
   }
@@ -193,7 +199,10 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.4.2';
+  String get currentAppVersion => '3.5.0';
+  String get initialThemeModeKey => 'system';
+  String get initialAccentThemeKey => 'indigo';
+  bool get initialDynamicColor => false;
   bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;
@@ -238,8 +247,14 @@ abstract class ConsoleBackend {
     required String name,
     required String baseUrl,
     String savedPassword = '',
+    String bearerToken = '',
   }) async =>
       activeNode;
+
+  Future<Map<String, dynamic>> probeRemoteNodeHealth(
+    ConsoleNodeProfile node,
+  ) async =>
+      const {'ok': false};
 
   Future<void> deleteRemoteNode(String nodeId) async {}
 
@@ -296,6 +311,52 @@ abstract class ConsoleBackend {
   Future<Map<String, dynamic>> deleteSubMcp(String name);
   Future<Map<String, dynamic>> testSubMcp(String name);
 
+  Future<Map<String, dynamic>> startSubMcpOAuth(
+    String name, {
+    Map<String, dynamic>? draft,
+    String? scope,
+    bool autoOpenBrowser = true,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
+  Future<Map<String, dynamic>> revokeSubMcpOAuth(String name) async =>
+      const {'ok': false};
+
+  Future<Map<String, dynamic>> callSubMcpPlayground({
+    required String name,
+    String kind = 'tool',
+    String toolName = '',
+    String uri = '',
+    Map<String, dynamic> arguments = const {},
+    int? timeoutSec,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
+  Future<Map<String, dynamic>> getClientOnboardingTargets() async =>
+      const {'ok': true, 'targets': <dynamic>[]};
+
+  Future<Map<String, dynamic>> applyClientOnboarding({
+    required String clientId,
+    required String serverKey,
+    required String mcpUrl,
+    String transport = 'http',
+    String? bearerToken,
+    String? customConfigPath,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
+  Future<Map<String, dynamic>> exportConfigSnapshot({
+    bool includeSecrets = false,
+    String? password,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
+  Future<Map<String, dynamic>> importConfigSnapshot({
+    required String rawJson,
+    String? password,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+
   Future<Map<String, dynamic>> getPrivilegeStatus() async =>
       const {'supported': false, 'requested_mode': 'none', 'active_mode': 'none'};
 
@@ -324,6 +385,7 @@ abstract class ConsoleBackend {
     String? pinCode,
     int? maxDownloads,
     bool spa = false,
+    bool allowUpload = false,
   }) async =>
       const {'ok': false, 'error': 'Unsupported'};
 

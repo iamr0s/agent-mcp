@@ -10,6 +10,7 @@ import 'package:shelf_static/shelf_static.dart';
 
 import 'auth.dart';
 import 'autostart.dart';
+import 'client_onboarding.dart';
 import 'config.dart';
 import 'exposure_tools.dart';
 import 'logging_utils.dart';
@@ -408,7 +409,11 @@ class DashboardHandler {
         (jsonDecode(await req.readAsString()) as Map?) ?? const {},
       );
       final isDir = body['directory'] == true;
-      final picked = await pickNativeLocalPath(directory: isDir);
+      final picked = await pickNativeLocalPath(
+        directory: isDir,
+        title: body['title']?.toString(),
+        initialDirectory: body['initial_dir']?.toString(),
+      );
       return _json({'ok': picked != null, 'path': picked ?? ''});
     }
 
@@ -428,6 +433,7 @@ class DashboardHandler {
           pinCode: (body['pin_code'] ?? body['pin'])?.toString(),
           maxDownloads: int.tryParse('${body['max_downloads'] ?? ''}'),
           spa: body['spa'] == true,
+          allowUpload: body['allow_upload'] == true,
           validateWithPolicy: false,
         );
         return _json({'ok': true, 'exposure': created});
@@ -690,6 +696,141 @@ class DashboardHandler {
       return _json(
         await SubMcpManager.instance.discoverTools(name, refresh: true),
       );
+    }
+
+    final subOAuthStartMatch =
+        RegExp(r'^/sub-mcps/([^/]+)/oauth/start$').firstMatch(apiPath);
+    if (subOAuthStartMatch != null && req.method == 'POST') {
+      final name = Uri.decodeComponent(subOAuthStartMatch.group(1)!);
+      try {
+        final rawText = await req.readAsString();
+        final body = rawText.trim().isEmpty
+            ? const <String, dynamic>{}
+            : Map<String, dynamic>.from((jsonDecode(rawText) as Map?) ?? const {});
+        final draft = body['draft'] is Map
+            ? Map<String, dynamic>.from(body['draft'] as Map)
+            : null;
+        final started = await SubMcpManager.instance.startOAuthFlow(
+          name,
+          draftOverride: draft,
+          stepUpScope: body['scope']?.toString(),
+        );
+        return _json(started);
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
+    }
+
+    final subOAuthRevokeMatch =
+        RegExp(r'^/sub-mcps/([^/]+)/oauth/revoke$').firstMatch(apiPath);
+    if (subOAuthRevokeMatch != null && req.method == 'POST') {
+      final name = Uri.decodeComponent(subOAuthRevokeMatch.group(1)!);
+      return _json({'ok': SubMcpManager.instance.revokeOAuth(name)});
+    }
+
+    final subCallMatch =
+        RegExp(r'^/sub-mcps/([^/]+)/call$').firstMatch(apiPath);
+    if (subCallMatch != null && req.method == 'POST') {
+      final name = Uri.decodeComponent(subCallMatch.group(1)!);
+      try {
+        final body = Map<String, dynamic>.from(
+          (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+        );
+        final kind = (body['kind'] ?? 'tool').toString().toLowerCase();
+        final sw = Stopwatch()..start();
+        String output;
+        if (kind == 'resource') {
+          output = await SubMcpManager.instance.readResource(
+            name,
+            (body['uri'] ?? body['tool_name'] ?? '').toString(),
+          );
+        } else if (kind == 'prompt') {
+          output = await SubMcpManager.instance.getPrompt(
+            name,
+            (body['tool_name'] ?? '').toString(),
+            arguments: body['arguments'] is Map
+                ? Map<String, dynamic>.from(body['arguments'] as Map)
+                : const <String, dynamic>{},
+          );
+        } else {
+          output = await SubMcpManager.instance.callTool(
+            name,
+            (body['tool_name'] ?? '').toString(),
+            arguments: body['arguments'] is Map
+                ? Map<String, dynamic>.from(body['arguments'] as Map)
+                : const <String, dynamic>{},
+            timeoutSec: int.tryParse('${body['timeout'] ?? ''}'),
+          );
+        }
+        sw.stop();
+        return _json({
+          'ok': !output.startsWith('Error:'),
+          'output': output,
+          'ms': double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1)),
+        });
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
+    }
+
+    if (apiPath == '/clients/targets' && req.method == 'GET') {
+      return _json({
+        'ok': true,
+        'targets':
+            ClientOnboardingManager.detectTargets().map((t) => t.toJson()).toList(),
+      });
+    }
+
+    if (apiPath == '/clients/onboard' && req.method == 'POST') {
+      try {
+        final body = Map<String, dynamic>.from(
+          (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+        );
+        final res = ClientOnboardingManager.applyClientOnboarding(
+          clientId: (body['client_id'] ?? '').toString(),
+          serverKey: (body['server_key'] ?? '').toString(),
+          mcpUrl: (body['mcp_url'] ?? '').toString(),
+          transport: (body['transport'] ?? 'http').toString(),
+          bearerToken: body['bearer_token']?.toString(),
+          customConfigPath: body['custom_config_path']?.toString(),
+        );
+        return _json(res);
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
+    }
+
+    if (apiPath == '/config/snapshot/export' && req.method == 'POST') {
+      try {
+        final rawText = await req.readAsString();
+        final body = rawText.trim().isEmpty
+            ? const <String, dynamic>{}
+            : Map<String, dynamic>.from((jsonDecode(rawText) as Map?) ?? const {});
+        final snap = ConfigSnapshotManager.exportSnapshot(
+          configFile: config.configFile,
+          includeSecrets: body['include_secrets'] == true,
+          password: body['password']?.toString(),
+        );
+        return _json({'ok': true, 'snapshot': snap});
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
+    }
+
+    if (apiPath == '/config/snapshot/import' && req.method == 'POST') {
+      try {
+        final body = Map<String, dynamic>.from(
+          (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+        );
+        final res = ConfigSnapshotManager.importSnapshot(
+          rawJson: (body['raw_json'] ?? '').toString(),
+          password: body['password']?.toString(),
+          configFile: config.configFile,
+        );
+        return _json(res);
+      } catch (e) {
+        return _json({'ok': false, 'error': '$e'}, status: 400);
+      }
     }
 
     final subDelMatch = RegExp(r'^/sub-mcps/([^/]+)$').firstMatch(apiPath);
@@ -992,6 +1133,9 @@ void saveUpdatedConfigMap(File configFile, Map<String, dynamic> patch) {
       }
       if (p0['oauth_redirect_uris'] != null) {
         cur['oauth_redirect_uris'] = p0['oauth_redirect_uris'];
+      }
+      if (p0['oauth_allow_all_redirects'] != null) {
+        cur['oauth_allow_all_redirects'] = p0['oauth_allow_all_redirects'];
       }
       if (p0['api_key'] != null) {
         cur['api_key'] = p0['api_key'];

@@ -91,6 +91,12 @@ class RemoteHttpNodeClient {
     if (_sessionCookie != null && _sessionCookie!.isNotEmpty) {
       req.headers.set(HttpHeaders.cookieHeader, _sessionCookie!);
     }
+    if (profile.bearerToken.trim().isNotEmpty) {
+      req.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${profile.bearerToken.trim()}',
+      );
+    }
     if (extraHeaders != null) {
       extraHeaders.forEach(req.headers.set);
     }
@@ -255,6 +261,12 @@ class RemoteHttpNodeClient {
           if (_sessionCookie != null && _sessionCookie!.isNotEmpty) {
             req.headers.set(HttpHeaders.cookieHeader, _sessionCookie!);
           }
+          if (profile.bearerToken.trim().isNotEmpty) {
+            req.headers.set(
+              HttpHeaders.authorizationHeader,
+              'Bearer ${profile.bearerToken.trim()}',
+            );
+          }
           final res = await req.close();
           _captureCookies(res);
           if (res.statusCode == 401 && profile.savedPassword.isNotEmpty) {
@@ -397,6 +409,95 @@ class RemoteHttpNodeClient {
   Future<Map<String, dynamic>> testSubMcp(String name) =>
       _requestJson('POST', '/sub-mcps/${Uri.encodeComponent(name)}/test');
 
+  Future<Map<String, dynamic>> startSubMcpOAuth(
+    String name, {
+    Map<String, dynamic>? draft,
+    String? scope,
+  }) =>
+      _requestJson(
+        'POST',
+        '/sub-mcps/${Uri.encodeComponent(name)}/oauth/start',
+        jsonBody: {
+          if (draft != null) 'draft': draft,
+          if (scope != null && scope.isNotEmpty) 'scope': scope,
+        },
+      );
+
+  Future<Map<String, dynamic>> revokeSubMcpOAuth(String name) =>
+      _requestJson('POST', '/sub-mcps/${Uri.encodeComponent(name)}/oauth/revoke');
+
+  Future<Map<String, dynamic>> callSubMcpPlayground({
+    required String name,
+    String kind = 'tool',
+    String toolName = '',
+    String uri = '',
+    Map<String, dynamic> arguments = const {},
+    int? timeoutSec,
+  }) =>
+      _requestJson(
+        'POST',
+        '/sub-mcps/${Uri.encodeComponent(name)}/call',
+        jsonBody: {
+          'kind': kind,
+          'tool_name': toolName,
+          if (uri.isNotEmpty) 'uri': uri,
+          'arguments': arguments,
+          if (timeoutSec != null) 'timeout': timeoutSec,
+        },
+      );
+
+  Future<Map<String, dynamic>> getClientOnboardingTargets() =>
+      _requestJson('GET', '/clients/targets');
+
+  Future<Map<String, dynamic>> applyClientOnboarding({
+    required String clientId,
+    required String serverKey,
+    required String mcpUrl,
+    String transport = 'http',
+    String? bearerToken,
+    String? customConfigPath,
+  }) =>
+      _requestJson(
+        'POST',
+        '/clients/onboard',
+        jsonBody: {
+          'client_id': clientId,
+          'server_key': serverKey,
+          'mcp_url': mcpUrl,
+          'transport': transport,
+          if (bearerToken != null && bearerToken.isNotEmpty)
+            'bearer_token': bearerToken,
+          if (customConfigPath != null && customConfigPath.isNotEmpty)
+            'custom_config_path': customConfigPath,
+        },
+      );
+
+  Future<Map<String, dynamic>> exportConfigSnapshot({
+    bool includeSecrets = false,
+    String? password,
+  }) =>
+      _requestJson(
+        'POST',
+        '/config/snapshot/export',
+        jsonBody: {
+          'include_secrets': includeSecrets,
+          if (password != null && password.isNotEmpty) 'password': password,
+        },
+      );
+
+  Future<Map<String, dynamic>> importConfigSnapshot({
+    required String rawJson,
+    String? password,
+  }) =>
+      _requestJson(
+        'POST',
+        '/config/snapshot/import',
+        jsonBody: {
+          'raw_json': rawJson,
+          if (password != null && password.isNotEmpty) 'password': password,
+        },
+      );
+
   Future<Map<String, dynamic>> getPrivilegeStatus() =>
       _requestJson('GET', '/privilege/status');
 
@@ -431,6 +532,7 @@ class RemoteHttpNodeClient {
     String? pinCode,
     int? maxDownloads,
     bool spa = false,
+    bool allowUpload = false,
   }) =>
       _requestJson(
         'POST',
@@ -447,6 +549,7 @@ class RemoteHttpNodeClient {
           if (maxDownloads != null && maxDownloads > 0)
             'max_downloads': maxDownloads,
           'spa': spa,
+          'allow_upload': allowUpload,
         },
       );
 

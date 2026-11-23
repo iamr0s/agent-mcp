@@ -389,6 +389,123 @@ class _WebConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<Map<String, dynamic>> startSubMcpOAuth(
+    String name, {
+    Map<String, dynamic>? draft,
+    String? scope,
+    bool autoOpenBrowser = true,
+  }) async {
+    final r = await http.post(
+      _uri('/sub-mcps/${Uri.encodeComponent(name)}/oauth/start'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        if (draft != null) 'draft': draft,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+      }),
+    );
+    final res = _decodeResp(r);
+    final authUrl = (res['authorization_url'] ?? '').toString().trim();
+    if (autoOpenBrowser && res['ok'] == true && authUrl.isNotEmpty) {
+      web.window.open(authUrl, '_blank');
+    }
+    return res;
+  }
+
+  @override
+  Future<Map<String, dynamic>> revokeSubMcpOAuth(String name) async {
+    final r = await http
+        .post(_uri('/sub-mcps/${Uri.encodeComponent(name)}/oauth/revoke'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> callSubMcpPlayground({
+    required String name,
+    String kind = 'tool',
+    String toolName = '',
+    String uri = '',
+    Map<String, dynamic> arguments = const {},
+    int? timeoutSec,
+  }) async {
+    final r = await http.post(
+      _uri('/sub-mcps/${Uri.encodeComponent(name)}/call'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'kind': kind,
+        'tool_name': toolName,
+        if (uri.isNotEmpty) 'uri': uri,
+        'arguments': arguments,
+        if (timeoutSec != null) 'timeout': timeoutSec,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getClientOnboardingTargets() async {
+    final r = await http.get(_uri('/clients/targets'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> applyClientOnboarding({
+    required String clientId,
+    required String serverKey,
+    required String mcpUrl,
+    String transport = 'http',
+    String? bearerToken,
+    String? customConfigPath,
+  }) async {
+    final r = await http.post(
+      _uri('/clients/onboard'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'client_id': clientId,
+        'server_key': serverKey,
+        'mcp_url': mcpUrl,
+        'transport': transport,
+        if (bearerToken != null && bearerToken.isNotEmpty)
+          'bearer_token': bearerToken,
+        if (customConfigPath != null && customConfigPath.isNotEmpty)
+          'custom_config_path': customConfigPath,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> exportConfigSnapshot({
+    bool includeSecrets = false,
+    String? password,
+  }) async {
+    final r = await http.post(
+      _uri('/config/snapshot/export'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'include_secrets': includeSecrets,
+        if (password != null && password.isNotEmpty) 'password': password,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> importConfigSnapshot({
+    required String rawJson,
+    String? password,
+  }) async {
+    final r = await http.post(
+      _uri('/config/snapshot/import'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'raw_json': rawJson,
+        if (password != null && password.isNotEmpty) 'password': password,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
   Future<Map<String, dynamic>> getPrivilegeStatus() async {
     final r = await http.get(_uri('/privilege/status'));
     return _decodeResp(r);
@@ -447,6 +564,7 @@ class _WebConsoleBackend extends ConsoleBackend {
     String? pinCode,
     int? maxDownloads,
     bool spa = false,
+    bool allowUpload = false,
   }) async {
     final r = await http.post(
       _uri('/exposures/open'),
@@ -463,6 +581,7 @@ class _WebConsoleBackend extends ConsoleBackend {
         if (maxDownloads != null && maxDownloads > 0)
           'max_downloads': maxDownloads,
         'spa': spa,
+        'allow_upload': allowUpload,
       }),
     );
     return _decodeResp(r);

@@ -137,37 +137,42 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> command_line_arguments = GetCommandLineArguments();
   bool cli_silent = false;
   bool cli_show = false;
+  bool cli_installer = false;
   for (const auto& arg : command_line_arguments) {
     if (arg == "--silent" || arg == "--background" || arg == "--tray" ||
         arg == "--minimized" || arg == "-s") {
       cli_silent = true;
     } else if (arg == "--show" || arg == "--open-window") {
       cli_show = true;
+    } else if (arg == "--installer") {
+      cli_installer = true;
     }
   }
 
-  // Single-instance guard:
-  // - Interactive launch (no --silent): wake & focus the existing tray window.
-  // - Silent background launch (--silent): exit quietly if already running.
-  HANDLE mutex =
-      ::CreateMutexW(nullptr, TRUE, L"Local\\AgentMcpConsoleSingleInstance");
-  if (mutex != nullptr && ::GetLastError() == ERROR_ALREADY_EXISTS) {
-    if (!cli_silent) {
-      HWND existing =
-          ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"Agent MCP Console");
-      if (existing != nullptr) {
-        if (::IsIconic(existing)) {
-          ::ShowWindow(existing, SW_RESTORE);
-        } else if (!::IsWindowVisible(existing)) {
-          ::ShowWindow(existing, SW_SHOWNORMAL);
-        } else {
-          ::ShowWindow(existing, SW_SHOW);
+  // Single-instance guard (bypassed when running in --installer wizard mode so
+  // an active tray instance never swallows the interactive setup wizard):
+  HANDLE mutex = nullptr;
+  if (!cli_installer) {
+    mutex =
+        ::CreateMutexW(nullptr, TRUE, L"Local\\AgentMcpConsoleSingleInstance");
+    if (mutex != nullptr && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+      if (!cli_silent) {
+        HWND existing =
+            ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"Agent MCP Console");
+        if (existing != nullptr) {
+          if (::IsIconic(existing)) {
+            ::ShowWindow(existing, SW_RESTORE);
+          } else if (!::IsWindowVisible(existing)) {
+            ::ShowWindow(existing, SW_SHOWNORMAL);
+          } else {
+            ::ShowWindow(existing, SW_SHOW);
+          }
+          ::SetForegroundWindow(existing);
         }
-        ::SetForegroundWindow(existing);
       }
+      ::CloseHandle(mutex);
+      return EXIT_SUCCESS;
     }
-    ::CloseHandle(mutex);
-    return EXIT_SUCCESS;
   }
 
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
@@ -178,7 +183,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   const StartupConfigFlags cfg_flags = ReadStartupConfigFlags(exe_dir);
   const bool start_hidden =
-      !cli_show && (cli_silent || cfg_flags.silent_start);
+      !cli_installer && !cli_show && (cli_silent || cfg_flags.silent_start);
 
   flutter::DartProject project(L"data");
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
@@ -186,17 +191,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   window.SetStartHidden(start_hidden);
   window.SetBackdropEffect(false);
+  if (cli_installer) {
+    window.SetTrayEnabled(false);
+  }
 
   Win32Window::Point origin(80, 60);
-  Win32Window::Size size(1180, 780);
-  if (!window.Create(L"Agent MCP Console", origin, size)) {
+  Win32Window::Size size = cli_installer
+      ? Win32Window::Size(660, 520)
+      : Win32Window::Size(1180, 780);
+  const wchar_t* win_title =
+      cli_installer ? L"Agent MCP Setup" : L"Agent MCP Console";
+  if (!window.Create(win_title, origin, size)) {
     if (mutex != nullptr) {
       ::CloseHandle(mutex);
     }
     ::CoUninitialize();
     return EXIT_FAILURE;
   }
-  window.SetHideOnClose(true);
+  if (cli_installer) {
+    window.CenterOnPrimaryMonitor();
+  }
+  window.SetHideOnClose(!cli_installer);
   window.SetQuitOnClose(true);
 
   ::MSG msg;

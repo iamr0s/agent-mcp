@@ -13,12 +13,18 @@ import 'services/console_backend.dart';
 import 'theme/prism_theme.dart';
 import 'views/activity_page.dart';
 import 'views/exposure_page.dart';
+import 'views/installer_wizard.dart';
 import 'views/setup_page.dart';
 import 'views/remote_nodes_dialog.dart';
 import 'views/sub_mcp_page.dart';
 import 'views/update_dialog.dart';
 
-void main([List<String> _ = const []]) {
+void main([List<String> args = const []]) {
+  if (!kIsWeb && isInstallerLaunchArgs(args)) {
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(buildInstallerWizardApp(args));
+    return;
+  }
   late ConsoleBackend backend;
   runZonedGuarded(
     () async {
@@ -69,6 +75,13 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
   @override
   void initState() {
     super.initState();
+    _themeMode = switch (widget.backend.initialThemeModeKey) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+    _accentId = PrismAccentId.fromKey(widget.backend.initialAccentThemeKey);
+    _dynamicColor = widget.backend.initialDynamicColor;
     PrismPalette.configureAccent(_accentId);
     _initAndroidDynamicColor();
   }
@@ -504,7 +517,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.4.2').toString();
+      _version = (auth['version'] ?? '3.5.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;

@@ -5,9 +5,12 @@ import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
+import '../theme/qr_code_painter.dart';
+import 'prism_structured_editors.dart';
 import 'profile_endpoints_helper.dart';
 
 class ProfileEditDialog extends StatefulWidget {
+  final ConsoleBackend? backend;
   final Map<String, dynamic>? existing;
   final int serverPort;
   final List<HostIpOption> ipOptions;
@@ -15,6 +18,7 @@ class ProfileEditDialog extends StatefulWidget {
 
   const ProfileEditDialog({
     super.key,
+    this.backend,
     required this.existing,
     required this.serverPort,
     required this.ipOptions,
@@ -32,9 +36,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   final _tunTokenCtrl = TextEditingController();
   final _cidCtrl = TextEditingController();
   final _csecCtrl = TextEditingController();
-  final _rurisCtrl = TextEditingController();
   final _apiKeyCtrl = TextEditingController();
-  final _rootsCtrl = TextEditingController();
 
   late List<HostIpOption> _allIpOptions;
   final Set<String> _selectedDirectIps = <String>{};
@@ -44,10 +46,18 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   String _tunnelMode = 'none';
   bool _tunnelAuto = true;
   String _authMode = 'oauth-local';
+  bool _oauthAllowAllRedirects = true;
+  List<String> _oauthRedirectRules = <String>[];
   bool _inheritPerm = true;
   bool _writable = true;
   bool _allowSecrets = false;
   bool _relaxedCmd = false;
+  bool _allowCommands = true;
+  bool _allowProcesses = true;
+  bool _allowExposures = true;
+  bool _allowClipboardScreen = true;
+  bool _allowAllRoots = true;
+  List<String> _rootRules = <String>[];
   bool _showManualUrls = false;
   bool _showStaticOAuthCreds = false;
 
@@ -105,17 +115,29 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       _authMode = (e['auth_mode'] ?? 'oauth-local').toString();
       _cidCtrl.text = (e['oauth_client_id'] ?? '').toString();
       _csecCtrl.text = (e['oauth_client_secret'] ?? '').toString();
-      _rurisCtrl.text =
-          ((e['oauth_redirect_uris'] as List?) ?? const []).join('\n');
-      if (_rurisCtrl.text.trim().isNotEmpty) {
-        _showStaticOAuthCreds = true;
-      }
+      _oauthRedirectRules = ((e['oauth_redirect_uris'] as List?) ?? const [])
+          .map((x) => x.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _oauthAllowAllRedirects = e.containsKey('oauth_allow_all_redirects')
+          ? e['oauth_allow_all_redirects'] != false
+          : _oauthRedirectRules.isEmpty;
       _apiKeyCtrl.text = (e['api_key'] ?? '').toString();
       _inheritPerm = e['inherit_permissions'] != false;
       _writable = e['read_only'] != true;
       _allowSecrets = e['allow_secrets'] == true;
       _relaxedCmd = e['relaxed_command_annotations'] == true;
-      _rootsCtrl.text = ((e['roots'] as List?) ?? const []).join('\n');
+      _allowCommands = e['allow_commands'] != false;
+      _allowProcesses = e['allow_processes'] != false;
+      _allowExposures = e['allow_exposures'] != false;
+      _allowClipboardScreen = e['allow_clipboard_screen'] != false;
+      _rootRules = ((e['roots'] as List?) ?? const [])
+          .map((x) => x.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _allowAllRoots = e.containsKey('allow_all_roots')
+          ? e['allow_all_roots'] != false
+          : _rootRules.isEmpty;
     } else {
       _cidCtrl.text = generateRandomToken('mcp-client-', 10);
       _csecCtrl.text = generateRandomToken('mcp-sec-', 24);
@@ -135,9 +157,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
     _tunTokenCtrl.dispose();
     _cidCtrl.dispose();
     _csecCtrl.dispose();
-    _rurisCtrl.dispose();
     _apiKeyCtrl.dispose();
-    _rootsCtrl.dispose();
     super.dispose();
   }
 
@@ -241,21 +261,19 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       'auth_mode': _authMode,
       'oauth_client_id': _cidCtrl.text.trim(),
       'oauth_client_secret': _csecCtrl.text.trim(),
-      'oauth_redirect_uris': _rurisCtrl.text
-          .split(RegExp(r'[\r\n,]+'))
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList(),
+      'oauth_allow_all_redirects': _oauthAllowAllRedirects,
+      'oauth_redirect_uris': _oauthRedirectRules,
       'api_key': _apiKeyCtrl.text.trim(),
       'inherit_permissions': _inheritPerm,
       'read_only': !_writable,
       'allow_secrets': _allowSecrets,
       'relaxed_command_annotations': _relaxedCmd,
-      'roots': _rootsCtrl.text
-          .split(RegExp(r'[\r\n,]+'))
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList(),
+      'allow_commands': _allowCommands,
+      'allow_processes': _allowProcesses,
+      'allow_exposures': _allowExposures,
+      'allow_clipboard_screen': _allowClipboardScreen,
+      'allow_all_roots': _allowAllRoots,
+      'roots': _rootRules,
     };
     Navigator.of(context).pop(out);
   }
@@ -760,25 +778,39 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                             controller: _csecCtrl,
                                           ),
                                         ),
-                                        _ModalGridRow(
-                                          label: '允许的回调 URI',
-                                          child: TextField(
-                                            controller: _rurisCtrl,
-                                            maxLines: 2,
-                                            style: monoStyle(
-                                              c,
-                                              size: 12,
-                                              color: c.ink,
-                                            ),
-                                            decoration: const InputDecoration(
-                                              hintText:
-                                                  '留空自动放行动态注册回调（推荐）；或每行填一个固定 URI',
-                                            ),
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                PrismWildcardRuleListCard(
+                                  switchKey: const ValueKey(
+                                    'profile-allow-all-redirects-switch',
+                                  ),
+                                  switchTitle: '允许所有回调地址 (Redirect URI)',
+                                  switchSubtitleOn:
+                                      '默认开启：自动放行 Claude、Cursor、Gemini 及动态注册回调地址',
+                                  switchSubtitleOff:
+                                      '仅允许匹配下方白名单规则的回调地址（支持 * 与 ** 通配符，同步校验动态注册）',
+                                  badgeOnText: '允许所有地址',
+                                  badgeOffPrefix: '指定回调白名单',
+                                  allowAll: _oauthAllowAllRedirects,
+                                  onAllowAllChanged: (v) => setState(
+                                    () => _oauthAllowAllRedirects = v,
+                                  ),
+                                  rules: _oauthRedirectRules,
+                                  onRulesChanged: (next) => setState(
+                                    () => _oauthRedirectRules = next,
+                                  ),
+                                  rowHintText:
+                                      '如 http://127.0.0.1:*/** 或 https://*.claude.ai/**',
+                                  addRowLabel: '添加回调地址',
+                                  quickPresets: const [
+                                    ('127.0.0.1:*', 'http://127.0.0.1:*/**'),
+                                    ('localhost:*', 'http://localhost:*/**'),
+                                    ('Claude', 'https://*.claude.ai/**'),
+                                    ('Cursor', 'cursor://**'),
+                                  ],
                                 ),
                               ],
                             ),
@@ -835,19 +867,63 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     onChanged: (v) =>
                                         setState(() => _relaxedCmd = v),
                                   ),
+                                  PrismCheckToggle(
+                                    value: _allowCommands,
+                                    label: '允许终端命令',
+                                    onChanged: (v) =>
+                                        setState(() => _allowCommands = v),
+                                  ),
+                                  PrismCheckToggle(
+                                    value: _allowProcesses,
+                                    label: '允许后台进程',
+                                    onChanged: (v) =>
+                                        setState(() => _allowProcesses = v),
+                                  ),
+                                  PrismCheckToggle(
+                                    value: _allowExposures,
+                                    label: '允许外网分享',
+                                    onChanged: (v) =>
+                                        setState(() => _allowExposures = v),
+                                  ),
+                                  PrismCheckToggle(
+                                    value: _allowClipboardScreen,
+                                    label: '允许剪贴板与截图',
+                                    onChanged: (v) => setState(
+                                      () => _allowClipboardScreen = v,
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 10),
-                              _ModalGridRow(
-                                label: '目录白名单',
-                                child: TextField(
-                                  controller: _rootsCtrl,
-                                  maxLines: 2,
-                                  style: monoStyle(c, size: 12, color: c.ink),
-                                  decoration: const InputDecoration(
-                                    hintText: '每行一个允许访问的目录，留空允许全盘',
-                                  ),
+                              PrismWildcardRuleListCard(
+                                switchKey: const ValueKey(
+                                  'profile-allow-all-roots-switch',
                                 ),
+                                switchTitle: '允许访问所有目录',
+                                switchSubtitleOn:
+                                    '默认开启：不限制工作目录范围（仍受只读与敏感文件保护约束）',
+                                switchSubtitleOff:
+                                    '仅允许访问下方指定目录或通配路径（支持 * 与 ** 通配符）',
+                                badgeOnText: '全盘开放',
+                                badgeOffPrefix: '指定目录白名单',
+                                allowAll: _allowAllRoots,
+                                onAllowAllChanged: (v) =>
+                                    setState(() => _allowAllRoots = v),
+                                rules: _rootRules,
+                                onRulesChanged: (next) =>
+                                    setState(() => _rootRules = next),
+                                rowHintText:
+                                    r'如 D:\Projects\** 或 ~/workspace/*',
+                                addRowLabel: '添加目录路径',
+                                onPickDirectory: widget.backend != null &&
+                                        !widget.backend!.isAndroidPlatform
+                                    ? () => widget.backend!
+                                        .pickLocalSharePath(directory: true)
+                                    : null,
+                                quickPresets: const [
+                                  ('主目录 ~/**', '~/**'),
+                                  ('当前目录 ./**', './**'),
+                                ],
                               ),
                             ],
                           ),
@@ -905,6 +981,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
   late String _selectedBaseUrl;
   Map<String, dynamic>? _healthResult;
   bool _checking = false;
+  bool _showQr = false;
 
   @override
   void initState() {
@@ -1208,13 +1285,54 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                 ),
               ),
               const SizedBox(height: 12),
+              if (_showQr) ...[
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: PrismQrCodeBox(
+                      data: tr == 'sse' ? '$base/sse' : '$base/mcp',
+                      size: 168,
+                    ),
+                  ),
+                ),
+              ],
               if (_healthResult != null) ...[
                 _DialogHealthCard(result: _healthResult!),
                 const SizedBox(height: 10),
               ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
+                  PrismButton(
+                    label: _showQr ? '收起二维码' : '扫码连接',
+                    compact: true,
+                    variant: PrismBtnVariant.ghost,
+                    leading: const Icon(Icons.qr_code_rounded),
+                    onPressed: () => setState(() => _showQr = !_showQr),
+                  ),
+                  PrismButton(
+                    label: '一键写入 AI 客户端',
+                    compact: true,
+                    variant: PrismBtnVariant.clay,
+                    leading: const Icon(Icons.bolt_rounded),
+                    onPressed: () {
+                      showPrismDialog<void>(
+                        context: context,
+                        builder: (ctx) => ClientOnboardingDialog(
+                          backend: widget.backend,
+                          serverKey: 'agent-mcp',
+                          mcpUrl: tr == 'sse' ? '$base/sse' : '$base/mcp',
+                          transport: tr == 'sse' ? 'sse' : 'http',
+                          bearerToken: auth == 'bearer'
+                              ? (p['api_key'] ?? '').toString()
+                              : null,
+                          onToast: widget.onToast,
+                        ),
+                      );
+                    },
+                  ),
                   PrismButton(
                     label: _checking ? '测试中...' : '测试 /health 连通性',
                     compact: true,

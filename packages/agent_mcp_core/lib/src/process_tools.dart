@@ -370,11 +370,13 @@ void registerProcessTools(
   }
 
   String resolveWorkDir(String? rawCwd) {
-    final roots = getEffectivePolicy(config).roots;
+    final policy = getEffectivePolicy(config);
+    final roots = policy.effectiveRoots;
     if (rawCwd != null && rawCwd.trim().isNotEmpty) {
       return normalizePath(rawCwd, roots);
     }
-    if (roots.isNotEmpty) return expandAndResolvePath(roots.first);
+    final concrete = policy.concreteRoots;
+    if (concrete.isNotEmpty) return concrete.first;
     return Directory.current.absolute.path;
   }
 
@@ -416,6 +418,10 @@ void registerProcessTools(
       'required': ['command'],
     },
     handler: (args) async {
+      final policy = getEffectivePolicy(config);
+      if (!policy.allowCommands) {
+        return "Error: Command execution is disabled for profile '${policy.profileName}'.";
+      }
       final command = (args['command'] ?? '').toString();
       final rawCwd = args['cwd']?.toString();
       final timeoutSec =
@@ -517,6 +523,10 @@ void registerProcessTools(
       'required': ['command'],
     },
     handler: (args) async {
+      final policy = getEffectivePolicy(config);
+      if (!policy.allowCommands) {
+        return "Error: Background process execution is disabled for profile '${policy.profileName}'.";
+      }
       final command = (args['command'] ?? '').toString();
       final rawCwd = args['cwd']?.toString();
       final shell = (args['shell'] ?? 'auto').toString();
@@ -579,7 +589,11 @@ void registerProcessTools(
       'required': ['action'],
     },
     handler: (args) async {
+      final policy = getEffectivePolicy(config);
       final action = (args['action'] ?? '').toString();
+      if ((action == 'write' || action == 'kill') && !policy.allowProcesses) {
+        return "Error: Process management ('$action') is disabled for profile '${policy.profileName}'.";
+      }
       if (action == 'list') {
         return jsonEncoder.convert(await procMgr.listAllAsync());
       }

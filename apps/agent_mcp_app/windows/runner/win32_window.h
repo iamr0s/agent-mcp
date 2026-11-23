@@ -39,6 +39,8 @@ class Win32Window {
   HWND GetHandle();
   void SetQuitOnClose(bool quit_on_close);
   void SetHideOnClose(bool hide_on_close);
+  void SetTrayEnabled(bool tray_enabled);
+  void CenterOnPrimaryMonitor();
   RECT GetClientArea();
 
   // Custom frameless window controls & Win11 Mica backdrop
@@ -107,6 +109,7 @@ class Win32Window {
   bool is_dark_mode_ = false;
   bool was_maximized_ = false;
   bool backdrop_enabled_ = false;
+  bool tray_enabled_ = true;
   bool tray_added_ = false;
 
   HWND tray_flyout_hwnd_ = nullptr;
