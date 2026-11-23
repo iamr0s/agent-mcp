@@ -1,5 +1,8 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
@@ -8,6 +11,56 @@ import 'android_privilege_card.dart';
 import 'exposure_page.dart';
 import 'profile_dialogs.dart';
 import 'profile_endpoints_helper.dart';
+
+/// Bridges narrow-screen Level-2 subpage & inline-editor back navigation
+/// with the outer shell's PopScope, top Jade Back Pill, Esc key, and tab re-tap.
+class SetupNavigationHandle extends ChangeNotifier {
+  bool _inMobileSubpage = false;
+  bool _hasInlineEditor = false;
+  String _subpageTitle = '';
+  bool Function()? _onBack;
+
+  bool get inMobileSubpage => _inMobileSubpage;
+  bool get hasInlineEditor => _hasInlineEditor;
+  String get subpageTitle => _subpageTitle;
+  bool get canHandleBack => _hasInlineEditor || _inMobileSubpage;
+
+  bool handleBack() => _onBack?.call() ?? false;
+
+  void _attach(bool Function() handler) {
+    _onBack = handler;
+  }
+
+  void _detach(bool Function() handler) {
+    if (_onBack == handler) {
+      _onBack = null;
+    }
+  }
+
+  void _updateState({
+    required bool inMobileSubpage,
+    required bool hasInlineEditor,
+    required String subpageTitle,
+  }) {
+    if (_inMobileSubpage == inMobileSubpage &&
+        _hasInlineEditor == hasInlineEditor &&
+        _subpageTitle == subpageTitle) {
+      return;
+    }
+    _inMobileSubpage = inMobileSubpage;
+    _hasInlineEditor = hasInlineEditor;
+    _subpageTitle = subpageTitle;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
+    } else {
+      notifyListeners();
+    }
+  }
+}
 
 class ServiceSetupPage extends StatefulWidget {
   final ConsoleBackend backend;
@@ -34,6 +87,7 @@ class ServiceSetupPage extends StatefulWidget {
   final Future<void> Function()? onCheckUpdate;
   final ValueListenable<String?>? requestedSectionSignal;
   final VoidCallback? onConsumeRequestedSection;
+  final SetupNavigationHandle? navigationHandle;
 
   const ServiceSetupPage({
     super.key,
@@ -61,13 +115,15 @@ class ServiceSetupPage extends StatefulWidget {
     this.onCheckUpdate,
     this.requestedSectionSignal,
     this.onConsumeRequestedSection,
+    this.navigationHandle,
   });
 
   @override
   State<ServiceSetupPage> createState() => _ServiceSetupPageState();
 }
 
-class _ServiceSetupPageState extends State<ServiceSetupPage> {
+class _ServiceSetupPageState extends State<ServiceSetupPage>
+    with SingleTickerProviderStateMixin {
   final _nameCtrl = TextEditingController();
   final _prefixCtrl = TextEditingController();
   final List<TextEditingController> _hostCtrls = [
@@ -100,6 +156,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   String _setupSection = 'basic';
   bool _sectionNavReverse = false;
   bool _mobileInDetail = false;
+  bool _swipingBack = false;
+  double _swipeDragDx = 0.0;
+  late final AnimationController _mobileSubCtrl;
   String? _activeInlineEdit;
   final Set<String> _togglingTunnels = <String>{};
 
@@ -245,6 +304,12 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   @override
   void initState() {
     super.initState();
+    _mobileSubCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+      value: _mobileInDetail ? 1.0 : 0.0,
+    );
+    widget.navigationHandle?._attach(_handleBackRequest);
     _mirrorCtrl.text = widget.updatePrefs.mirrorPrefix;
     _syncFromConfig(force: true);
     widget.requestedSectionSignal?.addListener(_handleRequestedSection);
@@ -254,6 +319,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
   @override
   void didUpdateWidget(covariant ServiceSetupPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationHandle != widget.navigationHandle) {
+      oldWidget.navigationHandle?._detach(_handleBackRequest);
+      widget.navigationHandle?._attach(_handleBackRequest);
+    }
     if (oldWidget.requestedSectionSignal != widget.requestedSectionSignal) {
       oldWidget.requestedSectionSignal?.removeListener(_handleRequestedSection);
       widget.requestedSectionSignal?.addListener(_handleRequestedSection);
@@ -263,6 +332,68 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       _mirrorCtrl.text = widget.updatePrefs.mirrorPrefix;
     }
     _syncFromConfig(force: false);
+  }
+
+  bool _handleBackRequest() {
+    if (!mounted) return false;
+    if (_activeInlineEdit != null) {
+      setState(() {
+        _pwdCtrl.clear();
+        _syncFromConfig(force: true);
+        _activeInlineEdit = null;
+      });
+      _syncNavigationHandle();
+      return true;
+    }
+    final isNarrow = MediaQuery.sizeOf(context).width < 820;
+    if (isNarrow && _mobileInDetail) {
+      _popMobileDetail();
+      return true;
+    }
+    return false;
+  }
+
+  void _popMobileDetail() {
+    if (!_mobileInDetail && _mobileSubCtrl.value <= 0.001) return;
+    setState(() {
+      _mobileInDetail = false;
+      _swipingBack = false;
+      _activeInlineEdit = null;
+    });
+    _syncNavigationHandle();
+    if (!mounted || ClaudeMotion.reduceMotion(context)) {
+      _mobileSubCtrl.value = 0.0;
+    } else {
+      unawaited(
+        _mobileSubCtrl.animateBack(
+          0.0,
+          duration: const Duration(milliseconds: 240),
+          curve: ClaudeMotion.editorialOut,
+        ),
+      );
+    }
+  }
+
+  String _sectionTitleFor(String id) {
+    return switch (id) {
+      'basic' => '基础与外观',
+      'profiles' => '网络与认证',
+      'expose' => '外网与隧道',
+      'security' => '目录与权限',
+      'about' => '关于与更新',
+      _ => '全部配置',
+    };
+  }
+
+  void _syncNavigationHandle({bool? forceIsWide}) {
+    final handle = widget.navigationHandle;
+    if (handle == null || !mounted) return;
+    final isWide = forceIsWide ?? (MediaQuery.sizeOf(context).width >= 820);
+    handle._updateState(
+      inMobileSubpage: !isWide && _mobileInDetail,
+      hasInlineEditor: _activeInlineEdit != null,
+      subpageTitle: _sectionTitleFor(_setupSection),
+    );
   }
 
   void _handleRequestedSection() {
@@ -288,8 +419,23 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       _activeInlineEdit = null;
       if (openMobileDetail) {
         _mobileInDetail = true;
+        _swipingBack = false;
       }
     });
+    if (openMobileDetail) {
+      if (!mounted || ClaudeMotion.reduceMotion(context)) {
+        _mobileSubCtrl.value = 1.0;
+      } else {
+        unawaited(
+          _mobileSubCtrl.animateTo(
+            1.0,
+            duration: const Duration(milliseconds: 260),
+            curve: ClaudeMotion.editorialOut,
+          ),
+        );
+      }
+    }
+    _syncNavigationHandle();
   }
 
   void _toggleInlineEdit(String key) {
@@ -302,6 +448,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         _activeInlineEdit = key;
       }
     });
+    _syncNavigationHandle();
   }
 
   void _syncFromConfig({required bool force}) {
@@ -348,12 +495,15 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       _activeInlineEdit = null;
       _syncFromConfig(force: true);
     });
+    _syncNavigationHandle();
     widget.onToast('已还原未保存的修改');
   }
 
   @override
   void dispose() {
+    widget.navigationHandle?._detach(_handleBackRequest);
     widget.requestedSectionSignal?.removeListener(_handleRequestedSection);
+    _mobileSubCtrl.dispose();
     _nameCtrl.dispose();
     _prefixCtrl.dispose();
     for (final ctrl in _hostCtrls) {
@@ -1077,6 +1227,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
 
     final screenW = MediaQuery.sizeOf(context).width;
     final isWideDesktop = screenW >= 820;
+    _syncNavigationHandle(forceIsWide: isWideDesktop);
     final hasDirty = _basicDirty || _permDirty;
     final bottomPad = (screenW < 700 ? 124.0 : 42.0) +
         (hasDirty ? 64.0 : 0.0) +
@@ -2191,152 +2342,373 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       );
     }
 
-    // 2. Mobile / Narrow Screen (< 820px): Shared-X Push/Pop between Level-1 & Level-2
+    // 2. Mobile / Narrow Screen (< 820px): iOS 26 Full-Screen Interactive Parallax Swipe-Back Stack
     final currentCatTitle = navCategories
             .where((e) => e.$1 == _setupSection)
             .map((e) => e.$3)
             .firstOrNull ??
         '全部配置';
 
-    final Widget mobileView = !_mobileInDetail
-        ? SingleChildScrollView(
-            key: const ValueKey('setup-mobile-list'),
-            controller: _scrollCtrl,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(
-              top: widget.topPadding,
-              right: 2,
-              bottom: bottomPad,
+    Widget buildMobileLevel1List() {
+      return SingleChildScrollView(
+        key: const ValueKey('setup-mobile-list'),
+        controller: !_mobileInDetail ? _scrollCtrl : null,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(
+          top: widget.topPadding,
+          right: 2,
+          bottom: bottomPad,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ClaudeEditorialPageHeader(
+              eyebrow: 'SYSTEM PREFERENCES',
+              title: '服务配置',
+              subtitle: '轻点下方分组进入对应设置项',
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            const SizedBox(height: 14),
+            ClaudeListGroup(
+              dividerIndent: 64,
               children: [
-                const ClaudeEditorialPageHeader(
-                  eyebrow: 'SYSTEM PREFERENCES',
-                  title: '服务配置',
-                  subtitle: '轻点下方分组进入对应设置项',
-                ),
-                const SizedBox(height: 14),
-                ClaudeListGroup(
-                  dividerIndent: 64,
-                  children: [
-                    for (var i = 0; i < navCategories.length; i++)
-                      ClaudeSettingsRow(
-                        onTap: () => _selectSetupSection(
-                          navCategories[i].$1,
-                          openMobileDetail: true,
+                for (var i = 0; i < navCategories.length; i++)
+                  ClaudeSettingsRow(
+                    onTap: () => _selectSetupSection(
+                      navCategories[i].$1,
+                      openMobileDetail: true,
+                    ),
+                    leading: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: ShapeDecoration(
+                        color: c.clay.withValues(
+                          alpha: c.isDark ? 0.16 : 0.10,
                         ),
-                        leading: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: ShapeDecoration(
-                            color: c.clay.withValues(
-                              alpha: c.isDark ? 0.16 : 0.10,
-                            ),
-                            shape: claudeSuperellipse(9),
+                        shape: claudeSuperellipse(9),
+                      ),
+                      child: Icon(
+                        navCategories[i].$2,
+                        size: 18,
+                        color: c.clay,
+                      ),
+                    ),
+                    title: navCategories[i].$3,
+                    subtitle: navCategories[i].$4,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (navCategories[i].$6 != null) ...[
+                          ClaudePill(
+                            text: navCategories[i].$6!,
+                            fg: navCategories[i].$5 ? c.clay : c.muted,
+                            bg: navCategories[i].$5
+                                ? c.clay.withValues(alpha: 0.14)
+                                : c.recessed,
                           ),
-                          child: Icon(
-                            navCategories[i].$2,
-                            size: 18,
-                            color: c.clay,
-                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 19,
+                          color: c.meta,
                         ),
-                        title: navCategories[i].$3,
-                        subtitle: navCategories[i].$4,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (navCategories[i].$6 != null) ...[
-                              ClaudePill(
-                                text: navCategories[i].$6!,
-                                fg: navCategories[i].$5 ? c.clay : c.muted,
-                                bg: navCategories[i].$5
-                                    ? c.clay.withValues(alpha: 0.14)
-                                    : c.recessed,
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            if (isAndroidHost) ...[
+              const SizedBox(height: 14),
+              AndroidPrivilegeCard(
+                backend: widget.backend,
+                config: widget.config,
+                onRefreshStatus: widget.onRefreshStatus,
+                onToast: widget.onToast,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    Widget buildMobileLevel2Detail() {
+      return SingleChildScrollView(
+        key: ValueKey('setup-mobile-detail-$_setupSection'),
+        controller: _mobileInDetail ? _scrollCtrl : null,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(
+          top: widget.topPadding,
+          right: 2,
+          bottom: bottomPad,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CustomPaint(
+                  foregroundPainter: ClaudeSpecularRimPainter(
+                    radius: 999,
+                    isDark: c.isDark,
+                    accentTint: c.sage,
+                    intensity: 0.85,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: const ValueKey('setup-mobile-back-btn'),
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: _popMobileDetail,
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: c.isDark
+                                ? [
+                                    const Color(0xD81C362E),
+                                    const Color(0xE611211C),
+                                  ]
+                                : [
+                                    const Color(0xF6FFFFFF),
+                                    const Color(0xECF0FAF5),
+                                  ],
+                          ),
+                          shape: const StadiumBorder(),
+                          shadows: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: c.isDark ? 0.28 : 0.05,
                               ),
-                              const SizedBox(width: 6),
-                            ],
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              size: 19,
-                              color: c.meta,
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                      ),
-                  ],
-                ),
-                if (isAndroidHost) ...[
-                  const SizedBox(height: 14),
-                  AndroidPrivilegeCard(
-                    backend: widget.backend,
-                    config: widget.config,
-                    onRefreshStatus: widget.onRefreshStatus,
-                    onToast: widget.onToast,
-                  ),
-                ],
-              ],
-            ),
-          )
-        : SingleChildScrollView(
-            key: ValueKey('setup-mobile-detail-$_setupSection'),
-            controller: _scrollCtrl,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(
-              top: widget.topPadding,
-              right: 2,
-              bottom: bottomPad,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    ClaudeButton(
-                      label: '返回服务配置',
-                      compact: true,
-                      variant: ClaudeBtnVariant.ghost,
-                      leading: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 14,
-                      ),
-                      onPressed: () => setState(() {
-                        _mobileInDetail = false;
-                        _activeInlineEdit = null;
-                      }),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        currentCatTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: sansStyle(
-                          c,
-                          size: 15.5,
-                          weight: FontWeight.w600,
-                          color: c.ink,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(9, 5.5, 12, 5.5),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 12.5,
+                                color: c.sage,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '返回服务配置',
+                                style: sansStyle(
+                                  c,
+                                  size: 12.2,
+                                  weight: FontWeight.w600,
+                                  color: c.isDark
+                                      ? const Color(0xFFECFDF5)
+                                      : const Color(0xFF064E3B),
+                                  height: 1.15,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                buildCategoryDetailContent(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    currentCatTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: serifTitleStyle(
+                      c,
+                      size: 18.5,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ],
             ),
-          );
-
-    return Stack(
-      children: [
-        ClaudeSharedAxisSwitcher(
-          axis: Axis.horizontal,
-          reverse: !_mobileInDetail,
-          distance: 22.0,
-          child: mobileView,
+            const SizedBox(height: 12),
+            buildCategoryDetailContent(),
+          ],
         ),
-        _buildFloatingUnsavedBar(c),
-      ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (ctx, stackBox) {
+        final paneWidth =
+            stackBox.maxWidth.isFinite ? stackBox.maxWidth : screenW;
+        return AnimatedBuilder(
+          animation: _mobileSubCtrl,
+          builder: (ctx, _) {
+            final t = _mobileSubCtrl.value.clamp(0.0, 1.0);
+            final showLevel2 = _mobileInDetail || t > 0.001;
+            final hideLevel1 = t >= 0.999 && !_swipingBack;
+            final inTransition = t > 0.002 && t < 0.998;
+            final draggedRatio = (1.0 - t).clamp(0.0, 1.0);
+            final l2Scale =
+                _swipingBack ? (1.0 - draggedRatio * 0.045) : 1.0;
+
+            return Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                // Underlying Level-1 Directory with -26% Parallax Reveal
+                Offstage(
+                  key: const ValueKey('setup-mobile-l1-slot'),
+                  offstage: hideLevel1,
+                  child: IgnorePointer(
+                    ignoring: t > 0.01,
+                    child: ExcludeSemantics(
+                      excluding: t > 0.01,
+                      child: Transform.translate(
+                        offset: Offset(-0.26 * paneWidth * t, 0.0),
+                        child: Opacity(
+                          opacity: (1.0 - 0.18 * t).clamp(0.0, 1.0),
+                          child: buildMobileLevel1List(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  key: const ValueKey('setup-mobile-scrim-slot'),
+                  child: IgnorePointer(
+                    child: inTransition
+                        ? ColoredBox(
+                            color: Colors.black.withValues(
+                              alpha: (c.isDark ? 0.34 : 0.10) * t,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+                if (showLevel2)
+                  Positioned.fill(
+                    key: const ValueKey('setup-mobile-l2-slot'),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragStart: (details) {
+                        if (!_mobileInDetail) return;
+                        _mobileSubCtrl.stop();
+                        setState(() {
+                          _swipingBack = true;
+                          _swipeDragDx = (1.0 - _mobileSubCtrl.value) * paneWidth;
+                        });
+                      },
+                      onHorizontalDragUpdate: (details) {
+                        if (!_swipingBack) return;
+                        _swipeDragDx = (_swipeDragDx + details.delta.dx)
+                            .clamp(0.0, paneWidth);
+                        _mobileSubCtrl.value =
+                            (1.0 - _swipeDragDx / paneWidth).clamp(0.0, 1.0);
+                      },
+                      onHorizontalDragEnd: (details) {
+                        if (!_swipingBack) return;
+                        final vx = details.primaryVelocity ?? 0.0;
+                        final outRatio = 1.0 - _mobileSubCtrl.value;
+                        if (outRatio > 0.24 || vx > 380.0) {
+                          _popMobileDetail();
+                        } else {
+                          setState(() => _swipingBack = false);
+                          unawaited(
+                            _mobileSubCtrl.animateTo(
+                              1.0,
+                              duration: const Duration(milliseconds: 220),
+                              curve: ClaudeMotion.snappySpring,
+                            ),
+                          );
+                        }
+                      },
+                      onHorizontalDragCancel: () {
+                        if (!_swipingBack) return;
+                        setState(() => _swipingBack = false);
+                        unawaited(
+                          _mobileSubCtrl.animateTo(
+                            1.0,
+                            duration: const Duration(milliseconds: 220),
+                            curve: ClaudeMotion.snappySpring,
+                          ),
+                        );
+                      },
+                      child: Transform.translate(
+                        offset: Offset((1.0 - t) * paneWidth, 0.0),
+                        child: Transform.scale(
+                          scale: l2Scale,
+                          alignment: Alignment.centerLeft,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: c.paper,
+                              borderRadius: inTransition
+                                  ? BorderRadius.circular(24)
+                                  : BorderRadius.zero,
+                              boxShadow: inTransition
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: c.isDark ? 0.62 : 0.14,
+                                        ),
+                                        blurRadius: 28,
+                                        spreadRadius: -6,
+                                        offset: const Offset(-12, 0),
+                                      ),
+                                    ]
+                                  : const [],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: inTransition
+                                  ? BorderRadius.circular(24)
+                                  : BorderRadius.zero,
+                              child: buildMobileLevel2Detail(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_swipingBack && draggedRatio > 0.03)
+                  Positioned(
+                    left: 4.0 + (draggedRatio * 26.0).clamp(0.0, 22.0),
+                    top: 0,
+                    bottom: 84,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Opacity(
+                          opacity: (draggedRatio * 2.8).clamp(0.0, 1.0),
+                          child: Container(
+                            width: 30,
+                            height: 48,
+                            decoration: ShapeDecoration(
+                              color: c.sage.withValues(alpha: 0.92),
+                              shape: const StadiumBorder(),
+                              shadows: [
+                                BoxShadow(
+                                  color: c.sage.withValues(alpha: 0.36),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.chevron_left_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                _buildFloatingUnsavedBar(c),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

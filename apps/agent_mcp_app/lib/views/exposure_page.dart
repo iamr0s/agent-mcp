@@ -1197,7 +1197,14 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         vertical: 18,
       ),
       shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
-      child: ConstrainedBox(
+      child: PopScope(
+        canPop: _inStep1 || widget.initialMode != 'wizard',
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && mounted) {
+            setState(() => _inStep1 = true);
+          }
+        },
+        child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600, maxHeight: 740),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1929,6 +1936,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

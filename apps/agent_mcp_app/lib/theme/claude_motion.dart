@@ -72,6 +72,20 @@ abstract final class ClaudeMotion {
   static const Duration modal = Duration(milliseconds: 240);
   static const Duration reveal = Duration(milliseconds: 300);
 
+  /// Safe to call from `build`, `didUpdateWidget`, or pointer/gesture callbacks.
+  static bool reduceMotion(BuildContext context) {
+    final mq = context.getInheritedWidgetOfExactType<MediaQuery>();
+    if (mq != null && mq.data.disableAnimations) {
+      return true;
+    }
+    final scope =
+        context.getInheritedWidgetOfExactType<_ThemeSwitchingScope>();
+    if (scope != null && scope.isSwitching) {
+      return true;
+    }
+    return false;
+  }
+
   /// Returns `Duration.zero` when system animations are disabled OR while a
   /// global theme snapshot cross-fade is active (preventing competing
   /// per-widget `AnimatedContainer` color lag underneath the theme transition).

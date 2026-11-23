@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, PlatformDispatcher, lerpDouble;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 
 import 'services/console_backend.dart';
@@ -296,7 +298,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '3.0.0';
+  String _version = '3.1.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -338,6 +340,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   StreamSubscription<String>? _trayCmdSub;
   final ValueNotifier<String?> _droppedSharePath = ValueNotifier<String?>(null);
   final ValueNotifier<String?> _setupSectionJump = ValueNotifier<String?>(null);
+  final SetupNavigationHandle _setupNavHandle = SetupNavigationHandle();
   final GlobalKey _themeBtnKey = GlobalKey();
   AppLifecycleState _appLifecycle = AppLifecycleState.resumed;
 
@@ -450,6 +453,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _trayCmdSub?.cancel();
     _droppedSharePath.dispose();
     _setupSectionJump.dispose();
+    _setupNavHandle.dispose();
     _eventSub?.cancel();
     _pollTimer?.cancel();
     _toastTimer?.cancel();
@@ -481,7 +485,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.0.0').toString();
+      _version = (auth['version'] ?? '3.1.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -947,6 +951,32 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     unawaited(_refreshStatus());
   }
 
+  void _handleReselectActiveTab() {
+    if (_tabIndex == 3 && _setupNavHandle.canHandleBack) {
+      HapticFeedback.selectionClick();
+      _setupNavHandle.handleBack();
+    }
+  }
+
+  bool _handleSystemBack({required bool isMobile}) {
+    if (_tabIndex == 3 && _setupNavHandle.canHandleBack) {
+      HapticFeedback.selectionClick();
+      if (!_chromeVisible) {
+        setState(() {
+          _chromeVisible = true;
+          _scrollAccum = 0.0;
+        });
+      }
+      return _setupNavHandle.handleBack();
+    }
+    if (isMobile && _tabIndex != 0) {
+      HapticFeedback.selectionClick();
+      _selectTab(0);
+      return true;
+    }
+    return false;
+  }
+
   void _selectTab(int idx) {
     if (_tabIndex == idx) return;
     setState(() {
@@ -1102,38 +1132,146 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: IgnorePointer(
-                    ignoring: hasCustomBar,
-                    child: Row(
-                      children: [
-                        const ClaudeSparkIcon(size: 16.5),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            _serverName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: sansStyle(
-                              c,
-                              size: 13.5,
-                              weight: FontWeight.w600,
-                              color: c.ink,
-                            ),
-                          ),
+                  child: ListenableBuilder(
+                    listenable: _setupNavHandle,
+                    builder: (context, _) {
+                      final showHeaderJadeBack = showAuthControls &&
+                          isMobileHeader &&
+                          _tabIndex == 3 &&
+                          _setupNavHandle.inMobileSubpage;
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 190),
+                        switchInCurve: ClaudeMotion.editorialOut,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (currentChild, previousChildren) => Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [
+                            ...previousChildren,
+                            if (currentChild != null) currentChild,
+                          ],
                         ),
-                        if (showModeBadge) ...[
-                          const SizedBox(width: 8),
-                          ClaudePill(
-                            text: modeBadgeText,
-                            mono: false,
-                            bg: c.paper2,
-                            fg: widget.backend.isRemoteNodeActive
-                                ? c.clay
-                                : c.muted,
-                          ),
-                        ],
-                      ],
-                    ),
+                        child: showHeaderJadeBack
+                            ? Align(
+                                key: const ValueKey('header-left-subpage-back'),
+                                alignment: Alignment.centerLeft,
+                                child: Tooltip(
+                                  message: '返回服务配置',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      key: const ValueKey(
+                                        'header-jade-back-pill',
+                                      ),
+                                      onTap: () =>
+                                          _handleSystemBack(isMobile: true),
+                                      borderRadius: BorderRadius.circular(999),
+                                      child: CustomPaint(
+                                        foregroundPainter:
+                                            ClaudeSpecularRimPainter(
+                                          radius: 999,
+                                          isDark: c.isDark,
+                                          accentTint: c.sage,
+                                          intensity: 0.92,
+                                        ),
+                                        child: Container(
+                                          height: 28,
+                                          padding: EdgeInsets.fromLTRB(
+                                            7,
+                                            0,
+                                            viewW < 400 ? 9 : 11,
+                                            0,
+                                          ),
+                                          decoration: ShapeDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                c.isDark
+                                                    ? const Color(0x2E10B981)
+                                                    : const Color(0xF2FFFFFF),
+                                                c.sageBg,
+                                              ],
+                                            ),
+                                            shape: const StadiumBorder(),
+                                            shadows: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha:
+                                                      c.isDark ? 0.30 : 0.05,
+                                                ),
+                                                blurRadius: 6,
+                                                offset: const Offset(0, 1.5),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons
+                                                    .arrow_back_ios_new_rounded,
+                                                size: 11.5,
+                                                color: c.sage,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  viewW < 400 ? '返回' : '返回上级',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: sansStyle(
+                                                    c,
+                                                    size: 12.0,
+                                                    weight: FontWeight.w600,
+                                                    color: c.ink,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : IgnorePointer(
+                                key: const ValueKey('header-left-brand'),
+                                ignoring: hasCustomBar,
+                                child: Row(
+                                  children: [
+                                    const ClaudeSparkIcon(size: 16.5),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        _serverName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: sansStyle(
+                                          c,
+                                          size: 13.5,
+                                          weight: FontWeight.w600,
+                                          color: c.ink,
+                                        ),
+                                      ),
+                                    ),
+                                    if (showModeBadge) ...[
+                                      const SizedBox(width: 8),
+                                      ClaudePill(
+                                        text: modeBadgeText,
+                                        mono: false,
+                                        bg: c.paper2,
+                                        fg: widget.backend.isRemoteNodeActive
+                                            ? c.clay
+                                            : c.muted,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                      );
+                    },
                   ),
                 ),
                 if (showAuthControls && viewW >= 960) ...[
@@ -1575,15 +1713,45 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         onCheckUpdate: () => _checkForUpdates(manual: true),
         requestedSectionSignal: _setupSectionJump,
         onConsumeRequestedSection: () => _setupSectionJump.value = null,
+        navigationHandle: _setupNavHandle,
       ),
     ];
 
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-            _openCommandPalette,
-        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-            _openCommandPalette,
+    return ListenableBuilder(
+      listenable: _setupNavHandle,
+      builder: (context, child) {
+        final canHandleSetupBack =
+            _tabIndex == 3 && _setupNavHandle.canHandleBack;
+        final canInterceptBack =
+            canHandleSetupBack || (isMobile && _tabIndex != 0);
+        return PopScope(
+          canPop: !canInterceptBack,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              _handleSystemBack(isMobile: isMobile);
+            }
+          },
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (ev) {
+              if ((ev.buttons & kBackMouseButton) != 0) {
+                _handleSystemBack(isMobile: isMobile);
+              }
+            },
+            child: CallbackShortcuts(
+              bindings: <ShortcutActivator, VoidCallback>{
+                const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                    _openCommandPalette,
+                const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+                    _openCommandPalette,
+                if (canHandleSetupBack)
+                  const SingleActivator(LogicalKeyboardKey.escape): () =>
+                      _handleSystemBack(isMobile: isMobile),
+              },
+              child: child!,
+            ),
+          ),
+        );
       },
       child: Scaffold(
       key: const ValueKey('shell'),
@@ -2322,6 +2490,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         safeLeft: safeLeft,
                         safeRight: safeRight,
                         onSelect: _selectTab,
+                        onReselectActive: _handleReselectActiveTab,
                       ),
                     ),
                   ),
@@ -2531,11 +2700,15 @@ class _ProgressiveScrollEdgeVeil extends StatelessWidget {
   }
 }
 
-/// Centered Morphing Jewel Capsule Dock (Expanding Label Capsule + ProKit Liquid Glass).
-/// Floats as a compact centered stadium jewel surrounded by generous open canvas;
-/// only the active destination expands smoothly into a high-contrast Onyx/Alabaster pill
-/// with icon + label, while inactive destinations breathe as pure 20px icons.
-class _MobileMorphingJewelDock extends StatelessWidget {
+/// iOS 26 / Telegram-inspired Liquid Jade Lens Dock:
+/// - Matches the small-screen top `:8000` status jade capsule (translucent white-jade /
+///   celadon subsurface glow in light mode; ice-emerald nephrite in dark mode).
+/// - Single continuous sliding indicator glides across tabs with velocity-driven
+///   squash-and-stretch physics on tap.
+/// - Pressing & dragging lifts the indicator (+11%) into a 1:1 finger-tracking optical lens
+///   that magnifies tabs underneath up to +16% along a Gaussian proximity curve while
+///   illuminating the frosted glass bar beneath the finger.
+class _MobileMorphingJewelDock extends StatefulWidget {
   final int selectedIndex;
   final int enabledSubCount;
   final int activeExposeCount;
@@ -2544,6 +2717,7 @@ class _MobileMorphingJewelDock extends StatelessWidget {
   final double safeLeft;
   final double safeRight;
   final ValueChanged<int> onSelect;
+  final VoidCallback? onReselectActive;
 
   const _MobileMorphingJewelDock({
     required this.selectedIndex,
@@ -2554,7 +2728,140 @@ class _MobileMorphingJewelDock extends StatelessWidget {
     this.safeLeft = 0,
     this.safeRight = 0,
     required this.onSelect,
+    this.onReselectActive,
   });
+
+  @override
+  State<_MobileMorphingJewelDock> createState() =>
+      _MobileMorphingJewelDockState();
+}
+
+class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  Duration? _lastTickElapsed;
+
+  late double _lensSlotPos;
+  late double _targetSlotPos;
+  double _lensVel = 0.0;
+
+  double _liftVal = 0.0;
+  double _liftTarget = 0.0;
+  double _liftVel = 0.0;
+
+  double _fingerNormX = 0.5;
+  bool _isPressing = false;
+  bool _isDragging = false;
+  int _lastHoverReportedIdx = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _lensSlotPos = widget.selectedIndex.toDouble();
+    _targetSlotPos = _lensSlotPos;
+    _lastHoverReportedIdx = widget.selectedIndex;
+    _ticker = createTicker(_onTick);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MobileMorphingJewelDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedIndex != widget.selectedIndex && !_isDragging) {
+      _targetSlotPos = widget.selectedIndex.toDouble();
+      _lastHoverReportedIdx = widget.selectedIndex;
+      if (ClaudeMotion.reduceMotion(context)) {
+        _lensSlotPos = _targetSlotPos;
+        _lensVel = 0.0;
+      } else {
+        _ensureTicker();
+      }
+    }
+  }
+
+  void _ensureTicker() {
+    if (!_ticker.isActive) {
+      _lastTickElapsed = null;
+      _ticker.start();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    final prev = _lastTickElapsed;
+    _lastTickElapsed = elapsed;
+    final dt = prev == null
+        ? 0.016
+        : ((elapsed - prev).inMicroseconds / 1000000.0).clamp(0.001, 0.032);
+
+    // 1. Horizontal lens spring: tight 1:1 tracking while dragging, fluid glide on tap/snap
+    final stiffness = _isDragging ? 760.0 : 330.0;
+    final damping = _isDragging ? 44.0 : 25.5;
+    final ax = (_targetSlotPos - _lensSlotPos) * stiffness - _lensVel * damping;
+    _lensVel += ax * dt;
+    _lensSlotPos += _lensVel * dt;
+
+    // 2. Lift spring (0 -> 1 while pressed/scrubbing)
+    final aLift = (_liftTarget - _liftVal) * 420.0 - _liftVel * 30.0;
+    _liftVel += aLift * dt;
+    _liftVal = (_liftVal + _liftVel * dt).clamp(0.0, 1.15);
+
+    final settled = !_isPressing &&
+        !_isDragging &&
+        (_targetSlotPos - _lensSlotPos).abs() < 0.0008 &&
+        _lensVel.abs() < 0.004 &&
+        (_liftTarget - _liftVal).abs() < 0.001 &&
+        _liftVel.abs() < 0.004;
+
+    if (settled) {
+      _lensSlotPos = _targetSlotPos;
+      _lensVel = 0.0;
+      _liftVal = _liftTarget;
+      _liftVel = 0.0;
+      _lastTickElapsed = null;
+      _ticker.stop();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _updateDragLocalDx(double localDx, double innerWidth, double barWidth) {
+    final slotWidth = innerWidth / 4.0;
+    _fingerNormX = (localDx / barWidth).clamp(0.04, 0.96);
+    final relX = localDx - 4.0;
+    final rawSlot = (relX / slotWidth) - 0.5;
+    double clamped = rawSlot;
+    if (rawSlot < 0.0) {
+      clamped = rawSlot * 0.22;
+    } else if (rawSlot > 3.0) {
+      clamped = 3.0 + (rawSlot - 3.0) * 0.22;
+    }
+    _targetSlotPos = clamped;
+    _ensureTicker();
+
+    final hoverIdx = clamped.round().clamp(0, 3);
+    if (hoverIdx != _lastHoverReportedIdx) {
+      _lastHoverReportedIdx = hoverIdx;
+      HapticFeedback.selectionClick();
+      widget.onSelect(hoverIdx);
+    }
+  }
+
+  void _handleSlotTap(int idx) {
+    if (idx == widget.selectedIndex) {
+      if (!ClaudeMotion.reduceMotion(context)) {
+        _liftVel = 2.6;
+        _ensureTicker();
+      }
+      widget.onReselectActive?.call();
+      return;
+    }
+    _fingerNormX = ((idx + 0.5) / 4.0).clamp(0.08, 0.92);
+    widget.onSelect(idx);
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2565,23 +2872,24 @@ class _MobileMorphingJewelDock extends StatelessWidget {
         Icons.hub_outlined,
         Icons.hub_rounded,
         '子 MCP',
-        enabledSubCount > 0 ? '$enabledSubCount' : null,
+        widget.enabledSubCount > 0 ? '${widget.enabledSubCount}' : null,
       ),
       (
         Icons.public_outlined,
         Icons.public_rounded,
         '外网',
-        activeExposeCount > 0 ? '$activeExposeCount' : null,
+        widget.activeExposeCount > 0 ? '${widget.activeExposeCount}' : null,
       ),
       (Icons.tune_outlined, Icons.tune_rounded, '服务配置', null),
     ];
 
-    final blurSigma = micaActive ? (kIsWeb ? 12.0 : 24.0) : 0.0;
+    final blurSigma = widget.micaActive ? (kIsWeb ? 12.0 : 24.0) : 0.0;
+    final tLift = _liftVal.clamp(0.0, 1.0);
 
     final shellShadows = c.isDark
         ? const [
             BoxShadow(
-              color: Color(0xB8000000),
+              color: Color(0xBA000000),
               blurRadius: 36,
               spreadRadius: -4,
               offset: Offset(0, 14),
@@ -2594,30 +2902,30 @@ class _MobileMorphingJewelDock extends StatelessWidget {
           ]
         : const [
             BoxShadow(
-              color: Color(0x1E000000),
+              color: Color(0x220F261E),
               blurRadius: 32,
               spreadRadius: -6,
               offset: Offset(0, 14),
             ),
             BoxShadow(
-              color: Color(0x0D000000),
+              color: Color(0x0D0F172A),
               blurRadius: 8,
               spreadRadius: -1,
               offset: Offset(0, 3),
             ),
           ];
 
-    final shellGradient = micaActive
+    final baseTrayGradient = widget.micaActive
         ? (c.isDark
             ? const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xDC1B1B22), Color(0xEB101015)],
+                colors: [Color(0xCC182320), Color(0xE00D1413)],
               )
             : const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xEBFFFFFF), Color(0xD8F4F4F7)],
+                colors: [Color(0xDEFFFFFF), Color(0xC6F0F7F4)],
               ))
         : LinearGradient(
             begin: Alignment.topCenter,
@@ -2627,49 +2935,326 @@ class _MobileMorphingJewelDock extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        18 + safeLeft,
+        18 + widget.safeLeft,
         0,
-        18 + safeRight,
-        safeBottom > 0 ? safeBottom + 8 : 14,
+        18 + widget.safeRight,
+        widget.safeBottom > 0 ? widget.safeBottom + 8 : 14,
       ),
       child: Center(
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            shape: const StadiumBorder(),
-            shadows: shellShadows,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-              child: CustomPaint(
-                foregroundPainter: ClaudeSpecularRimPainter(
-                  radius: 999,
-                  isDark: c.isDark,
-                  intensity: 1.0,
-                ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(gradient: shellGradient),
-                  child: Padding(
-                    padding: const EdgeInsets.all(5.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (var i = 0; i < items.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 4),
-                          _MobileMorphingJewelTab(
-                            icon: selectedIndex == i
-                                ? items[i].$2
-                                : items[i].$1,
-                            label: items[i].$3,
-                            badge: items[i].$4,
-                            active: selectedIndex == i,
-                            onTap: () => onSelect(i),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: LayoutBuilder(
+            builder: (ctx, box) {
+              final barWidth = box.maxWidth.isFinite ? box.maxWidth : 324.0;
+              final innerWidth = math.max(160.0, barWidth - 8.0);
+              final slotWidth = innerWidth / 4.0;
+
+              final speedStretch =
+                  (_lensVel.abs() * 0.018).clamp(0.0, 0.16);
+              final lensScaleX = (1.0 + 0.105 * tLift) * (1.0 + speedStretch);
+              final lensScaleY =
+                  (1.0 + 0.105 * tLift) * (1.0 - 0.40 * speedStretch);
+              final lensTilt = (_lensVel * 0.0032).clamp(-0.042, 0.042);
+              final lensLiftDy = -1.5 * tLift;
+              final barScale = 1.0 + 0.022 * tLift;
+
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (ev) {
+                  _isPressing = true;
+                  _fingerNormX =
+                      (ev.localPosition.dx / barWidth).clamp(0.04, 0.96);
+                  if (!ClaudeMotion.reduceMotion(context)) {
+                    _liftTarget = 1.0;
+                    _ensureTicker();
+                  } else {
+                    setState(() => _liftVal = 1.0);
+                  }
+                },
+                onPointerUp: (_) {
+                  if (!_isDragging) {
+                    _isPressing = false;
+                    _liftTarget = 0.0;
+                    if (ClaudeMotion.reduceMotion(context)) {
+                      setState(() => _liftVal = 0.0);
+                    } else {
+                      _ensureTicker();
+                    }
+                  }
+                },
+                onPointerCancel: (_) {
+                  if (!_isDragging) {
+                    _isPressing = false;
+                    _liftTarget = 0.0;
+                    if (ClaudeMotion.reduceMotion(context)) {
+                      setState(() => _liftVal = 0.0);
+                    } else {
+                      _ensureTicker();
+                    }
+                  }
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (details) {
+                    _isDragging = true;
+                    _isPressing = true;
+                    _liftTarget = 1.0;
+                    _lastHoverReportedIdx = widget.selectedIndex;
+                    _updateDragLocalDx(
+                      details.localPosition.dx,
+                      innerWidth,
+                      barWidth,
+                    );
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    if (!_isDragging) return;
+                    _updateDragLocalDx(
+                      details.localPosition.dx,
+                      innerWidth,
+                      barWidth,
+                    );
+                  },
+                  onHorizontalDragEnd: (_) {
+                    if (!_isDragging) return;
+                    _isDragging = false;
+                    _isPressing = false;
+                    _liftTarget = 0.0;
+                    final snappedIdx = _targetSlotPos.round().clamp(0, 3);
+                    _targetSlotPos = snappedIdx.toDouble();
+                    _lastHoverReportedIdx = snappedIdx;
+                    if (ClaudeMotion.reduceMotion(context)) {
+                      _lensSlotPos = _targetSlotPos;
+                      _liftVal = 0.0;
+                      setState(() {});
+                    } else {
+                      _ensureTicker();
+                    }
+                    if (snappedIdx != widget.selectedIndex) {
+                      widget.onSelect(snappedIdx);
+                    }
+                  },
+                  onHorizontalDragCancel: () {
+                    if (!_isDragging) return;
+                    _isDragging = false;
+                    _isPressing = false;
+                    _liftTarget = 0.0;
+                    _targetSlotPos = widget.selectedIndex.toDouble();
+                    _ensureTicker();
+                  },
+                  child: Transform.scale(
+                    scale: barScale,
+                    alignment: Alignment.bottomCenter,
+                    child: DecoratedBox(
+                      key: const ValueKey('mobile-liquid-jade-dock'),
+                      decoration: ShapeDecoration(
+                        shape: const StadiumBorder(),
+                        shadows: shellShadows,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(
+                            sigmaX: blurSigma,
+                            sigmaY: blurSigma,
                           ),
-                        ],
-                      ],
+                          child: CustomPaint(
+                            foregroundPainter: ClaudeSpecularRimPainter(
+                              radius: 999,
+                              isDark: c.isDark,
+                              accentTint: c.sage,
+                              intensity: 0.86 + 0.14 * tLift,
+                            ),
+                            child: DecoratedBox(
+                              decoration:
+                                  BoxDecoration(gradient: baseTrayGradient),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: tLift > 0.005
+                                      ? RadialGradient(
+                                          center: Alignment(
+                                            _fingerNormX * 2.0 - 1.0,
+                                            0.0,
+                                          ),
+                                          radius: 1.25,
+                                          colors: [
+                                            c.sage.withValues(
+                                              alpha: (c.isDark ? 0.24 : 0.18) *
+                                                  tLift,
+                                            ),
+                                            c.sage.withValues(alpha: 0.0),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                                child: SizedBox(
+                                  height: 58,
+                                  width: barWidth,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      // Single continuous sliding + finger-following Jade Lens Pill
+                                      Positioned(
+                                        left: 4.0 + _lensSlotPos * slotWidth,
+                                        top: 4.0,
+                                        width: slotWidth,
+                                        height: 50.0,
+                                        child: IgnorePointer(
+                                          child: Transform.translate(
+                                            offset: Offset(0.0, lensLiftDy),
+                                            child: Transform.rotate(
+                                              angle: lensTilt,
+                                              child: Transform.scale(
+                                                scaleX: lensScaleX,
+                                                scaleY: lensScaleY,
+                                                child: _LiquidJadeLensPill(
+                                                  key: const ValueKey(
+                                                    'mobile-liquid-jade-lens',
+                                                  ),
+                                                  palette: c,
+                                                  liftProgress: tLift,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // 4 Equal-Width Tab Slots with +16% Gaussian Proximity Magnification
+                                      Positioned.fill(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4.0),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              for (var i = 0;
+                                                  i < items.length;
+                                                  i++)
+                                                Expanded(
+                                                  child: _buildLensSlot(
+                                                    c: c,
+                                                    index: i,
+                                                    item: items[i],
+                                                    tLift: tLift,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLensSlot({
+    required ClaudePalette c,
+    required int index,
+    required (IconData, IconData, String, String?) item,
+    required double tLift,
+  }) {
+    final dist = (_lensSlotPos - index).abs();
+    final prox = math.exp(-(dist * dist) / (2.0 * 0.48 * 0.48));
+    final underLens = prox > 0.52;
+    // Matches iOS 26 UIKit measurement: +16% max magnification under lifted lens!
+    final magScale = 1.0 + prox * (0.035 + 0.125 * tLift);
+    final liftIconDy = -1.1 * prox * tLift;
+
+    final activeIconCol =
+        c.isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+    final activeTextCol =
+        c.isDark ? const Color(0xFFECFDF5) : const Color(0xFF064E3B);
+    final iconCol = Color.lerp(c.muted, activeIconCol, prox)!;
+    final textCol = Color.lerp(c.muted, activeTextCol, prox)!;
+    final badge = item.$4;
+
+    return Semantics(
+      selected: widget.selectedIndex == index,
+      button: true,
+      label: item.$3,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _handleSlotTap(index),
+          child: Center(
+            child: Transform.translate(
+              offset: Offset(0.0, liftIconDy),
+              child: Transform.scale(
+                scale: magScale,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          underLens ? item.$2 : item.$1,
+                          size: 19.5,
+                          color: iconCol,
+                        ),
+                        if (badge != null)
+                          Positioned(
+                            top: -2.0,
+                            right: -7.0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3.8,
+                                vertical: 0.5,
+                              ),
+                              decoration: ShapeDecoration(
+                                color: underLens
+                                    ? activeIconCol
+                                    : c.sage.withValues(alpha: 0.18),
+                                shape: const StadiumBorder(),
+                              ),
+                              child: Text(
+                                badge,
+                                style: monoStyle(
+                                  c,
+                                  size: 8.8,
+                                  weight: FontWeight.w700,
+                                  color: underLens
+                                      ? (c.isDark
+                                          ? const Color(0xFF06281E)
+                                          : Colors.white)
+                                      : c.sage,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2.5),
+                    Text(
+                      item.$3,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: sansStyle(
+                        c,
+                        size: 11.0,
+                        weight: underLens ? FontWeight.w600 : FontWeight.w500,
+                        color: textCol,
+                        letterSpacing: -0.15,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -2678,6 +3263,181 @@ class _MobileMorphingJewelDock extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Top-Header Matching Translucent Jade Cabochon & Lifted Optical Refraction Lens.
+class _LiquidJadeLensPill extends StatelessWidget {
+  final ClaudePalette palette;
+  final double liftProgress;
+
+  const _LiquidJadeLensPill({
+    super.key,
+    required this.palette,
+    required this.liftProgress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = palette.isDark;
+    final t = liftProgress.clamp(0.0, 1.0);
+
+    final topColor = isDark
+        ? Color.lerp(
+            const Color(0xEE1C382F),
+            const Color(0xB8244D40),
+            t,
+          )!
+        : Color.lerp(
+            const Color(0xF6FFFFFF),
+            const Color(0xBAFFFFFF),
+            t,
+          )!;
+    final bottomColor = isDark
+        ? Color.lerp(
+            const Color(0xF211221D),
+            const Color(0xC8142B24),
+            t,
+          )!
+        : Color.lerp(
+            const Color(0xECF0FAF5),
+            const Color(0x9CE6F9F0),
+            t,
+          )!;
+
+    final shadowBlur = lerpDouble(11.0, 22.0, t)!;
+    final shadowDy = lerpDouble(3.0, 7.5, t)!;
+    final shadowAlpha = isDark
+        ? lerpDouble(0.52, 0.72, t)!
+        : lerpDouble(0.15, 0.25, t)!;
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [topColor, bottomColor],
+        ),
+        shape: const StadiumBorder(),
+        shadows: [
+          BoxShadow(
+            color: (isDark ? Colors.black : const Color(0xFF106E50))
+                .withValues(alpha: shadowAlpha),
+            blurRadius: shadowBlur,
+            spreadRadius: -2.0,
+            offset: Offset(0, shadowDy),
+          ),
+        ],
+      ),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: const StadiumBorder(),
+          gradient: RadialGradient(
+            center: const Alignment(-0.42, -0.68),
+            radius: 1.35,
+            colors: [
+              palette.sage.withValues(
+                alpha: (isDark ? 0.24 : 0.15) + 0.10 * t,
+              ),
+              palette.sage.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
+        child: CustomPaint(
+          foregroundPainter: _LiquidJadeCabochonRimPainter(
+            isDark: isDark,
+            sage: palette.sage,
+            liftProgress: t,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiquidJadeCabochonRimPainter extends CustomPainter {
+  final bool isDark;
+  final Color sage;
+  final double liftProgress;
+
+  const _LiquidJadeCabochonRimPainter({
+    required this.isDark,
+    required this.sage,
+    required this.liftProgress,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = (Offset.zero & size).deflate(0.55);
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(size.height * 0.5),
+    );
+
+    // 1. Subtle jade contour + lifted prismatic dispersion sheen
+    final rimPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 + 0.35 * liftProgress
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: isDark
+            ? [
+                Color.lerp(
+                  const Color(0x52A7F3D0),
+                  const Color(0x90D1FAE5),
+                  liftProgress,
+                )!,
+                sage.withValues(alpha: 0.26 + 0.20 * liftProgress),
+                Color.lerp(
+                  sage.withValues(alpha: 0.22),
+                  const Color(0x6638BDF8),
+                  liftProgress,
+                )!,
+              ]
+            : [
+                Colors.white.withValues(alpha: 0.98),
+                sage.withValues(alpha: 0.24 + 0.16 * liftProgress),
+                Color.lerp(
+                  sage.withValues(alpha: 0.20),
+                  const Color(0x520EA5E9),
+                  liftProgress,
+                )!,
+              ],
+        stops: const [0.0, 0.52, 1.0],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, rimPaint);
+
+    // 2. Top pure specular cabochon catchlight arc
+    final innerTop = rect.deflate(0.8);
+    final innerRRect = RRect.fromRectAndRadius(
+      innerTop,
+      Radius.circular(innerTop.height * 0.5),
+    );
+    final specPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(
+            alpha: isDark ? (0.28 + 0.20 * liftProgress) : 0.96,
+          ),
+          Colors.white.withValues(alpha: 0.0),
+          sage.withValues(alpha: (isDark ? 0.18 : 0.12) * liftProgress),
+        ],
+        stops: const [0.0, 0.42, 1.0],
+      ).createShader(innerTop);
+    canvas.drawRRect(innerRRect, specPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiquidJadeCabochonRimPainter old) =>
+      old.isDark != isDark ||
+      old.sage != sage ||
+      (old.liftProgress - liftProgress).abs() > 0.005;
 }
 
 class _MobileCollapsedRestorePill extends StatefulWidget {
@@ -2756,208 +3516,6 @@ class _MobileCollapsedRestorePillState
                     color: _hovered ? c.clay : c.muted,
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MobileMorphingJewelTab extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final String? badge;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _MobileMorphingJewelTab({
-    required this.icon,
-    required this.label,
-    this.badge,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  State<_MobileMorphingJewelTab> createState() =>
-      _MobileMorphingJewelTabState();
-}
-
-class _MobileMorphingJewelTabState extends State<_MobileMorphingJewelTab> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    final morphDur = ClaudeMotion.duration(
-      context,
-      const Duration(milliseconds: 280),
-    );
-    final activeBg = c.clay;
-    final activeFg = c.onClay;
-    final inactiveFg = _hovered ? c.ink : c.muted;
-    final scale = _pressed ? 0.95 : (_hovered && !widget.active ? 1.03 : 1.0);
-
-    return Semantics(
-      selected: widget.active,
-      button: true,
-      label: widget.label,
-      child: Tooltip(
-        message: widget.label,
-        waitDuration: const Duration(milliseconds: 420),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() {
-            _hovered = false;
-            _pressed = false;
-          }),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
-            onTap: widget.onTap,
-            child: AnimatedScale(
-              scale: scale,
-              duration: ClaudeMotion.duration(
-                context,
-                _pressed
-                    ? const Duration(milliseconds: 75)
-                    : const Duration(milliseconds: 200),
-              ),
-              curve:
-                  _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
-              child: AnimatedContainer(
-                duration: morphDur,
-                curve: ClaudeMotion.snappySpring,
-                height: 42,
-                constraints: BoxConstraints(
-                  minWidth: widget.active ? 86 : 46,
-                ),
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.active ? 15.0 : 13.0,
-                ),
-                decoration: ShapeDecoration(
-                  color: widget.active
-                      ? activeBg
-                      : (_hovered
-                          ? c.paper3.withValues(alpha: 0.72)
-                          : activeBg.withValues(alpha: 0.0)),
-                  shape: const StadiumBorder(),
-                  shadows: widget.active
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: c.isDark ? 0.42 : 0.18,
-                            ),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : const [],
-                ),
-                child: AnimatedSize(
-                  duration: morphDur,
-                  curve: ClaudeMotion.snappySpring,
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            widget.icon,
-                            size: widget.active ? 18.5 : 20.0,
-                            color: widget.active ? activeFg : inactiveFg,
-                          ),
-                          if (widget.badge != null && !widget.active)
-                            Positioned(
-                              top: -1.5,
-                              right: -2.5,
-                              child: Container(
-                                width: 6.5,
-                                height: 6.5,
-                                decoration: BoxDecoration(
-                                  color: c.sage,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: c.isDark
-                                        ? const Color(0xFF14141A)
-                                        : Colors.white,
-                                    width: 1.2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (!widget.active)
-                            Positioned.fill(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  widget.label,
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  style: sansStyle(
-                                    c,
-                                    size: 10,
-                                    color: Colors.transparent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (widget.active) ...[
-                        const SizedBox(width: 6.5),
-                        Text(
-                          widget.label,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: sansStyle(
-                            c,
-                            size: 12.8,
-                            weight: FontWeight.w600,
-                            color: activeFg,
-                            letterSpacing: -0.15,
-                            height: 1.1,
-                          ),
-                        ),
-                        if (widget.badge != null) ...[
-                          const SizedBox(width: 5),
-                          DecoratedBox(
-                            decoration: ShapeDecoration(
-                              color: activeFg.withValues(alpha: 0.16),
-                              shape: const StadiumBorder(),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5.0,
-                                vertical: 1.0,
-                              ),
-                              child: Text(
-                                widget.badge!,
-                                style: monoStyle(
-                                  c,
-                                  size: 9.5,
-                                  weight: FontWeight.w700,
-                                  color: activeFg,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
               ),
             ),
           ),

@@ -1160,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v3.0.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v3.1.0 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.0.0'), findsOneWidget);
-    await tester.tap(find.text('v3.0.0'));
+    expect(find.text('v3.1.0'), findsOneWidget);
+    await tester.tap(find.text('v3.1.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1252,9 +1252,9 @@ void main() {
       findsOneWidget,
     );
 
-    // Verify Centered Morphing Jewel Capsule Dock sits surrounded by generous negative space & floats above bottom
+    // Verify Centered Liquid Jade Lens Dock sits surrounded by generous negative space & floats above bottom
     final callFlowTabRect = tester.getRect(find.text('调用流').last);
-    expect(callFlowTabRect.left, greaterThan(40.0));
+    expect(callFlowTabRect.left, greaterThan(24.0));
     expect(callFlowTabRect.bottom, lessThan(770.0));
 
     // Navigate to ServiceSetupPage at 360px and verify Level-1 chevron does NOT wrap below title!
@@ -1263,7 +1263,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.0.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.1.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1294,5 +1294,140 @@ void main() {
       lessThan(tester.getRect(find.text('文件夹').last).top - 24.0),
     );
     expect(find.text('粘贴路径'), findsOneWidget);
+  });
+
+  testWidgets(
+      'v3.1.0 Liquid Jade Lens Finger-Tracking & Level-2 Full-Screen Parallax Back + 4-Tier PopScope',
+      (tester) async {
+    Future<void> pumpFrames([int count = 16]) async {
+      await tester.pump();
+      for (var i = 0; i < count; i++) {
+        await tester.pump(const Duration(milliseconds: 28));
+      }
+    }
+
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend()..customTitleBar = false;
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // 1. Verify Liquid Jade Lens Pill starts aligned with Tab 0 ('调用流')
+    final lensFinder = find.byKey(const ValueKey('mobile-liquid-jade-lens'));
+    final dockFinder = find.byKey(const ValueKey('mobile-liquid-jade-dock'));
+    expect(lensFinder, findsOneWidget);
+    expect(dockFinder, findsOneWidget);
+    final lensStartCenterX = tester.getCenter(lensFinder).dx;
+    final dockRect = tester.getRect(dockFinder);
+    expect(lensStartCenterX, lessThan(dockRect.left + dockRect.width * 0.30));
+
+    // 2. Finger-drag the Liquid Jade Lens continuously across the dock from Tab 0 -> Tab 3 ('服务配置')
+    final dragGesture = await tester.startGesture(
+      Offset(dockRect.left + 44.0, dockRect.center.dy),
+    );
+    await pumpFrames(3);
+    // Move halfway across the dock -> lens tracks finger smoothly in mid-bar!
+    await dragGesture.moveTo(Offset(dockRect.center.dx, dockRect.center.dy));
+    await pumpFrames(4);
+    final lensMidDragX = tester.getCenter(lensFinder).dx;
+    expect(lensMidDragX, greaterThan(lensStartCenterX + 60.0));
+    expect(lensMidDragX, lessThan(dockRect.right - 60.0));
+
+    // Continue dragging onto Slot 3 ('服务配置') and release
+    await dragGesture.moveTo(
+      Offset(dockRect.right - 36.0, dockRect.center.dy),
+    );
+    await pumpFrames(4);
+    await dragGesture.up();
+    await pumpFrames(18);
+    expect(tester.takeException(), isNull);
+
+    // Landed on '服务配置' Level-1 directory; lens settled on rightmost slot
+    final lensSlot3X = tester.getCenter(lensFinder).dx;
+    expect(lensSlot3X, greaterThan(dockRect.left + dockRect.width * 0.70));
+    expect(find.text('基础与外观'), findsOneWidget);
+
+    // 3. Drill into Level-2 subpage ('基础与外观') -> verify top-left Header Jade Back Pill appears
+    await tester.tap(find.text('基础与外观'));
+    await pumpFrames(16);
+    expect(
+      find.byKey(const ValueKey('header-jade-back-pill')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('setup-sec-basic')), findsOneWidget);
+
+    // 4. Short rightward swipe (< 20% width) cancels cleanly and stays on Level-2
+    const subpageCenter = Offset(110.0, 320.0);
+    final cancelSwipe = await tester.startGesture(subpageCenter);
+    await cancelSwipe.moveBy(const Offset(42.0, 0.0));
+    await pumpFrames(2);
+    await cancelSwipe.up();
+    await pumpFrames(14);
+    expect(find.byKey(const ValueKey('setup-sec-basic')), findsOneWidget);
+
+    // 5. Full-screen rightward swipe-back (> 35% width from content middle, not just edge) pops Level-2 -> Level-1!
+    final commitSwipe = await tester.startGesture(const Offset(80.0, 340.0));
+    await commitSwipe.moveBy(const Offset(24.0, 0.0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await commitSwipe.moveBy(const Offset(80.0, 0.0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await commitSwipe.moveBy(const Offset(80.0, 0.0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await commitSwipe.up();
+    await pumpFrames(16);
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('header-jade-back-pill')),
+      findsNothing,
+    );
+    expect(find.text('关于与更新'), findsOneWidget);
+
+    // 6. Test 4-Tier System Back Chain: Inline Editor -> Level-2 Subpage -> Level-1 -> Root Tab 0 ('调用流')
+    await tester.tap(find.text('基础与外观'));
+    await pumpFrames(16);
+    await tester.tap(find.text('MCP 服务名称'));
+    await pumpFrames(14);
+    expect(find.byType(TextField), findsOneWidget);
+
+    // Tier A: System back collapses inline editor first without leaving Level-2
+    await tester.binding.handlePopRoute();
+    await pumpFrames(14);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byKey(const ValueKey('setup-sec-basic')), findsOneWidget);
+
+    // Tier B: System back pops Level-2 subpage back to Level-1 directory
+    await tester.binding.handlePopRoute();
+    await pumpFrames(16);
+    expect(
+      find.byKey(const ValueKey('header-jade-back-pill')),
+      findsNothing,
+    );
+    expect(find.text('关于与更新'), findsOneWidget);
+
+    // Bonus check: Re-tapping active '服务配置' tab on bottom dock also pops Level-2 -> Level-1!
+    await tester.tap(find.text('基础与外观'));
+    await pumpFrames(16);
+    expect(
+      find.byKey(const ValueKey('header-jade-back-pill')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('服务配置').last);
+    await pumpFrames(16);
+    expect(
+      find.byKey(const ValueKey('header-jade-back-pill')),
+      findsNothing,
+    );
+
+    // Tier C: System back on non-home root tab glides Liquid Jade Lens smoothly back to Tab 0 ('调用流')
+    await tester.binding.handlePopRoute();
+    await pumpFrames(22);
+    final lensReturnedX = tester.getCenter(lensFinder).dx;
+    expect(lensReturnedX, lessThan(dockRect.left + dockRect.width * 0.30));
   });
 }
