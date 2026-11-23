@@ -1160,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v3.1.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v3.2.0 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.1.0'), findsOneWidget);
-    await tester.tap(find.text('v3.1.0'));
+    expect(find.text('v3.2.0'), findsOneWidget);
+    await tester.tap(find.text('v3.2.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1263,7 +1263,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.1.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.2.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1429,5 +1429,67 @@ void main() {
     await pumpFrames(22);
     final lensReturnedX = tester.getCenter(lensFinder).dx;
     expect(lensReturnedX, lessThan(dockRect.left + dockRect.width * 0.30));
+  });
+
+  testWidgets(
+      'v3.2.0 Concentric Large-Radius & Sculpted Jade Capsule Unification across desktop stage, buttons, cards & modals',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 860);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // 1. Verify action buttons ('清空') & segmented strip ('全部') use 999px StadiumBorder capsules
+    final clearBtnBox = tester.widget<DecoratedBox>(
+      find.ancestor(
+        of: find.text('清空'),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is DecoratedBox &&
+              w.decoration is ShapeDecoration &&
+              (w.decoration as ShapeDecoration).shape is StadiumBorder,
+        ),
+      ).first,
+    );
+    expect(
+      (clearBtnBox.decoration as ShapeDecoration).shape,
+      isA<StadiumBorder>(),
+    );
+
+    final segOuterBox = tester.widget<DecoratedBox>(
+      find.ancestor(
+        of: find.text('全部'),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is DecoratedBox &&
+              w.decoration is ShapeDecoration &&
+              (w.decoration as ShapeDecoration).shape is StadiumBorder,
+        ),
+      ).first,
+    );
+    expect(
+      (segOuterBox.decoration as ShapeDecoration).shape,
+      isA<StadiumBorder>(),
+    );
+
+    // 2. Verify Share Creation Modal uses concentric 28px RoundedSuperellipseBorder
+    backend.emitDroppedFiles([r'D:\demo\concentric_share']);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    final shareDialog = tester.widget<Dialog>(find.byType(Dialog).last);
+    expect(shareDialog.shape, isA<RoundedSuperellipseBorder>());
+    final shareShape = shareDialog.shape! as RoundedSuperellipseBorder;
+    expect(
+      shareShape.borderRadius,
+      equals(BorderRadius.circular(28)),
+    );
   });
 }

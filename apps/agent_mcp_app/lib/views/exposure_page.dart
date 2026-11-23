@@ -582,7 +582,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       return _DashedDropZone(
         borderColor: c.clay.withValues(alpha: c.isDark ? 0.36 : 0.26),
         fillColor: c.paper2,
-        radius: 14,
+        radius: 22,
         onTap: () => _openCreateDialog(initialMode: 'file'),
         child: heroBody,
       );
@@ -592,7 +592,10 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       width: double.infinity,
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(
+          22,
+          side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
+        ),
       ),
       child: heroBody,
     );
@@ -615,7 +618,7 @@ class _MobileQuickShareGrid extends StatelessWidget {
     ];
     return LayoutBuilder(
       builder: (ctx, box) {
-        const gap = 8.0;
+        const gap = 10.0;
         final w = (box.maxWidth - gap) / 2;
         return Wrap(
           spacing: gap,
@@ -627,29 +630,31 @@ class _MobileQuickShareGrid extends StatelessWidget {
                 child: Material(
                   color: c.paper2,
                   shape: claudeSuperellipse(
-                    11,
-                    side: BorderSide(color: c.hairline),
+                    20,
+                    side: BorderSide(
+                      color: c.hairline.withValues(alpha: 0.62),
+                    ),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: () => onOpenMode(m.$1),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                        horizontal: 13,
+                        vertical: 12,
                       ),
                       child: Row(
                         children: [
                           Container(
-                            width: 30,
-                            height: 30,
+                            width: 36,
+                            height: 36,
                             decoration: ShapeDecoration(
                               color: c.clay.withValues(
                                 alpha: c.isDark ? 0.16 : 0.10,
                               ),
-                              shape: claudeSuperellipse(8),
+                              shape: claudeSuperellipse(12),
                             ),
-                            child: Icon(m.$2, size: 16, color: c.clay),
+                            child: Icon(m.$2, size: 17.5, color: c.clay),
                           ),
                           const SizedBox(width: 9),
                           Expanded(
@@ -864,16 +869,16 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                   clipBehavior: Clip.none,
                   children: [
                     Container(
-                      width: 34,
-                      height: 34,
+                      width: 40,
+                      height: 40,
                       decoration: ShapeDecoration(
                         color: c.clay.withValues(
                           alpha: c.isDark ? 0.16 : 0.10,
                         ),
-                        shape: claudeSuperellipse(9),
+                        shape: claudeSuperellipse(13.5),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(kindIcon, size: 17, color: c.clay),
+                      child: Icon(kindIcon, size: 18.5, color: c.clay),
                     ),
                     Positioned(
                       right: -2,
@@ -975,7 +980,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
             if (isNarrow) ...[
               const SizedBox(height: 10),
               Padding(
-                padding: const EdgeInsets.only(left: 46),
+                padding: const EdgeInsets.only(left: 52),
                 child: actionBar,
               ),
             ],
@@ -1196,7 +1201,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       child: PopScope(
         canPop: _inStep1 || widget.initialMode != 'wizard',
         onPopInvokedWithResult: (didPop, _) {
@@ -1398,12 +1406,14 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                       if (!_folderStep) const SizedBox(height: 12),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(13),
+                        padding: const EdgeInsets.all(15),
                         decoration: ShapeDecoration(
                           color: c.paper2,
                           shape: claudeSuperellipse(
-                            12,
-                            side: BorderSide(color: c.hairline),
+                            20,
+                            side: BorderSide(
+                              color: c.hairline.withValues(alpha: 0.65),
+                            ),
                           ),
                         ),
                         child: Column(
@@ -1413,17 +1423,17 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                               Row(
                                 children: [
                                   Container(
-                                    width: 32,
-                                    height: 32,
+                                    width: 38,
+                                    height: 38,
                                     decoration: ShapeDecoration(
                                       color: c.clay.withValues(
                                         alpha: c.isDark ? 0.16 : 0.10,
                                       ),
-                                      shape: claudeSuperellipse(8.5),
+                                      shape: claudeSuperellipse(13),
                                     ),
                                     child: Icon(
                                       Icons.podcasts_rounded,
-                                      size: 16.5,
+                                      size: 17.5,
                                       color: c.clay,
                                     ),
                                   ),
@@ -1510,13 +1520,13 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                   final targetHeader = Row(
                                     children: [
                                       Container(
-                                        width: 32,
-                                        height: 32,
+                                        width: 38,
+                                        height: 38,
                                         decoration: ShapeDecoration(
                                           color: c.clay.withValues(
                                             alpha: c.isDark ? 0.16 : 0.10,
                                           ),
-                                          shape: claudeSuperellipse(8.5),
+                                          shape: claudeSuperellipse(13),
                                         ),
                                         child: Icon(
                                           _mode == 'folder'
@@ -1962,7 +1972,10 @@ class _ShareQrDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: c.paper,
       elevation: 0,
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
         child: Padding(
@@ -1989,8 +2002,8 @@ class _ShareQrDialog extends StatelessWidget {
                 decoration: ShapeDecoration(
                   color: Colors.white,
                   shape: claudeSuperellipse(
-                    14,
-                    side: BorderSide(color: c.hairline),
+                    20,
+                    side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
                   ),
                 ),
                 child: Image.network(
@@ -2012,8 +2025,8 @@ class _ShareQrDialog extends StatelessWidget {
                 decoration: ShapeDecoration(
                   color: c.recessed,
                   shape: claudeSuperellipse(
-                    10,
-                    side: BorderSide(color: c.hairline),
+                    16,
+                    side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
                   ),
                 ),
                 child: SelectableText(
@@ -2460,28 +2473,30 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
           decoration: ShapeDecoration(
             color: _hovered
                 ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.06)
                 : c.paper2,
             shape: claudeSuperellipse(
-              11,
+              20,
               side: BorderSide(
-                color: _hovered ? c.clay.withValues(alpha: 0.45) : c.hairline,
+                color: _hovered
+                    ? c.clay.withValues(alpha: 0.45)
+                    : c.hairline.withValues(alpha: 0.65),
               ),
             ),
           ),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: ShapeDecoration(
                   color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
-                  shape: claudeSuperellipse(9),
+                  shape: claudeSuperellipse(13.5),
                 ),
-                child: Icon(widget.icon, size: 18, color: c.clay),
+                child: Icon(widget.icon, size: 18.5, color: c.clay),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2650,15 +2665,17 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
               const Duration(milliseconds: 180),
             ),
             curve: ClaudeMotion.editorialOut,
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
             decoration: ShapeDecoration(
               color: bg,
               shape: claudeSuperellipse(
-                11.5,
+                18,
                 side: BorderSide(
                   color: active
                       ? c.clay
-                      : (_hovered ? c.ringHover : c.hairline),
+                      : (_hovered
+                          ? c.ringHover
+                          : c.hairline.withValues(alpha: 0.65)),
                 ),
               ),
               shadows: active
@@ -2667,8 +2684,8 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
                         color: Colors.black.withValues(
                           alpha: c.isDark ? 0.42 : 0.14,
                         ),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
                     ]
                   : const [],
@@ -2676,13 +2693,13 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
             child: Row(
               children: [
                 Container(
-                  width: 28,
-                  height: 28,
+                  width: 30,
+                  height: 30,
                   decoration: ShapeDecoration(
                     color: active
                         ? c.onClay.withValues(alpha: 0.14)
                         : c.recessed,
-                    shape: claudeSuperellipse(8),
+                    shape: claudeSuperellipse(10),
                   ),
                   alignment: Alignment.center,
                   child: Icon(widget.icon, size: 15, color: iconFg),
@@ -2757,9 +2774,9 @@ class _FolderKindChip extends StatelessWidget {
               ? c.clay.withValues(alpha: c.isDark ? 0.18 : 0.09)
               : c.paper2,
           shape: claudeSuperellipse(
-            10,
+            18,
             side: BorderSide(
-              color: active ? c.clay : c.hairline,
+              color: active ? c.clay : c.hairline.withValues(alpha: 0.65),
               width: active ? 1.3 : 1.0,
             ),
           ),

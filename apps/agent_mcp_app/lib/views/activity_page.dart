@@ -250,17 +250,17 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
           decoration: ShapeDecoration(
             color: c.paper2,
             shape: claudeSuperellipse(
-              10,
-              side: BorderSide(color: c.hairline),
+              22,
+              side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: LayoutBuilder(
               builder: (ctx, fbox) {
                 final narrowFilter = fbox.maxWidth < 680;
                 final searchField = SizedBox(
-                  height: 30,
+                  height: 32,
                   child: TextField(
                     controller: _searchCtrl,
                     focusNode: _searchFocusNode,
@@ -268,8 +268,24 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     style: sansStyle(c, size: 12.5, color: c.ink),
                     decoration: InputDecoration(
                       hintText: '搜索参数、路径或关键词...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide(
+                          color: c.hairline.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide(
+                          color: c.hairline.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide(color: c.sage, width: 1.4),
+                      ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
+                        horizontal: 12,
                         vertical: 6,
                       ),
                       prefixIcon: Icon(
@@ -278,8 +294,8 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                         color: c.meta,
                       ),
                       prefixIconConstraints: const BoxConstraints(
-                        minWidth: 30,
-                        minHeight: 28,
+                        minWidth: 32,
+                        minHeight: 30,
                       ),
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
@@ -1115,8 +1131,8 @@ class _EventCardState extends State<_EventCard> {
     }
 
     final borderRad = BorderRadius.vertical(
-      top: widget.isFirst ? const Radius.circular(11) : Radius.zero,
-      bottom: widget.isLast ? const Radius.circular(11) : Radius.zero,
+      top: widget.isFirst ? const Radius.circular(20) : Radius.zero,
+      bottom: widget.isLast ? const Radius.circular(20) : Radius.zero,
     );
     final rowBg = widget.selected
         ? Color.alphaBlend(
@@ -1139,7 +1155,7 @@ class _EventCardState extends State<_EventCard> {
           selectedColor: widget.selected ? c.clay : null,
           isFirst: widget.isFirst,
           isLast: widget.isLast,
-          radius: 11,
+          radius: 20,
         ),
         child: ClipRRect(
           borderRadius: borderRad,
@@ -1155,8 +1171,8 @@ class _EventCardState extends State<_EventCard> {
                   cursor: SystemMouseCursors.click,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8.5,
+                      horizontal: 14,
+                      vertical: 10,
                     ),
                     child: LayoutBuilder(
                       builder: (ctx, rowBox) {
@@ -2006,8 +2022,10 @@ class _RichToolDetailDrawer extends StatelessWidget {
           ? const BoxDecoration()
           : ShapeDecoration(
               color: c.recessed,
-              shape:
-                  claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+              shape: claudeSuperellipse(
+                16,
+                side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
+              ),
             ),
       child: LayoutBuilder(
         builder: (ctx, dbox) {
@@ -2086,7 +2104,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                         decoration: ShapeDecoration(
                           color: c.sageBg,
                           shape: claudeSuperellipse(
-                            9.5,
+                            14,
                             side: BorderSide(
                               color: c.sage.withValues(alpha: 0.28),
                             ),
@@ -2160,7 +2178,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
       ),
       child: LayoutBuilder(
         builder: (ctx, pBox) => Wrap(
@@ -2463,7 +2481,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8.5),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
+            shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
           ),
           child: Row(
             children: [
@@ -2554,7 +2572,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
       ),
       child: Wrap(
         spacing: 8,
@@ -2616,7 +2634,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
+            shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
           ),
           child: Wrap(
             spacing: 8,
@@ -2753,12 +2771,12 @@ class _RichToolDetailDrawer extends StatelessWidget {
       decoration: ShapeDecoration(
         color: c.codeSheet,
         shape: claudeSuperellipse(
-          10,
+          16,
           side: BorderSide(color: c.codeBorder),
         ),
       ),
       child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -2945,12 +2963,12 @@ class _InlineDiffBlockState extends State<_InlineDiffBlock> {
       decoration: ShapeDecoration(
         color: c.codeSheet,
         shape: claudeSuperellipse(
-          10,
+          16,
           side: BorderSide(color: c.codeBorder),
         ),
       ),
       child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -2977,7 +2995,7 @@ class _InlineDiffBlockState extends State<_InlineDiffBlock> {
                   ),
                   const SizedBox(width: 6),
                   InkWell(
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(999),
                     onTap: () => setState(() => _softWrap = !_softWrap),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -3321,12 +3339,12 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
       decoration: ShapeDecoration(
         color: c.codeSheet,
         shape: claudeSuperellipse(
-          10,
+          16,
           side: BorderSide(color: c.codeBorder),
         ),
       ),
       child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           mainAxisSize: widget.fillHeight ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3355,7 +3373,7 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
                   ),
                   const SizedBox(width: 6),
                   InkWell(
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(999),
                     onTap: () => setState(() => _softWrap = !_softWrap),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(

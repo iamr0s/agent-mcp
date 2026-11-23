@@ -176,7 +176,10 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
         backgroundColor: c.paper,
         elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(
+          28,
+          side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
           child: Column(
@@ -188,17 +191,17 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                 child: Row(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 38,
+                      height: 38,
                       decoration: ShapeDecoration(
-                        color: c.clay.withValues(alpha: 0.12),
-                        shape: claudeSuperellipse(9),
+                        color: c.sageBg,
+                        shape: claudeSuperellipse(13),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
                         Icons.hub_rounded,
-                        size: 17,
-                        color: c.clay,
+                        size: 18,
+                        color: c.sage,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -277,8 +280,10 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                           decoration: ShapeDecoration(
                             color: c.paper2,
                             shape: claudeSuperellipse(
-                              12,
-                              side: BorderSide(color: c.hairline),
+                              20,
+                              side: BorderSide(
+                                color: c.hairline.withValues(alpha: 0.65),
+                              ),
                             ),
                           ),
                           child: Column(
@@ -342,7 +347,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                   ),
                                   decoration: ShapeDecoration(
                                     color: _probeOk ? c.sageBg : c.dangerBg,
-                                    shape: claudeSuperellipse(8),
+                                    shape: claudeSuperellipse(14),
                                   ),
                                   child: Text(
                                     _probeMsg!,

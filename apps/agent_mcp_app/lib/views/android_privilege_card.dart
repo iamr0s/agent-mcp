@@ -243,11 +243,11 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                 decoration: ShapeDecoration(
                   color: c.recessed,
                   shape: claudeSuperellipse(
-                    13,
+                    18,
                     side: BorderSide(
                       color: isDegraded
                           ? c.clay.withValues(alpha: 0.34)
-                          : c.hairline,
+                          : c.hairline.withValues(alpha: 0.65),
                     ),
                   ),
                 ),
@@ -458,7 +458,7 @@ class _AuthorizerModeTileState extends State<_AuthorizerModeTile> {
           decoration: ShapeDecoration(
             color: bg,
             shape: claudeSuperellipse(
-              14,
+              18,
               side: BorderSide(
                 color: borderColor,
                 width: sel ? 1.35 : 1.0,

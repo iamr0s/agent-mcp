@@ -273,7 +273,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
         child: Padding(
@@ -355,8 +358,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                             decoration: ShapeDecoration(
                               color: c.recessed,
                               shape: claudeSuperellipse(
-                                13,
-                                side: BorderSide(color: c.hairline),
+                                18,
+                                side: BorderSide(
+                                  color: c.hairline.withValues(alpha: 0.65),
+                                ),
                               ),
                             ),
                             child: Column(
@@ -443,7 +448,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                         alpha: c.isDark ? 0.14 : 0.08,
                                       ),
                                       shape: claudeSuperellipse(
-                                        10,
+                                        14,
                                         side: BorderSide(
                                           color: c.clay.withValues(alpha: 0.30),
                                         ),
@@ -936,10 +941,13 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
   }) {
     if (val.isEmpty) return const SizedBox.shrink();
     final valueBox = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8.5),
       decoration: ShapeDecoration(
         color: c.recessed,
-        shape: claudeSuperellipse(10, side: BorderSide(color: c.hairline)),
+        shape: claudeSuperellipse(
+          14,
+          side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
+        ),
       ),
       child: SelectableText(
         val,
@@ -1029,7 +1037,10 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 585, maxHeight: 700),
         child: Padding(
@@ -1154,7 +1165,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                               decoration: ShapeDecoration(
                                 color: c.sageBg,
                                 shape: claudeSuperellipse(
-                                  10,
+                                  16,
                                   side: BorderSide(
                                     color: c.sage.withValues(alpha: 0.25),
                                   ),
@@ -1327,7 +1338,7 @@ class _DialogHealthCard extends StatelessWidget {
       decoration: ShapeDecoration(
         color: bg,
         shape: claudeSuperellipse(
-          12,
+          18,
           side: BorderSide(color: accent.withValues(alpha: 0.35)),
         ),
       ),

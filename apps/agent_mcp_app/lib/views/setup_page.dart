@@ -774,10 +774,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(22),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+            shape: claudeSuperellipse(
+              22,
+              side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
+            ),
           ),
           child: LayoutBuilder(
             builder: (ctx, box) {
@@ -1126,12 +1129,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             decoration: ShapeDecoration(
               color: c.popover,
-              shape: claudeSuperellipse(
-                12,
-                side: BorderSide(color: c.clay.withValues(alpha: 0.42)),
+              shape: StadiumBorder(
+                side: BorderSide(color: c.sage.withValues(alpha: 0.42)),
               ),
               shadows: c.popoverShadow,
             ),
@@ -2201,8 +2203,8 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
 
     // 1. Desktop Wide Screen (>= 820px): 2-Pane Master-Detail + Sliding Spring Rail + Shared-Y Switcher
     if (isWideDesktop) {
-      const tileH = 36.0;
-      const tileGap = 3.0;
+      const tileH = 38.0;
+      const tileGap = 4.0;
       const dividerBlockH = 17.0; // 8 top + 1 divider + 8 bottom
       final catIdx =
           navCategories.indexWhere((item) => item.$1 == _setupSection);
@@ -2267,12 +2269,36 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               right: 0,
                               height: tileH,
                               child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: ShapeDecoration(
-                                    color: c.clay.withValues(
-                                      alpha: c.isDark ? 0.20 : 0.10,
+                                child: CustomPaint(
+                                  foregroundPainter: ClaudeSpecularRimPainter(
+                                    radius: 999,
+                                    isDark: c.isDark,
+                                    accentTint: c.sage,
+                                    intensity: 0.90,
+                                  ),
+                                  child: DecoratedBox(
+                                    decoration: ShapeDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: c.isDark
+                                            ? [
+                                                const Color(0xFF1C332B),
+                                                const Color(0xFF12221D),
+                                              ]
+                                            : [
+                                                const Color(0xFFFFFFFF),
+                                                const Color(0xFFF1FAF6),
+                                              ],
+                                      ),
+                                      shape: StadiumBorder(
+                                        side: BorderSide(
+                                          color: c.sage.withValues(
+                                            alpha: c.isDark ? 0.36 : 0.24,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    shape: claudeSuperellipse(8),
                                   ),
                                 ),
                               ),
@@ -2378,17 +2404,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       openMobileDetail: true,
                     ),
                     leading: Container(
-                      width: 34,
-                      height: 34,
+                      width: 38,
+                      height: 38,
                       decoration: ShapeDecoration(
                         color: c.clay.withValues(
                           alpha: c.isDark ? 0.16 : 0.10,
                         ),
-                        shape: claudeSuperellipse(9),
+                        shape: claudeSuperellipse(13),
                       ),
                       child: Icon(
                         navCategories[i].$2,
-                        size: 18,
+                        size: 18.5,
                         color: c.clay,
                       ),
                     ),
@@ -3453,7 +3479,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
                 ? Colors.white.withValues(alpha: 0.05)
                 : Colors.black.withValues(alpha: 0.04))
             : Colors.transparent);
-    final fg = widget.active ? c.clay : (_hovered ? c.ink : c.inkSoft);
+    final fg = widget.active ? c.ink : (_hovered ? c.ink : c.inkSoft);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -3465,14 +3491,18 @@ class _SetupNavTileState extends State<_SetupNavTile> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 110),
           height: widget.height,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 13),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(8),
+            shape: const StadiumBorder(),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 16.5, color: fg),
+              Icon(
+                widget.icon,
+                size: 16.5,
+                color: widget.active ? c.sage : fg,
+              ),
               const SizedBox(width: 9),
               Expanded(
                 child: Text(

@@ -507,22 +507,27 @@ ThemeData buildClaudeTheme(
     dialogTheme: DialogThemeData(
       backgroundColor: c.paper2,
       elevation: 0,
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: c.paper2,
       elevation: 8,
       surfaceTintColor: Colors.transparent,
-      shape: claudeSuperellipse(12, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        20,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
+      ),
       textStyle: sansStyle(c, size: 12.5, weight: FontWeight.w500),
     ),
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 340),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
       decoration: ShapeDecoration(
         color: c.isDark ? const Color(0xF51E2433) : const Color(0xF50F172A),
-        shape: claudeSuperellipse(
-          8,
+        shape: StadiumBorder(
           side: BorderSide(
             color: c.isDark ? const Color(0xFF333D54) : const Color(0xFF1E293B),
           ),
@@ -538,32 +543,32 @@ ThemeData buildClaudeTheme(
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.isDark ? c.recessed : c.paper2,
+      fillColor: c.recessed,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10.5),
       hintStyle: TextStyle(
         fontFamily: kFontSans,
         fontFamilyFallback: kSansFallback,
         color: c.meta,
         fontSize: 12.6,
       ),
-      // Fixed 10px radius across all states — zero hover/focus edge jitter!
+      // Concentric 14px soft recessed well across all states — zero edge jitter!
       border: WidgetStateInputBorder.resolveWith((states) {
         if (states.contains(WidgetState.focused)) {
           return OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: c.focusRing, width: 1.4),
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: c.sage, width: 1.4),
           );
         }
         if (states.contains(WidgetState.hovered)) {
           return OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: c.ringHover),
           );
         }
         return OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: c.hairline),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
         );
       }),
     ),
@@ -886,8 +891,8 @@ class ClaudeListGroup extends StatelessWidget {
     this.subtitle,
     this.headerTrailing,
     required this.children,
-    this.radius = 12,
-    this.dividerIndent = 16,
+    this.radius = 22,
+    this.dividerIndent = 18,
     this.margin,
   });
 
@@ -902,7 +907,7 @@ class ClaudeListGroup extends StatelessWidget {
       foregroundPainter: ClaudeSpecularRimPainter(
         radius: radius,
         isDark: c.isDark,
-        intensity: c.isDark ? 0.65 : 0.85,
+        intensity: c.isDark ? 0.72 : 0.90,
       ),
       child: DecoratedBox(
         decoration: ShapeDecoration(
@@ -911,8 +916,8 @@ class ClaudeListGroup extends StatelessWidget {
             radius,
             side: BorderSide(
               color: c.isDark
-                  ? c.hairline.withValues(alpha: 0.65)
-                  : c.hairline.withValues(alpha: 0.85),
+                  ? c.hairline.withValues(alpha: 0.52)
+                  : c.hairline.withValues(alpha: 0.62),
             ),
           ),
           shadows: c.whisperShadow,
@@ -926,8 +931,12 @@ class ClaudeListGroup extends StatelessWidget {
               for (var i = 0; i < children.length; i++) ...[
                 if (i > 0)
                   Padding(
-                    padding: EdgeInsets.only(left: dividerIndent),
-                    child: Divider(height: 1, thickness: 1, color: c.hairline),
+                    padding: EdgeInsets.only(left: dividerIndent, right: 16),
+                    child: Divider(
+                      height: 1,
+                      thickness: 0.75,
+                      color: c.hairline.withValues(alpha: 0.65),
+                    ),
                   ),
                 children[i],
               ],
@@ -943,7 +952,7 @@ class ClaudeListGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            padding: const EdgeInsets.fromLTRB(6, 0, 6, 9),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -1036,21 +1045,25 @@ class ClaudeSettingsRow extends StatelessWidget {
               const SizedBox(width: 12),
             ] else if (icon != null) ...[
               Container(
-                width: compactRow ? 32 : 34,
-                height: compactRow ? 32 : 34,
+                width: compactRow ? 36 : 38,
+                height: compactRow ? 36 : 38,
                 decoration: ShapeDecoration(
-                  color: c.recessed,
+                  color: iconColor != null
+                      ? iconColor!.withValues(alpha: c.isDark ? 0.16 : 0.10)
+                      : c.recessed,
                   shape: claudeSuperellipse(
-                    9.5,
+                    13.0,
                     side: BorderSide(
-                      color: c.hairline.withValues(alpha: 0.78),
+                      color: iconColor != null
+                          ? iconColor!.withValues(alpha: 0.22)
+                          : c.hairline.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   icon,
-                  size: compactRow ? 15.8 : 16.5,
+                  size: compactRow ? 16.5 : 17.5,
                   color: iconColor ?? c.inkSoft,
                 ),
               ),
@@ -1092,8 +1105,8 @@ class ClaudeSettingsRow extends StatelessWidget {
 
         Widget content = Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: compactRow ? 15 : 18,
-            vertical: 13.5,
+            horizontal: compactRow ? 16 : 19,
+            vertical: 14.5,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1371,8 +1384,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
     }
 
     final iconOnly = widget.label.isEmpty && (widget.leading != null || widget.loading);
-    final radius = widget.compact ? 8.5 : 10.0;
-    final iconSize = widget.compact ? 14.5 : 15.5;
+    final iconSize = widget.compact ? 14.5 : 15.8;
     final effFg = (disabled && !widget.loading) ? fg.withValues(alpha: 0.45) : fg;
     final effBg = (disabled && !widget.loading) ? bg.withValues(alpha: 0.45) : bg;
     final effBorder =
@@ -1425,45 +1437,53 @@ class _ClaudeButtonState extends State<ClaudeButton> {
             : const Duration(milliseconds: 180),
       ),
       curve: _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
-      child: AnimatedContainer(
-        duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-        curve: ClaudeMotion.editorialOut,
-        height: widget.compact ? 30 : 35,
-        width: iconOnly ? (widget.compact ? 30 : 35) : null,
-        padding: iconOnly
-            ? EdgeInsets.zero
-            : EdgeInsets.symmetric(horizontal: widget.compact ? 10.5 : 14),
-        decoration: ShapeDecoration(
-          color: effBg,
-          shape: claudeSuperellipse(
-            radius,
-            side: BorderSide(color: effBorder),
+      child: CustomPaint(
+        foregroundPainter: widget.variant == ClaudeBtnVariant.ghost
+            ? null
+            : ClaudeSpecularRimPainter(
+                radius: 999,
+                isDark: c.isDark,
+                intensity: widget.variant == ClaudeBtnVariant.neutral ? 0.65 : 0.42,
+              ),
+        child: AnimatedContainer(
+          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
+          curve: ClaudeMotion.editorialOut,
+          height: widget.compact ? 31 : 37,
+          width: iconOnly ? (widget.compact ? 31 : 37) : null,
+          padding: iconOnly
+              ? EdgeInsets.zero
+              : EdgeInsets.symmetric(horizontal: widget.compact ? 11.5 : 16),
+          decoration: ShapeDecoration(
+            color: effBg,
+            shape: StadiumBorder(
+              side: BorderSide(color: effBorder),
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (leadingSlot != null) ...[
-              leadingSlot,
-              if (widget.label.isNotEmpty) const SizedBox(width: 6),
-            ],
-            if (widget.label.isNotEmpty)
-              Flexible(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: kFontSans,
-                    fontFamilyFallback: kSansFallback,
-                    fontSize: widget.compact ? 12.2 : 13.0,
-                    fontWeight: FontWeight.w500,
-                    color: effFg,
+          child: Row(
+            mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (leadingSlot != null) ...[
+                leadingSlot,
+                if (widget.label.isNotEmpty) const SizedBox(width: 6),
+              ],
+              if (widget.label.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: kFontSans,
+                      fontFamilyFallback: kSansFallback,
+                      fontSize: widget.compact ? 12.2 : 13.0,
+                      fontWeight: FontWeight.w500,
+                      color: effFg,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1509,10 +1529,10 @@ class ClaudeCard extends StatefulWidget {
   const ClaudeCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
     this.onTap,
     this.hoverable = false,
-    this.radius = 12,
+    this.radius = 22,
   });
 
   @override
@@ -1546,7 +1566,9 @@ class _ClaudeCardState extends State<ClaudeCard> {
           shape: claudeSuperellipse(
             widget.radius,
             side: BorderSide(
-              color: (_hovered && interactive) ? c.ringHover : c.hairline,
+              color: (_hovered && interactive)
+                  ? c.ringHover
+                  : c.hairline.withValues(alpha: c.isDark ? 0.55 : 0.62),
             ),
           ),
           shadows:
@@ -1677,32 +1699,33 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
       width: width,
       child: CustomPaint(
         foregroundPainter: ClaudeSpecularRimPainter(
-          radius: 8.0,
+          radius: 999,
           isDark: c.isDark,
-          intensity: 0.9,
+          accentTint: c.sage,
+          intensity: 0.90,
         ),
         child: DecoratedBox(
           decoration: ShapeDecoration(
             gradient: c.isDark
-                ? LinearGradient(
+                ? const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      const Color(0xFF282832),
-                      c.paper3,
+                      Color(0xE81C332B),
+                      Color(0xF012221D),
                     ],
                   )
                 : const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFFFFFFFF), Color(0xFFFAFAFC)],
+                    colors: [Color(0xFFFFFFFF), Color(0xFFF1FAF6)],
                   ),
-            shape: claudeSuperellipse(8.0),
+            shape: const StadiumBorder(),
             shadows: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.07),
-                blurRadius: 6,
-                offset: const Offset(0, 1.5),
+                color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -1735,7 +1758,7 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
                 estimatedIntrinsic > box.maxWidth);
 
         if (forceEqualWidth && box.hasBoundedWidth && box.maxWidth.isFinite) {
-          final innerW = (box.maxWidth - 5.0).clamp(40.0, box.maxWidth);
+          final innerW = (box.maxWidth - 6.0).clamp(40.0, box.maxWidth);
           final count = widget.items.isEmpty ? 1 : widget.items.length;
           final slotW = innerW / count;
           final eqPillLeft = activeIdx * slotW;
@@ -1746,14 +1769,13 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
 
           return DecoratedBox(
             decoration: ShapeDecoration(
-              color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
-              shape: claudeSuperellipse(
-                9.0,
-                side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
+              color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.85),
+              shape: StadiumBorder(
+                side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(2.5),
+              padding: const EdgeInsets.all(3.0),
               child: Stack(
                 alignment: Alignment.centerLeft,
                 children: [
@@ -1789,14 +1811,13 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
 
         return DecoratedBox(
           decoration: ShapeDecoration(
-            color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.82),
-            shape: claudeSuperellipse(
-              9.0,
-              side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
+            color: c.isDark ? c.recessed : c.paper3.withValues(alpha: 0.85),
+            shape: StadiumBorder(
+              side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(2.5),
+            padding: const EdgeInsets.all(3.0),
             child: IntrinsicWidth(
               child: Stack(
                 alignment: Alignment.centerLeft,
@@ -1872,13 +1893,13 @@ class _SegmentTapItemState extends State<_SegmentTapItem> {
         child: Container(
           alignment: Alignment.center,
           padding: EdgeInsets.symmetric(
-            horizontal: widget.compactPad ? 5 : 10,
-            vertical: 5,
+            horizontal: widget.compactPad ? 6 : 12,
+            vertical: 6,
           ),
           decoration: widget.fallbackHighlight
               ? ShapeDecoration(
                   color: c.isDark ? c.paper3 : c.paper2,
-                  shape: claudeSuperellipse(7.0),
+                  shape: const StadiumBorder(),
                 )
               : null,
           child: Text(
@@ -1927,13 +1948,12 @@ class ClaudePill extends StatelessWidget {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: bg ?? c.recessed,
-        shape: claudeSuperellipse(
-          6.5,
-          side: BorderSide(color: border ?? c.hairline.withValues(alpha: 0.85)),
+        shape: StadiumBorder(
+          side: BorderSide(color: border ?? c.hairline.withValues(alpha: 0.70)),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2336,17 +2356,17 @@ Future<bool> showClaudeConfirmDialog(
           vertical: 20,
         ),
         shape: claudeSuperellipse(
-          16,
-          side: BorderSide(color: c.hairline),
+          28,
+          side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              compact ? 18 : 22,
+              compact ? 20 : 24,
+              22,
+              compact ? 20 : 24,
               20,
-              compact ? 18 : 22,
-              18,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2355,13 +2375,13 @@ Future<bool> showClaudeConfirmDialog(
                 Row(
                   children: [
                     Container(
-                      width: 28,
-                      height: 28,
+                      width: 36,
+                      height: 36,
                       decoration: ShapeDecoration(
                         color: destructive
                             ? c.dangerBg
                             : c.clay.withValues(alpha: 0.12),
-                        shape: claudeSuperellipse(8),
+                        shape: claudeSuperellipse(13),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
@@ -2945,12 +2965,11 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
           child: AnimatedContainer(
             duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
             curve: ClaudeMotion.editorialOut,
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 9.5),
+            height: 31,
+            padding: const EdgeInsets.symmetric(horizontal: 11),
             decoration: ShapeDecoration(
               color: bg,
-              shape: claudeSuperellipse(
-                8.5,
+              shape: StadiumBorder(
                 side: BorderSide(color: borderCol),
               ),
             ),
@@ -3069,13 +3088,15 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
                             decoration: ShapeDecoration(
                               color: oc.paper2,
                               shape: claudeSuperellipse(
-                                11,
-                                side: BorderSide(color: oc.hairline),
+                                20,
+                                side: BorderSide(
+                                  color: oc.hairline.withValues(alpha: 0.72),
+                                ),
                               ),
                               shadows: oc.popoverShadow,
                             ),
                             child: ClipRSuperellipse(
-                              borderRadius: BorderRadius.circular(11),
+                              borderRadius: BorderRadius.circular(20),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3294,10 +3315,10 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
         onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 6.5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(7.5),
+            shape: claudeSuperellipse(12),
           ),
           child: Row(
             children: [
@@ -3504,19 +3525,18 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
           child: Container(
-            height: 30,
-            width: (widget.label == null || widget.label!.isEmpty) ? 30 : null,
+            height: 31,
+            width: (widget.label == null || widget.label!.isEmpty) ? 31 : null,
             padding: (widget.label == null || widget.label!.isEmpty)
                 ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 9.5),
+                : const EdgeInsets.symmetric(horizontal: 11),
             decoration: ShapeDecoration(
               color: (widget.label != null && widget.label!.isNotEmpty)
                   ? ((_open || _hovered) ? c.paper3 : c.paper2)
                   : ((_open || _hovered)
                       ? c.paper3
                       : c.paper3.withValues(alpha: 0.0)),
-              shape: claudeSuperellipse(
-                8,
+              shape: StadiumBorder(
                 side: BorderSide(
                   color: _open
                       ? c.clay
@@ -3630,13 +3650,15 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
                             decoration: ShapeDecoration(
                               color: oc.paper2,
                               shape: claudeSuperellipse(
-                                11,
-                                side: BorderSide(color: oc.hairline),
+                                20,
+                                side: BorderSide(
+                                  color: oc.hairline.withValues(alpha: 0.72),
+                                ),
                               ),
                               shadows: oc.popoverShadow,
                             ),
                             child: ClipRSuperellipse(
-                              borderRadius: BorderRadius.circular(11),
+                              borderRadius: BorderRadius.circular(20),
                               child: SingleChildScrollView(
                                 padding: const EdgeInsets.all(4.5),
                                 child: Column(
@@ -3736,10 +3758,10 @@ class _ActionMenuTileState extends State<_ActionMenuTile> {
         onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(7.5),
+            shape: claudeSuperellipse(12),
           ),
           child: Row(
             children: [
@@ -3859,12 +3881,12 @@ class ClaudeSplitButton extends StatelessWidget {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: bg,
-        shape: claudeSuperellipse(8.5, side: BorderSide(color: border)),
+        shape: StadiumBorder(side: BorderSide(color: border)),
       ),
-      child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(8.5),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
         child: SizedBox(
-          height: 30,
+          height: 31,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

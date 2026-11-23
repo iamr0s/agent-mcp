@@ -149,14 +149,19 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 42,
-                        height: 42,
+                        width: 46,
+                        height: 46,
                         decoration: ShapeDecoration(
-                          color: c.clay.withValues(alpha: 0.12),
-                          shape: claudeSuperellipse(11),
+                          color: c.sageBg,
+                          shape: claudeSuperellipse(
+                            15,
+                            side: BorderSide(
+                              color: c.sage.withValues(alpha: 0.24),
+                            ),
+                          ),
                         ),
                         alignment: Alignment.center,
-                        child: Icon(Icons.layers_outlined, size: 20, color: c.clay),
+                        child: Icon(Icons.layers_outlined, size: 21, color: c.sage),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -191,7 +196,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                     widget.extraBottomPadding,
               ),
               child: ClaudeListGroup(
-                dividerIndent: 58,
+                dividerIndent: 68,
                 children: [
                   for (var idx = 0; idx < widget.servers.length; idx++)
                     _buildServerRow(context, c, widget.servers[idx]),
@@ -257,8 +262,8 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
               hoverColor: c.paper3.withValues(alpha: 0.45),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
+                  horizontal: 16,
+                  vertical: 13,
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -268,13 +273,15 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: 34,
-                          height: 34,
+                          width: 40,
+                          height: 40,
                           decoration: ShapeDecoration(
                             color: c.recessed,
                             shape: claudeSuperellipse(
-                              8.5,
-                              side: BorderSide(color: c.hairline),
+                              13.5,
+                              side: BorderSide(
+                                color: c.hairline.withValues(alpha: 0.65),
+                              ),
                             ),
                           ),
                           alignment: Alignment.center,
@@ -282,7 +289,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                             tr == 'stdio'
                                 ? Icons.terminal_rounded
                                 : Icons.public_rounded,
-                            size: 16,
+                            size: 17.5,
                             color: enabled ? trColor : c.muted,
                           ),
                         ),
@@ -443,15 +450,15 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
               expanded: lastErr.isNotEmpty,
               builder: (_) => Container(
                 width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(58, 0, 14, 10),
+                margin: const EdgeInsets.fromLTRB(68, 0, 16, 12),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 decoration: ShapeDecoration(
                   color: c.dangerBg,
                   shape: claudeSuperellipse(
-                    8,
+                    14,
                     side: BorderSide(color: c.danger.withValues(alpha: 0.28)),
                   ),
                 ),
@@ -470,7 +477,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                       : c.recessed.withValues(alpha: 0.55),
                   border: Border(top: BorderSide(color: c.hairline)),
                 ),
-                padding: const EdgeInsets.fromLTRB(58, 8, 14, 10),
+                padding: const EdgeInsets.fromLTRB(68, 10, 16, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -544,9 +551,9 @@ class _SubMcpToolRow extends StatelessWidget {
 
     return InkWell(
       onTap: onToggle,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -588,7 +595,7 @@ class _SubMcpToolRow extends StatelessWidget {
                   message: '复制工具名',
                   child: InkWell(
                     onTap: onCopyName,
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(999),
                     child: Padding(
                       padding: const EdgeInsets.all(4),
                       child: Icon(
@@ -631,12 +638,14 @@ class _SubMcpToolRow extends StatelessWidget {
                     if (props.isNotEmpty)
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(9),
+                        padding: const EdgeInsets.all(11),
                         decoration: ShapeDecoration(
                           color: c.paper2,
                           shape: claudeSuperellipse(
-                            8,
-                            side: BorderSide(color: c.hairline),
+                            14,
+                            side: BorderSide(
+                              color: c.hairline.withValues(alpha: 0.65),
+                            ),
                           ),
                         ),
                         child: Column(
@@ -884,8 +893,8 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
         vertical: 18,
       ),
       shape: claudeSuperellipse(
-        16,
-        side: BorderSide(color: c.hairline),
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),

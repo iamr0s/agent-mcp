@@ -298,7 +298,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '3.1.0';
+  String _version = '3.2.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -485,7 +485,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.1.0').toString();
+      _version = (auth['version'] ?? '3.2.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1277,21 +1277,22 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 if (showAuthControls && viewW >= 960) ...[
                   InkWell(
                     onTap: _openCommandPalette,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(999),
                     child: Container(
-                      height: 28,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      height: 30,
+                      padding: const EdgeInsets.fromLTRB(12, 0, 7, 0),
                       decoration: ShapeDecoration(
                         color: c.paper2,
-                        shape: claudeSuperellipse(
-                          8,
-                          side: BorderSide(color: c.hairline),
+                        shape: StadiumBorder(
+                          side: BorderSide(
+                            color: c.hairline.withValues(alpha: 0.72),
+                          ),
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.search_rounded, size: 13.5, color: c.meta),
+                          Icon(Icons.search_rounded, size: 14, color: c.meta),
                           const SizedBox(width: 6),
                           Text(
                             '指令、切节点或贴路径秒享…',
@@ -1300,14 +1301,15 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           const SizedBox(width: 10),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
+                              horizontal: 7,
+                              vertical: 2,
                             ),
                             decoration: ShapeDecoration(
                               color: c.recessed,
-                              shape: claudeSuperellipse(
-                                4.5,
-                                side: BorderSide(color: c.hairline),
+                              shape: StadiumBorder(
+                                side: BorderSide(
+                                  color: c.hairline.withValues(alpha: 0.65),
+                                ),
                               ),
                             ),
                             child: Text(
@@ -2014,12 +2016,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                 child: InkWell(
                                                   onTap: _openAboutAndUpdates,
                                                   borderRadius:
-                                                      BorderRadius.circular(8),
+                                                      BorderRadius.circular(999),
                                                   child: Padding(
                                                     padding: const EdgeInsets
                                                         .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6.5,
+                                                      horizontal: 12,
+                                                      vertical: 7.5,
                                                     ),
                                                     child: Row(
                                                       children: [
@@ -2226,9 +2228,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         margin: !isMobile
                             ? EdgeInsets.fromLTRB(
                                 0,
-                                (!useFloatingTopBar && !showTopChrome) ? 8 : 0,
-                                8,
-                                4,
+                                (!useFloatingTopBar && !showTopChrome) ? 8 : 2,
+                                10,
+                                6,
                               )
                             : EdgeInsets.zero,
                         clipBehavior: !isMobile ? Clip.antiAlias : Clip.none,
@@ -2236,8 +2238,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             ? ShapeDecoration(
                                 color: c.paper,
                                 shape: claudeSuperellipse(
-                                  12,
-                                  side: BorderSide(color: c.hairline),
+                                  24,
+                                  side: BorderSide(
+                                    color: c.hairline.withValues(alpha: 0.65),
+                                  ),
                                 ),
                                 shadows: c.whisperShadow,
                               )
@@ -3540,8 +3544,8 @@ class _SidebarNavGroup extends StatelessWidget {
     required this.onSelect,
   });
 
-  static const double _itemH = 35.0;
-  static const double _gap = 3.0;
+  static const double _itemH = 38.0;
+  static const double _gap = 4.0;
 
   @override
   Widget build(BuildContext context) {
@@ -3578,12 +3582,39 @@ class _SidebarNavGroup extends StatelessWidget {
             left: 0,
             right: 0,
             height: _itemH,
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                color: c.isDark ? c.paper3 : c.paper2,
-                shape: claudeSuperellipse(
-                  8.5,
-                  side: BorderSide(color: c.hairline),
+            child: CustomPaint(
+              foregroundPainter: ClaudeSpecularRimPainter(
+                radius: 999,
+                isDark: c.isDark,
+                accentTint: c.sage,
+                intensity: 0.90,
+              ),
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  gradient: c.isDark
+                      ? const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0xE81C332B),
+                            Color(0xF012221D),
+                          ],
+                        )
+                      : const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFFFFFFFF), Color(0xFFF0FAF5)],
+                        ),
+                  shape: const StadiumBorder(),
+                  shadows: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: c.isDark ? 0.30 : 0.05,
+                      ),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -3650,7 +3681,7 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
         color: (!widget.active && _hovered)
             ? c.paper3.withValues(alpha: 0.65)
             : c.paper3.withValues(alpha: 0.0),
-        shape: claudeSuperellipse(12),
+        shape: const StadiumBorder(),
       ),
       child: Row(
         mainAxisAlignment:
@@ -3660,7 +3691,7 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
             widget.icon,
             size: 18,
             color: widget.active
-                ? c.clay
+                ? c.sage
                 : (_hovered ? c.inkSoft : c.muted),
           ),
           if (!collapsed) ...[
@@ -3803,8 +3834,8 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
               index: 0,
               offsetY: 10,
               child: ClaudeCard(
-                radius: 24,
-                padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
+                radius: 28,
+                padding: const EdgeInsets.fromLTRB(28, 30, 28, 26),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3812,14 +3843,14 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                     Row(
                       children: [
                         Container(
-                          width: 36,
-                          height: 36,
+                          width: 42,
+                          height: 42,
                           decoration: ShapeDecoration(
-                            color: c.clay.withValues(alpha: 0.12),
-                            shape: claudeSuperellipse(11),
+                            color: c.sageBg,
+                            shape: claudeSuperellipse(14),
                           ),
                           alignment: Alignment.center,
-                          child: const ClaudeSparkIcon(size: 19),
+                          child: const ClaudeSparkIcon(size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -3866,7 +3897,7 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                           decoration: ShapeDecoration(
                             color: c.dangerBg,
                             shape: claudeSuperellipse(
-                              10,
+                              14,
                               side: BorderSide(
                                 color: c.danger.withValues(alpha: 0.28),
                               ),
@@ -4074,7 +4105,10 @@ class _GlobalCommandPaletteDialogState
       elevation: 0,
       alignment: const Alignment(0, -0.45),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: claudeSuperellipse(18),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Focus(
@@ -4134,13 +4168,16 @@ class _GlobalCommandPaletteDialogState
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                        horizontal: 8,
+                        vertical: 2.5,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: c.recessed,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: c.hairline),
+                        shape: StadiumBorder(
+                          side: BorderSide(
+                            color: c.hairline.withValues(alpha: 0.65),
+                          ),
+                        ),
                       ),
                       child: Text('ESC', style: monoStyle(c, size: 10.5, color: c.meta)),
                     ),
@@ -4160,18 +4197,18 @@ class _GlobalCommandPaletteDialogState
                       )
                     : ListView.builder(
                         shrinkWrap: true,
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(8),
                         itemCount: entries.length,
                         itemBuilder: (ctx, i) {
                           final it = entries[i];
                           final sel = i == _selectedIdx;
                           return Material(
                             color: sel
-                                ? c.clay.withValues(alpha: c.isDark ? 0.16 : 0.10)
+                                ? c.sage.withValues(alpha: c.isDark ? 0.18 : 0.10)
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(14),
                             child: InkWell(
-                              borderRadius: BorderRadius.circular(9),
+                              borderRadius: BorderRadius.circular(14),
                               onTap: () => Navigator.of(context).pop(it.payload),
                               onHover: (h) {
                                 if (h && _selectedIdx != i) {

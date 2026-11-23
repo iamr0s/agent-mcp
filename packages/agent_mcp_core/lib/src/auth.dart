@@ -632,7 +632,7 @@ class LocalOAuthProvider {
     var errorMsg = '';
     if (passwordHash.isEmpty) {
       errorMsg =
-          '<p style="color:#b45309;background:#fef3c7;padding:10px 12px;border-radius:8px;font-size:13px">'
+          '<p style="color:#b45309;background:#fef3c7;padding:11px 14px;border-radius:14px;font-size:13px">'
           '尚未设置「OAuth 本地授权密码」。请先打开 Agent MCP 控制台「服务配置 &rarr; OAuth 2.1 本地密码」设置并保存后，直接在此输入即可（无需重启）。</p>';
     }
 
@@ -699,16 +699,16 @@ class LocalOAuthProvider {
 @media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:#F4F4F6;--clay-h:#FFFFFF;--on-clay:#0A0A0C;--clay-bg:rgba(244,244,246,.10);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
-.card{width:100%;max-width:396px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px 24px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
-.head-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.ico{width:34px;height:34px;border-radius:9px;background:var(--clay-bg);color:var(--clay);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
-.client-pill{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--elev);border:1px solid var(--border);font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink)}
-.pw-box{position:relative;margin:10px 0 14px}
-input{width:100%;padding:10px 40px 10px 12px;background:var(--elev);color:var(--ink);border:1px solid var(--border);border-radius:9.5px;font-size:14px;outline:none;transition:border-color .15s}
+.card{width:100%;max-width:404px;background:var(--card);border:1px solid var(--border);border-radius:28px;padding:28px 26px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
+.head-row{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.ico{width:40px;height:40px;border-radius:13.5px;background:var(--clay-bg);color:var(--clay);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.client-pill{display:inline-block;padding:2.5px 10px;border-radius:999px;background:var(--elev);border:1px solid var(--border);font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink)}
+.pw-box{position:relative;margin:10px 0 15px}
+input{width:100%;padding:11px 40px 11px 14px;background:var(--elev);color:var(--ink);border:1px solid var(--border);border-radius:14px;font-size:14px;outline:none;transition:border-color .15s}
 input:focus{border-color:var(--clay)}
-.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px;display:inline-flex}
+.eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px;display:inline-flex}
 .eye:hover{color:var(--ink)}
-.submit{width:100%;padding:10px;background:var(--clay);color:var(--on-clay);border:0;border-radius:9.5px;font-size:13.8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
+.submit{width:100%;padding:11px 18px;background:var(--clay);color:var(--on-clay);border:0;border-radius:999px;font-size:13.8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
 .submit:hover{background:var(--clay-h)}
 .spin{width:13px;height:13px;border-radius:99px;border:2px solid rgba(128,128,136,.35);border-top-color:var(--on-clay);display:none;animation:sp .75s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}

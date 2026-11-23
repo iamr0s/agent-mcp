@@ -348,11 +348,13 @@ class EndpointCopyDropButton extends StatelessWidget {
       minMenuWidth: 268,
       maxMenuWidth: 380,
       customTrigger: Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: 31,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: ShapeDecoration(
           color: c.paper2,
-          shape: claudeSuperellipse(8.5, side: BorderSide(color: c.hairline)),
+          shape: StadiumBorder(
+            side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -429,11 +431,10 @@ class _SelectableIpChipState extends State<SelectableIpChip> {
         child: AnimatedContainer(
           duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
           curve: ClaudeMotion.editorialOut,
-          padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(
-              11,
+            shape: StadiumBorder(
               side: BorderSide(color: border, width: sel ? 1.25 : 1.0),
             ),
           ),
@@ -465,7 +466,7 @@ class _SelectableIpChipState extends State<SelectableIpChip> {
                 ),
                 decoration: ShapeDecoration(
                   color: c.paper2.withValues(alpha: 0.88),
-                  shape: claudeSuperellipse(6),
+                  shape: const StadiumBorder(),
                 ),
                 child: Text(
                   tagText,

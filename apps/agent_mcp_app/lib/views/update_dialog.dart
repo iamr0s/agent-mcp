@@ -144,7 +144,10 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
     return Dialog(
       backgroundColor: c.paper,
       elevation: 0,
-      shape: claudeSuperellipse(16, side: BorderSide(color: c.hairline)),
+      shape: claudeSuperellipse(
+        28,
+        side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
+      ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 620),
@@ -159,7 +162,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                 children: [
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
                           color: const Color(0xFF4338CA)
@@ -231,8 +234,10 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   decoration: ShapeDecoration(
                     color: c.recessed,
                     shape: claudeSuperellipse(
-                      12,
-                      side: BorderSide(color: c.hairline),
+                      16,
+                      side: BorderSide(
+                        color: c.hairline.withValues(alpha: 0.65),
+                      ),
                     ),
                   ),
                   child: Row(
@@ -277,8 +282,10 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   decoration: ShapeDecoration(
                     color: c.paper2,
                     shape: claudeSuperellipse(
-                      12,
-                      side: BorderSide(color: c.hairline),
+                      16,
+                      side: BorderSide(
+                        color: c.hairline.withValues(alpha: 0.65),
+                      ),
                     ),
                   ),
                   child: SingleChildScrollView(
@@ -336,7 +343,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   decoration: ShapeDecoration(
                     color: c.dangerBg,
                     shape: claudeSuperellipse(
-                      10,
+                      14,
                       side: BorderSide(color: c.danger.withValues(alpha: 0.3)),
                     ),
                   ),
