@@ -1173,8 +1173,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.3.0'), findsOneWidget);
-    await tester.tap(find.text('v3.3.0'));
+    expect(find.text('v3.4.0'), findsOneWidget);
+    await tester.tap(find.text('v3.4.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1274,7 +1274,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.3.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1635,6 +1635,153 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.byKey(const ValueKey('header-jade-back-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('setup-mobile-back-btn')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.4.0 Point-of-Click Theme Ripple Origin & Multi-Platform macOS/Linux GUI Asset Resolution',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      PrismPalette.configureAccent(PrismAccentId.indigo);
+    });
+    tester.view.physicalSize = const Size(1280, 860);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Navigate to ServiceSetupPage -> 基础与外观
+    await tester.tap(find.text('服务配置').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final shellCtx = tester.element(find.byType(Scaffold).first);
+
+    // 1. Click '陶土暖珀' swatch in lower-middle Setup pane -> wave origin MUST match exact swatch tap center, NOT top-right!
+    final terracottaFinder =
+        find.byKey(const ValueKey('accent-chip-terracotta'));
+    await tester.ensureVisible(terracottaFinder);
+    await tester.pump(const Duration(milliseconds: 120));
+    final swatchTapPos = tester.getCenter(terracottaFinder);
+    await tester.tapAt(swatchTapPos);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final originFromSwatch = PrismThemeCrossFade.debugLastRevealOrigin(shellCtx);
+    expect(originFromSwatch, isNotNull);
+    expect((originFromSwatch! - swatchTapPos).distance, lessThan(2.5));
+    expect(originFromSwatch.dy, greaterThan(200.0));
+
+    // 2. Click '暗色模式' segmented pill -> wave origin MUST match exact segmented pill tap center!
+    final darkPillFinder = find.text('暗色模式');
+    await tester.ensureVisible(darkPillFinder);
+    await tester.pump(const Duration(milliseconds: 120));
+    final darkTapPos = tester.getCenter(darkPillFinder);
+    await tester.tapAt(darkTapPos);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final originFromSegment =
+        PrismThemeCrossFade.debugLastRevealOrigin(shellCtx);
+    expect(originFromSegment, isNotNull);
+    expect((originFromSegment! - darkTapPos).distance, lessThan(2.5));
+
+    // 3. Click top-bar sun icon -> wave origin matches top-bar sun button tap center!
+    final sunBtnFinder = find.byTooltip('切换至浅色模式');
+    final sunTapPos = tester.getCenter(sunBtnFinder);
+    await tester.tapAt(sunTapPos);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final originFromSun = PrismThemeCrossFade.debugLastRevealOrigin(shellCtx);
+    expect(originFromSun, isNotNull);
+    expect((originFromSun! - sunTapPos).distance, lessThan(2.5));
+    expect(originFromSun.dy, lessThan(60.0));
+
+    // 4. Verify UpdateInfo.preferredAsset resolves macOS DMG (ARM64 + Intel) & Linux GTK3 GUI (x64 + ARM64)
+    final parsed = UpdateInfo.tryParseGithubApi({
+      'tag_name': 'v3.4.0',
+      'html_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v3.4.0',
+      'body': '## 更新亮点\n- 全新同心折射棱镜图标与全平台 GUI 发布',
+      'assets': [
+        {
+          'name': 'AgentMCP-v3.4.0-windows-x64-sfx.exe',
+          'browser_download_url': 'https://example.com/win.exe',
+          'size': 28000000,
+        },
+        {
+          'name': 'AgentMCP-v3.4.0-macos-arm64.dmg',
+          'browser_download_url': 'https://example.com/mac-arm64.dmg',
+          'size': 32000000,
+        },
+        {
+          'name': 'AgentMCP-v3.4.0-macos-x64.dmg',
+          'browser_download_url': 'https://example.com/mac-x64.dmg',
+          'size': 33000000,
+        },
+        {
+          'name': 'AgentMCP-v3.4.0-linux-x64-gui.tar.gz',
+          'browser_download_url': 'https://example.com/linux-x64-gui.tar.gz',
+          'size': 26000000,
+        },
+        {
+          'name': 'AgentMCP-v3.4.0-linux-arm64-gui.tar.gz',
+          'browser_download_url': 'https://example.com/linux-arm64-gui.tar.gz',
+          'size': 25000000,
+        },
+      ],
+    })!;
+
+    expect(
+      parsed
+          .preferredAsset(
+            isWindows: false,
+            isAndroid: false,
+            isLinux: false,
+            isMacOS: true,
+            cpuArch: 'arm64',
+          )
+          ?.name,
+      equals('AgentMCP-v3.4.0-macos-arm64.dmg'),
+    );
+    expect(
+      parsed
+          .preferredAsset(
+            isWindows: false,
+            isAndroid: false,
+            isLinux: false,
+            isMacOS: true,
+            cpuArch: 'x64',
+          )
+          ?.name,
+      equals('AgentMCP-v3.4.0-macos-x64.dmg'),
+    );
+    expect(
+      parsed
+          .preferredAsset(
+            isWindows: false,
+            isAndroid: false,
+            isLinux: true,
+            cpuArch: 'x64',
+          )
+          ?.name,
+      equals('AgentMCP-v3.4.0-linux-x64-gui.tar.gz'),
+    );
+    expect(
+      parsed
+          .preferredAsset(
+            isWindows: false,
+            isAndroid: false,
+            isLinux: true,
+            cpuArch: 'arm64',
+          )
+          ?.name,
+      equals('AgentMCP-v3.4.0-linux-arm64-gui.tar.gz'),
+    );
     expect(tester.takeException(), isNull);
   });
 }

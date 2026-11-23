@@ -125,10 +125,13 @@ class DashboardHandler {
 
   Directory? _locateWebBundleDir() {
     final root = StoragePaths.instance.rootDir;
+    final exeDir = File(Platform.resolvedExecutable).parent;
     final candidates = <String>[
       p.join(root.path, 'apps', 'agent_mcp_app', 'build', 'web'),
       p.join(root.path, 'web_dashboard'),
-      p.join(File(Platform.resolvedExecutable).parent.path, 'web_dashboard'),
+      p.join(exeDir.path, 'web_dashboard'),
+      p.join(exeDir.path, 'data', 'web_dashboard'),
+      p.join(exeDir.parent.path, 'Resources', 'web_dashboard'),
     ];
     for (final c in candidates) {
       final d = Directory(c);

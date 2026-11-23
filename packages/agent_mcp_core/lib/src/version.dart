@@ -1,18 +1,31 @@
 import 'dart:convert';
 
-const String agentMcpVersion = '3.3.0';
+const String agentMcpVersion = '3.4.0';
 
 const String appIconSvg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-    '<stop offset="0%" stop-color="#4F46E5"/>'
-    '<stop offset="100%" stop-color="#312E81"/>'
-    '</linearGradient></defs>'
-    '<rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>'
-    '<path d="M32 12L36.8 27.2L52 32L36.8 36.8L32 52L27.2 36.8L12 32L27.2 27.2L32 12Z" fill="#FAF9F6"/>'
-    '<line x1="21" y1="43" x2="43" y2="21" stroke="#C7D2FE" stroke-width="3.2" stroke-linecap="round"/>'
-    '<circle cx="21" cy="43" r="4" fill="#FAF9F6" stroke="#4338CA" stroke-width="1.6"/>'
-    '<circle cx="43" cy="21" r="4" fill="#FAF9F6" stroke="#4338CA" stroke-width="1.6"/>'
+    '<defs>'
+    '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">'
+    '<stop offset="0%" stop-color="#161838"/>'
+    '<stop offset="100%" stop-color="#090A16"/>'
+    '</linearGradient>'
+    '<radialGradient id="aura" cx="0.68" cy="0.70" r="0.52">'
+    '<stop offset="0%" stop-color="#4F46E5" stop-opacity="0.56"/>'
+    '<stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/>'
+    '</radialGradient>'
+    '<linearGradient id="pBack" x1="0" y1="0" x2="1" y2="1">'
+    '<stop offset="0%" stop-color="#939EFF"/>'
+    '<stop offset="100%" stop-color="#4F46E5"/>'
+    '</linearGradient>'
+    '<linearGradient id="pFront" x1="0" y1="0" x2="1" y2="1">'
+    '<stop offset="0%" stop-color="#FFFFFF"/>'
+    '<stop offset="100%" stop-color="#DFE6FF"/>'
+    '</linearGradient>'
+    '</defs>'
+    '<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#bg)" stroke="#818CF8" stroke-opacity="0.28" stroke-width="1"/>'
+    '<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#aura)"/>'
+    '<path fill="url(#pBack)" fill-rule="evenodd" d="M35.6 18.2a3.2 3.2 0 0 1 4.5 0l12.7 12.7a3.2 3.2 0 0 1 0 4.5L40.1 48.1a3.2 3.2 0 0 1-4.5 0L22.9 35.4a3.2 3.2 0 0 1 0-4.5Z M36.6 26.2a1.8 1.8 0 0 1 2.5 0l5.7 5.7a1.8 1.8 0 0 1 0 2.5l-5.7 5.7a1.8 1.8 0 0 1-2.5 0l-5.7-5.7a1.8 1.8 0 0 1 0-2.5Z"/>'
+    '<path fill="url(#pFront)" fill-rule="evenodd" d="M26.9 11.4a3.4 3.4 0 0 1 4.8 0l13.9 13.9a3.4 3.4 0 0 1 0 4.8L31.7 44.0a3.4 3.4 0 0 1-4.8 0L13.0 30.1a3.4 3.4 0 0 1 0-4.8Z M28.0 19.9a1.9 1.9 0 0 1 2.6 0l6.3 6.3a1.9 1.9 0 0 1 0 2.6l-6.3 6.3a1.9 1.9 0 0 1-2.6 0l-6.3-6.3a1.9 1.9 0 0 1 0-2.6Z"/>'
     '</svg>';
 
 final String appIconDataUri =

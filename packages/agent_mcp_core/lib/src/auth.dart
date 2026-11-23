@@ -8,6 +8,7 @@ import 'package:shelf/shelf.dart';
 
 import 'config.dart';
 import 'logging_utils.dart';
+import 'version.dart';
 
 String randomTokenUrlSafe([int byteLen = 24]) {
   final rng = Random.secure();
@@ -693,10 +694,10 @@ class LocalOAuthProvider {
     );
     final sname = _esc(serverName);
     final page = '''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:#141416;--clay-h:#27272A;--on-clay:#FFFFFF;--clay-bg:rgba(20,20,22,.075);--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
-@media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:#F4F4F6;--clay-h:#FFFFFF;--on-clay:#0A0A0C;--clay-bg:rgba(244,244,246,.10);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
+:root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:#4F46E5;--clay-h:#4338CA;--on-clay:#FFFFFF;--clay-bg:rgba(79,70,229,.09);--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
+@media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:#818CF8;--clay-h:#A5B4FC;--on-clay:#0A0A0C;--clay-bg:rgba(129,140,248,.13);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
 .card{width:100%;max-width:404px;background:var(--card);border:1px solid var(--border);border-radius:28px;padding:28px 26px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}

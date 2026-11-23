@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 /// Physics-backed & editorial motion primitives built on native spring physics
 /// and the Concentric Liquid Prism tactile design language.
@@ -118,18 +119,31 @@ class PrismThemeCrossFade extends StatefulWidget {
   });
 
   /// Captures the clean outgoing frame first, then invokes [applyThemeChange]
-  /// and runs a 120Hz single-pass transition.
+  /// and runs a 120Hz single-pass circular wave transition centered on the
+  /// exact pointer click/tap coordinates (or [origin] / focused widget).
   static Future<void> runThemeTransition(
     BuildContext context,
     VoidCallback applyThemeChange, {
     Offset? origin,
+    Offset? fallbackOrigin,
   }) async {
     final state = context.findAncestorStateOfType<_PrismThemeCrossFadeState>();
     if (state == null) {
       applyThemeChange();
       return;
     }
-    await state._performTransition(applyThemeChange, origin: origin);
+    await state._performTransition(
+      applyThemeChange,
+      origin: origin,
+      fallbackOrigin: fallbackOrigin,
+    );
+  }
+
+  @visibleForTesting
+  static Offset? debugLastRevealOrigin(BuildContext context) {
+    return context
+        .findAncestorStateOfType<_PrismThemeCrossFadeState>()
+        ?._lastRecordedRevealOrigin;
   }
 
   @override
@@ -153,12 +167,69 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
 
   ui.Image? _snapshot;
   Offset? _revealOrigin;
+  Offset? _lastRecordedRevealOrigin;
+  Offset? _lastPointerGlobalPos;
+  bool _lastInputWasKeyboard = false;
   bool _switching = false;
   bool _busyCapturing = false;
   late Brightness _effectiveBrightness = _resolveBrightness(
     widget.themeMode,
     widget.platformBrightness,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleHardwareKey);
+  }
+
+  bool _handleHardwareKey(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final k = event.logicalKey;
+      if (k == LogicalKeyboardKey.enter ||
+          k == LogicalKeyboardKey.numpadEnter ||
+          k == LogicalKeyboardKey.space) {
+        _lastInputWasKeyboard = true;
+      }
+    }
+    return false;
+  }
+
+  void _recordPointer(PointerEvent event) {
+    _lastPointerGlobalPos = event.position;
+    _lastInputWasKeyboard = false;
+  }
+
+  Offset? _resolveLocalOrigin({
+    Offset? explicitGlobalOrigin,
+    Offset? fallbackGlobalOrigin,
+  }) {
+    final renderObj = _repaintKey.currentContext?.findRenderObject();
+    final box = renderObj is RenderBox && renderObj.hasSize ? renderObj : null;
+    Offset toLocal(Offset globalPt) =>
+        box != null ? box.globalToLocal(globalPt) : globalPt;
+
+    if (explicitGlobalOrigin != null) {
+      return toLocal(explicitGlobalOrigin);
+    }
+    if (!_lastInputWasKeyboard && _lastPointerGlobalPos != null) {
+      return toLocal(_lastPointerGlobalPos!);
+    }
+    final focusRect = FocusManager.instance.primaryFocus?.rect;
+    if (focusRect != null &&
+        focusRect.width.isFinite &&
+        focusRect.height.isFinite &&
+        !focusRect.isEmpty) {
+      return toLocal(focusRect.center);
+    }
+    if (fallbackGlobalOrigin != null) {
+      return toLocal(fallbackGlobalOrigin);
+    }
+    if (box != null) {
+      return box.size.center(Offset.zero);
+    }
+    return null;
+  }
 
   Brightness _resolveBrightness(ThemeMode mode, Brightness platform) {
     return switch (mode) {
@@ -184,7 +255,16 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
     }
   }
 
-  Future<void> _performTransition(VoidCallback applyThemeChange, {Offset? origin}) async {
+  Future<void> _performTransition(
+    VoidCallback applyThemeChange, {
+    Offset? origin,
+    Offset? fallbackOrigin,
+  }) async {
+    final resolvedOrigin = _resolveLocalOrigin(
+      explicitGlobalOrigin: origin,
+      fallbackGlobalOrigin: fallbackOrigin,
+    );
+    _lastRecordedRevealOrigin = resolvedOrigin;
     if (_busyCapturing) {
       applyThemeChange();
       return;
@@ -222,7 +302,7 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
       _disposeSnapshot();
       setState(() {
         _snapshot = captured;
-        _revealOrigin = origin;
+        _revealOrigin = resolvedOrigin;
         _switching = true;
       });
       applyThemeChange();
@@ -257,6 +337,7 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
     _ctrl.dispose();
     _disposeSnapshot();
     super.dispose();
@@ -266,22 +347,27 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
   Widget build(BuildContext context) {
     return _ThemeSwitchingScope(
       isSwitching: _switching,
-      child: Stack(
-        alignment: Alignment.topLeft,
-        textDirection: TextDirection.ltr,
-        fit: StackFit.passthrough,
-        children: [
-          RepaintBoundary(
-            key: _repaintKey,
-            child: widget.child,
-          ),
-          if (_snapshot != null)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: LayoutBuilder(
-                  builder: (ctx, box) {
-                    final size = Size(box.maxWidth, box.maxHeight);
-                    final origin = _revealOrigin ?? Offset(size.width - 132, 24);
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _recordPointer,
+        onPointerUp: _recordPointer,
+        child: Stack(
+          alignment: Alignment.topLeft,
+          textDirection: TextDirection.ltr,
+          fit: StackFit.passthrough,
+          children: [
+            RepaintBoundary(
+              key: _repaintKey,
+              child: widget.child,
+            ),
+            if (_snapshot != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: LayoutBuilder(
+                    builder: (ctx, box) {
+                      final size = Size(box.maxWidth, box.maxHeight);
+                      final origin = _revealOrigin ??
+                          Offset(size.width * 0.5, size.height * 0.5);
                     final maxR = [
                       origin.distance,
                       (origin - Offset(size.width, 0)).distance,
@@ -327,7 +413,8 @@ class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

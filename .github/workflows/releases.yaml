@@ -7,16 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v2.5.3)'
+        description: 'Release tag to publish (e.g. v3.4.0)'
         required: true
-        default: 'v2.5.3'
+        default: 'v3.4.0'
 
 permissions:
   contents: write
 
 jobs:
   build-windows:
-    name: Build Windows x64 (GUI + Web + CLI + Smart SFX)
+    name: Build Windows x64 (GUI + Web + CLI + Prism SFX)
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -62,7 +62,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path bin | Out-Null
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o bin/agent-mcp.exe
 
-      - name: Package Portable ZIP, Smart SFX Installer & Standalone CLI ZIP
+      - name: Package Portable ZIP, Prism SFX Installer & Standalone CLI ZIP
         shell: pwsh
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_sfx.ps1 -SkipBuild -Version $env:APP_VERSION
@@ -133,7 +133,7 @@ jobs:
           if-no-files-found: error
 
   build-linux-x64:
-    name: Build Linux x64 Server & CLI Bundle (with Web Dashboard)
+    name: Build Linux x64 (GTK3 Desktop GUI + CLI + Web Bundle)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -145,30 +145,68 @@ jobs:
           VER="${RAW_TAG#v}"
           echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
 
+      - name: Install Linux GTK3 Desktop Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
       - name: Setup Flutter & Dart SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      - name: Compile Native Linux x64 Server Binary & Web Dashboard
+      - name: Compile Linux x64 GTK3 GUI, CLI Binary & Web Dashboard
         run: |
           (cd apps/agent_mcp_app && flutter pub get)
           pushd apps/agent_mcp_app
           flutter build web --release --base-href /dashboard/ --no-pub
+          flutter build linux --release --no-pub
           popd
-          mkdir -p release stage_linux/web_dashboard
+          mkdir -p release stage_linux/web_dashboard stage_linux_gui/web_dashboard
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_linux/agent-mcp
           chmod +x stage_linux/agent-mcp
           cp -r apps/agent_mcp_app/build/web/. stage_linux/web_dashboard/
           cp LICENSE README.md README.en.md stage_linux/
           tar -czf "release/AgentMCP-v${APP_VERSION}-linux-x64-cli.tar.gz" -C stage_linux .
 
-      - name: Upload Linux x64 Server & CLI Artifact
+          # Assemble Portable Linux x64 GUI Bundle (GTK3 App + CLI + Web Dashboard + .desktop installer)
+          cp -r apps/agent_mcp_app/build/linux/x64/release/bundle/. stage_linux_gui/
+          cp stage_linux/agent-mcp stage_linux_gui/agent-mcp
+          chmod +x stage_linux_gui/agent_mcp_app stage_linux_gui/agent-mcp
+          cp -r apps/agent_mcp_app/build/web/. stage_linux_gui/web_dashboard/
+          cp apps/agent_mcp_app/assets/app_icon.png stage_linux_gui/app_icon.png
+          cp LICENSE README.md README.en.md stage_linux_gui/
+          cat << 'DESKEOF' > stage_linux_gui/install-desktop.sh
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          mkdir -p "$HOME/.local/share/applications" "$HOME/.local/bin"
+          ln -sf "$APP_DIR/agent-mcp" "$HOME/.local/bin/agent-mcp"
+          cat > "$HOME/.local/share/applications/agent-mcp.desktop" <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Agent MCP Console
+          Comment=Concentric Liquid Prism MCP Control Plane & Gateway
+          Exec="$APP_DIR/agent_mcp_app"
+          Icon=$APP_DIR/app_icon.png
+          Terminal=false
+          Categories=Development;Utility;
+          StartupWMClass=io.github.iamr0s.agent_mcp_app
+          EOF
+          chmod +x "$HOME/.local/share/applications/agent-mcp.desktop"
+          echo "[OK] Installed Agent MCP Console launcher & ~/.local/bin/agent-mcp"
+          DESKEOF
+          chmod +x stage_linux_gui/install-desktop.sh
+          tar -czf "release/AgentMCP-v${APP_VERSION}-linux-x64-gui.tar.gz" -C stage_linux_gui .
+
+      - name: Upload Linux x64 GUI & CLI Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-x64-cli-artifact
-          path: release/AgentMCP-v*-linux-x64-cli.tar.gz
+          name: linux-x64-artifacts
+          path: |
+            release/AgentMCP-v*-linux-x64-gui.tar.gz
+            release/AgentMCP-v*-linux-x64-cli.tar.gz
           if-no-files-found: error
 
       - name: Upload Reusable Web Dashboard Bundle
@@ -179,7 +217,7 @@ jobs:
           if-no-files-found: error
 
   build-linux-arm64:
-    name: Build Linux ARM64 Server & CLI Bundle (with Web Dashboard)
+    name: Build Linux ARM64 (GTK3 Desktop GUI + CLI Bundle)
     needs: [build-linux-x64]
     runs-on: ubuntu-24.04-arm
     steps:
@@ -192,10 +230,16 @@ jobs:
           VER="${RAW_TAG#v}"
           echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
 
-      - name: Setup Dart SDK (Native ARM64)
-        uses: dart-lang/setup-dart@v1
+      - name: Install Linux ARM64 GTK3 Desktop Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Setup Flutter & Dart SDK (Native ARM64)
+        uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: 'stable'
+          cache: true
 
       - name: Download Reusable Web Dashboard Bundle
         uses: actions/download-artifact@v4
@@ -203,20 +247,33 @@ jobs:
           name: web-dashboard-bundle
           path: stage_linux/web_dashboard
 
-      - name: Compile Native Linux ARM64 Server Binary
+      - name: Compile Native Linux ARM64 GTK3 GUI & CLI Binary
         run: |
-          sed -i '/^resolution:/d' packages/agent_mcp_core/pubspec.yaml && (cd packages/agent_mcp_core && dart pub get)
-          mkdir -p release stage_linux/web_dashboard
+          (cd apps/agent_mcp_app && flutter pub get)
+          pushd apps/agent_mcp_app
+          flutter build linux --release --no-pub
+          popd
+          mkdir -p release stage_linux/web_dashboard stage_linux_gui/web_dashboard
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_linux/agent-mcp
           chmod +x stage_linux/agent-mcp
           cp LICENSE README.md README.en.md stage_linux/
           tar -czf "release/AgentMCP-v${APP_VERSION}-linux-arm64-cli.tar.gz" -C stage_linux .
 
-      - name: Upload Linux ARM64 Server & CLI Artifact
+          cp -r apps/agent_mcp_app/build/linux/arm64/release/bundle/. stage_linux_gui/
+          cp stage_linux/agent-mcp stage_linux_gui/agent-mcp
+          chmod +x stage_linux_gui/agent_mcp_app stage_linux_gui/agent-mcp
+          cp -r stage_linux/web_dashboard/. stage_linux_gui/web_dashboard/
+          cp apps/agent_mcp_app/assets/app_icon.png stage_linux_gui/app_icon.png
+          cp LICENSE README.md README.en.md stage_linux_gui/
+          tar -czf "release/AgentMCP-v${APP_VERSION}-linux-arm64-gui.tar.gz" -C stage_linux_gui .
+
+      - name: Upload Linux ARM64 GUI & CLI Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-arm64-cli-artifact
-          path: release/AgentMCP-v*-linux-arm64-cli.tar.gz
+          name: linux-arm64-artifacts
+          path: |
+            release/AgentMCP-v*-linux-arm64-gui.tar.gz
+            release/AgentMCP-v*-linux-arm64-cli.tar.gz
           if-no-files-found: error
 
   build-windows-arm64:
@@ -265,7 +322,8 @@ jobs:
           if-no-files-found: error
 
   build-macos-arm64:
-    name: Build macOS ARM64 (Apple Silicon) GUI App & CLI Bundle
+    name: Build macOS ARM64 (Apple Silicon) DMG + App + CLI
+    needs: [build-linux-x64]
     runs-on: macos-15
     steps:
       - name: Checkout Repository
@@ -283,35 +341,51 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Compile Native macOS ARM64 GUI App, Server Binary & Web Dashboard
+      - name: Download Reusable Web Dashboard Bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dashboard-bundle
+          path: stage_macos/web_dashboard
+
+      - name: Compile macOS ARM64 GUI (.dmg + .app.zip) & CLI Bundle
         run: |
           (cd apps/agent_mcp_app && flutter pub get)
           pushd apps/agent_mcp_app
-          flutter build web --release --base-href /dashboard/ --no-pub
           flutter build macos --release --no-pub
           popd
           mkdir -p release stage_macos/web_dashboard
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_macos/agent-mcp
           chmod +x stage_macos/agent-mcp
-          cp -r apps/agent_mcp_app/build/web/. stage_macos/web_dashboard/
           cp LICENSE README.md README.en.md stage_macos/
           tar -czf "release/AgentMCP-v${APP_VERSION}-macos-arm64-cli.tar.gz" -C stage_macos .
-          pushd apps/agent_mcp_app/build/macos/Build/Products/Release
-          APP_NAME=$(ls -d *.app | head -n 1)
-          ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" "$GITHUB_WORKSPACE/release/AgentMCP-v${APP_VERSION}-macos-arm64-app.zip"
-          popd
+
+          # Embed web_dashboard & agent-mcp CLI inside Agent MCP.app/Contents/Resources and ad-hoc re-sign
+          BUILD_REL="apps/agent_mcp_app/build/macos/Build/Products/Release"
+          SRC_APP=$(ls -d "$BUILD_REL"/*.app | head -n 1)
+          mkdir -p dmg_stage
+          cp -R "$SRC_APP" "dmg_stage/Agent MCP.app"
+          mkdir -p "dmg_stage/Agent MCP.app/Contents/Resources/web_dashboard"
+          cp -R stage_macos/web_dashboard/. "dmg_stage/Agent MCP.app/Contents/Resources/web_dashboard/"
+          cp stage_macos/agent-mcp "dmg_stage/Agent MCP.app/Contents/MacOS/agent-mcp"
+          chmod +x "dmg_stage/Agent MCP.app/Contents/MacOS/agent-mcp"
+          codesign --force --deep --sign - "dmg_stage/Agent MCP.app"
+
+          ditto -c -k --sequesterRsrc --keepParent "dmg_stage/Agent MCP.app" "release/AgentMCP-v${APP_VERSION}-macos-arm64-app.zip"
+          ln -s /Applications dmg_stage/Applications
+          hdiutil create -volname "Agent MCP v${APP_VERSION}" -srcfolder dmg_stage -ov -format UDZO "release/AgentMCP-v${APP_VERSION}-macos-arm64.dmg"
 
       - name: Upload macOS ARM64 Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-arm64-artifacts
           path: |
-            release/AgentMCP-v*-macos-arm64-cli.tar.gz
+            release/AgentMCP-v*-macos-arm64.dmg
             release/AgentMCP-v*-macos-arm64-app.zip
+            release/AgentMCP-v*-macos-arm64-cli.tar.gz
           if-no-files-found: error
 
   build-macos-x64:
-    name: Build macOS Intel (x64) Server & CLI Bundle (with Web Dashboard)
+    name: Build macOS Intel (x64) DMG + App + CLI
     needs: [build-linux-x64]
     runs-on: macos-15-intel
     steps:
@@ -324,10 +398,11 @@ jobs:
           VER="${RAW_TAG#v}"
           echo "APP_VERSION=${VER}" >> "$GITHUB_ENV"
 
-      - name: Setup Dart SDK (macOS Intel x64)
-        uses: dart-lang/setup-dart@v1
+      - name: Setup Flutter & Dart SDK (macOS Intel x64)
+        uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: 'stable'
+          cache: true
 
       - name: Download Reusable Web Dashboard Bundle
         uses: actions/download-artifact@v4
@@ -335,29 +410,53 @@ jobs:
           name: web-dashboard-bundle
           path: stage_macos_x64/web_dashboard
 
-      - name: Compile Native macOS Intel x64 Server Binary
+      - name: Compile macOS Intel x64 GUI (.dmg + .app.zip) & CLI Bundle
         run: |
-          sed -i '' '/^resolution:/d' packages/agent_mcp_core/pubspec.yaml
-          (cd packages/agent_mcp_core && dart pub get)
+          (cd apps/agent_mcp_app && flutter pub get)
+          pushd apps/agent_mcp_app
+          flutter build macos --release --no-pub
+          popd
           mkdir -p release stage_macos_x64/web_dashboard
           dart compile exe packages/agent_mcp_core/bin/agent_mcp.dart -o stage_macos_x64/agent-mcp
           chmod +x stage_macos_x64/agent-mcp
           cp LICENSE README.md README.en.md stage_macos_x64/
           tar -czf "release/AgentMCP-v${APP_VERSION}-macos-x64-cli.tar.gz" -C stage_macos_x64 .
 
-      - name: Upload macOS Intel x64 Artifact
+          BUILD_REL="apps/agent_mcp_app/build/macos/Build/Products/Release"
+          SRC_APP=$(ls -d "$BUILD_REL"/*.app | head -n 1)
+          mkdir -p dmg_stage_x64
+          cp -R "$SRC_APP" "dmg_stage_x64/Agent MCP.app"
+          mkdir -p "dmg_stage_x64/Agent MCP.app/Contents/Resources/web_dashboard"
+          cp -R stage_macos_x64/web_dashboard/. "dmg_stage_x64/Agent MCP.app/Contents/Resources/web_dashboard/"
+          cp stage_macos_x64/agent-mcp "dmg_stage_x64/Agent MCP.app/Contents/MacOS/agent-mcp"
+          chmod +x "dmg_stage_x64/Agent MCP.app/Contents/MacOS/agent-mcp"
+          codesign --force --deep --sign - "dmg_stage_x64/Agent MCP.app"
+
+          ditto -c -k --sequesterRsrc --keepParent "dmg_stage_x64/Agent MCP.app" "release/AgentMCP-v${APP_VERSION}-macos-x64-app.zip"
+          ln -s /Applications dmg_stage_x64/Applications
+          hdiutil create -volname "Agent MCP v${APP_VERSION}" -srcfolder dmg_stage_x64 -ov -format UDZO "release/AgentMCP-v${APP_VERSION}-macos-x64.dmg"
+
+      - name: Upload macOS Intel x64 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-x64-cli-artifact
-          path: release/AgentMCP-v*-macos-x64-cli.tar.gz
+          name: macos-x64-artifacts
+          path: |
+            release/AgentMCP-v*-macos-x64.dmg
+            release/AgentMCP-v*-macos-x64-app.zip
+            release/AgentMCP-v*-macos-x64-cli.tar.gz
           if-no-files-found: error
 
   publish-release:
-    name: Publish Multi-Arch GitHub Release & version.json
+    name: Publish Multi-Platform GitHub Release & Dynamic version.json
     needs: [build-windows, build-windows-arm64, build-android, build-linux-x64, build-linux-arm64, build-macos-arm64, build-macos-x64]
     if: always() && needs.build-windows.result == 'success' && needs.build-android.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository with Full Tag & Commit History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download All Release Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -371,13 +470,14 @@ jobs:
           sha256sum AgentMCP-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Generate version.json Manifest
+      - name: Generate Dynamic Release Notes & version.json Manifest
+        id: gen_meta
         env:
           REL_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           python3 - <<'PYEOF'
-          import datetime, hashlib, json, os, pathlib
+          import datetime, hashlib, json, os, pathlib, re, subprocess
 
           tag = os.environ['REL_TAG'].strip()
           ver = tag.lstrip('vV')
@@ -388,13 +488,21 @@ jobs:
               '-windows-x64-sfx.exe': 'windows_sfx',
               '-windows-x64-portable.zip': 'windows_portable',
               '-windows-x64-cli.zip': 'windows_cli',
+              '-windows-arm64-cli.zip': 'windows_arm64_cli',
+              '-macos-arm64.dmg': 'macos_arm64_dmg',
+              '-macos-arm64-app.zip': 'macos_arm64_app',
+              '-macos-arm64-cli.tar.gz': 'macos_arm64_cli',
+              '-macos-x64.dmg': 'macos_x64_dmg',
+              '-macos-x64-app.zip': 'macos_x64_app',
+              '-macos-x64-cli.tar.gz': 'macos_x64_cli',
+              '-linux-x64-gui.tar.gz': 'linux_x64_gui',
+              '-linux-x64-cli.tar.gz': 'linux_x64_cli',
+              '-linux-arm64-gui.tar.gz': 'linux_arm64_gui',
+              '-linux-arm64-cli.tar.gz': 'linux_arm64_cli',
               '-android-arm64-v8a.apk': 'android_arm64',
               '-android-armeabi-v7a.apk': 'android_armv7',
               '-android-x86_64.apk': 'android_x86_64',
               '-android-universal.apk': 'android_universal',
-              '-linux-x64-cli.tar.gz': 'linux_x64_cli',
-              '-linux-arm64-cli.tar.gz': 'linux_arm64_cli',
-              '-macos-arm64-cli.tar.gz': 'macos_arm64_cli',
           }
 
           assets = {}
@@ -421,57 +529,117 @@ jobs:
                   'size': f.stat().st_size,
               }
 
+          # 1. Extract release title & structured notes dynamically:
+          #    Priority A: CHANGELOG.md section for [vX.Y.Z] / vX.Y.Z
+          #    Priority B: Annotated git tag message
+          #    Priority C: Git commit log since previous v* tag
+          release_title = f'Agent MCP {tag}'
+          notes_body = ''
+
+          changelog_path = pathlib.Path('CHANGELOG.md')
+          if changelog_path.is_file():
+              raw_cl = changelog_path.read_text(encoding='utf-8')
+              pat = re.compile(
+                  rf'^##\s+\[?v?{re.escape(ver)}\]?(?:\s*[—\-:]\s*(.+))?$\n(.*?)(?=^##\s+|\Z)',
+                  re.MULTILINE | re.DOTALL,
+              )
+              m = pat.search(raw_cl)
+              if m:
+                  subtitle = (m.group(1) or '').strip()
+                  if subtitle:
+                      release_title = f'Agent MCP {tag} — {subtitle}'
+                  notes_body = m.group(2).strip()
+
+          if not notes_body:
+              try:
+                  tag_msg = subprocess.check_output(
+                      ['git', 'for-each-ref', f'refs/tags/{tag}', '--format=%(contents)'],
+                      text=True,
+                  ).strip()
+                  if tag_msg:
+                      lines = [ln.rstrip() for ln in tag_msg.splitlines()]
+                      first = lines[0].strip()
+                      rest = '\n'.join(lines[1:]).strip()
+                      if first:
+                          release_title = first if first.lower().startswith('agent mcp') else f'Agent MCP {tag} — {first}'
+                      notes_body = rest or first
+              except Exception:
+                  pass
+
+          if not notes_body:
+              try:
+                  tags_out = subprocess.check_output(
+                      ['git', 'tag', '--sort=-creatordate', '-l', 'v*'],
+                      text=True,
+                  ).splitlines()
+                  prev_tag = next((t.strip() for t in tags_out if t.strip() and t.strip() != tag), '')
+                  rev_range = f'{prev_tag}..{tag}' if prev_tag else f'{tag}~8..{tag}'
+                  commits = subprocess.check_output(
+                      ['git', 'log', rev_range, '--no-merges', '--pretty=format:- %s (`%h`)'],
+                      text=True,
+                  ).strip()
+                  if commits:
+                      notes_body = commits
+              except Exception:
+                  pass
+
+          if not notes_body:
+              notes_body = f'- Agent MCP {tag} 全平台桌面 GUI、移动端与 CLI 正式版更新。'
+
+          # Build clean Markdown Release Body with Download Matrix Table
+          ver_parts = [int(p) if p.isdigit() else 0 for p in (ver.split('.') + ['0', '0', '0'])[:3]]
+          build_num = ver_parts[0] * 1000 + ver_parts[1] * 100 + ver_parts[2]
+
           manifest = {
               'version': ver,
               'tag': tag,
-              'build': 7,
+              'build': build_num,
               'published_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
               'release_url': f'https://github.com/{repo}/releases/tag/{tag}',
-              'notes': (
-                  f'Agent MCP {tag} 正式版发布：\n'
-                  '- 全新瑞士工艺靛青应用图标（全平台多分辨率同步更新）与 Windows 托盘弹层界面升级\n'
-                  '- 新增应用内 GitHub Releases 更新检测（version.json + API 双源兜底）、定期检测开关与四动作更新弹窗\n'
-                  '- 升级 Windows 智能免授权三模式安装器（GUI / CLI / Silent，自动识别原安装目录与 --after gui 重回界面）\n'
-                  '- 外网分享页强化虚线拖拽提示区，并扩展全架构多处理器 Release 产物矩阵'
-              ),
+              'notes': f'{release_title}\n{notes_body}',
               'assets': assets,
           }
           out = dist / 'version.json'
           out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          print(out.read_text(encoding='utf-8'))
+
+          rows = [
+              ('Windows x64 桌面安装向导 (Prism GUI)', 'windows_sfx'),
+              ('Windows x64 免安装绿色版 (GUI + CLI)', 'windows_portable'),
+              ('macOS Apple Silicon 桌面版 (.dmg)', 'macos_arm64_dmg'),
+              ('macOS Intel 桌面版 (.dmg)', 'macos_x64_dmg'),
+              ('Linux x64 桌面版 (GTK3 GUI + CLI)', 'linux_x64_gui'),
+              ('Linux ARM64 桌面版 (GTK3 GUI + CLI)', 'linux_arm64_gui'),
+              ('Android 手机端推荐版 (arm64-v8a APK)', 'android_arm64'),
+              ('Android 全架构通用版 (Universal APK)', 'android_universal'),
+          ]
+          table_lines = [
+              '### 全平台安装包速览',
+              '',
+              '| 平台与形态 | 安装包文件 | 大小 |',
+              '| :--- | :--- | :--- |',
+          ]
+          for label, k in rows:
+              a = assets.get(k)
+              if not a:
+                  continue
+              mb = a['size'] / (1024 * 1024)
+              table_lines.append(f"| {label} | [`{a['name']}`]({a['url']}) | {mb:.2f} MB |")
+
+          full_md = f"## 更新亮点\n\n{notes_body}\n\n" + '\n'.join(table_lines) + '\n'
+          pathlib.Path('release_notes.md').write_text(full_md, encoding='utf-8')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
+              gh_out.write(f'release_title={release_title}\n')
+          print('=== RELEASE TITLE ===\n' + release_title)
+          print('=== RELEASE NOTES ===\n' + full_md)
           PYEOF
 
-      - name: Check Existing Release Body
-        id: check_rel
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REL_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
-        run: |
-          if BODY=$(gh release view "$REL_TAG" --repo "${{ github.repository }}" --json body -q .body 2>/dev/null) && [ -n "$BODY" ]; then
-            printf '%s\n' "$BODY" > existing_body.md
-            echo "has_body=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_body=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Update Existing GitHub Release Assets (Preserving Custom Notes)
-        if: steps.check_rel.outputs.has_body == 'true'
+      - name: Publish GitHub Release with Dynamic Changelog & Multi-Platform Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          body_path: existing_body.md
-          generate_release_notes: false
-          files: |
-            dist_artifacts/AgentMCP-*
-            dist_artifacts/SHA256SUMS.txt
-            dist_artifacts/version.json
-
-      - name: Create New GitHub Release (Auto-Generated Notes)
-        if: steps.check_rel.outputs.has_body != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "Agent MCP ${{ github.event.inputs.tag_name || github.ref_name }} — Auto-Updater, Smart Installer, New Icon & Multi-Arch Release"
+          name: ${{ steps.gen_meta.outputs.release_title }}
+          body_path: release_notes.md
           generate_release_notes: true
           files: |
             dist_artifacts/AgentMCP-*

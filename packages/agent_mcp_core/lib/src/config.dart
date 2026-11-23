@@ -58,6 +58,29 @@ class StoragePaths {
         execName != 'dartaotruntime' &&
         execName != 'flutter_tester') {
       final exeDir = File(execPath).parent;
+      // macOS .app bundle: store mutable config/data/logs/bin in ~/Library/Application Support/AgentMCP
+      // so read-only DMGs, App Translocation, and /Applications code-signature seals stay intact.
+      if (Platform.isMacOS &&
+          execPath.replaceAll('\\', '/').contains('.app/Contents/MacOS/')) {
+        final home = Platform.environment['HOME'] ?? '';
+        if (home.isNotEmpty) {
+          return Directory(
+            p.join(home, 'Library', 'Application Support', 'AgentMCP'),
+          );
+        }
+      }
+      // Linux system-wide read-only paths (/opt, /usr, /snap): store mutable state in XDG data dir.
+      if (Platform.isLinux &&
+          (execPath.startsWith('/usr/') ||
+              execPath.startsWith('/opt/') ||
+              execPath.startsWith('/snap/'))) {
+        final xdg = Platform.environment['XDG_DATA_HOME'];
+        final home = Platform.environment['HOME'] ?? '';
+        final base = (xdg != null && xdg.trim().isNotEmpty)
+            ? xdg.trim()
+            : (home.isNotEmpty ? p.join(home, '.local', 'share') : '/tmp');
+        return Directory(p.join(base, 'agent-mcp'));
+      }
       // If placed inside `<root>/bin/agent-mcp.exe`, use `<root>`
       if (p.basename(exeDir.path).toLowerCase() == 'bin') {
         return exeDir.parent;

@@ -1565,23 +1565,47 @@ class _SparkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final outer = size.width * 0.46;
-    final inner = size.width * 0.12;
+    final s = size.width;
+    void drawPrismRing(Offset center, double halfOuter, double halfInner, Color c) {
+      final paint = Paint()
+        ..color = c
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(math.pi / 4);
+      final outer = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: halfOuter * 2,
+          height: halfOuter * 2,
+        ),
+        Radius.circular(halfOuter * 0.34),
+      );
+      final inner = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: halfInner * 2,
+          height: halfInner * 2,
+        ),
+        Radius.circular(halfInner * 0.36),
+      );
+      canvas.drawDRRect(outer, inner, paint);
+      canvas.restore();
+    }
 
-    final path = Path()
-      ..moveTo(cx, cy - outer)
-      ..quadraticBezierTo(cx + inner * 0.6, cy - inner * 0.6, cx + outer, cy)
-      ..quadraticBezierTo(cx + inner * 0.6, cy + inner * 0.6, cx, cy + outer)
-      ..quadraticBezierTo(cx - inner * 0.6, cy + inner * 0.6, cx - outer, cy)
-      ..quadraticBezierTo(cx - inner * 0.6, cy - inner * 0.6, cx, cy - outer)
-      ..close();
-    canvas.drawPath(path, paint);
+    drawPrismRing(
+      Offset(s * 0.56, s * 0.56),
+      s * 0.23,
+      s * 0.10,
+      color.withValues(alpha: 0.52),
+    );
+    drawPrismRing(
+      Offset(s * 0.45, s * 0.45),
+      s * 0.245,
+      s * 0.108,
+      color,
+    );
   }
 
   @override

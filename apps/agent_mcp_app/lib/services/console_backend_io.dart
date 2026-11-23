@@ -64,6 +64,16 @@ class _IoConsoleBackend extends ConsoleBackend {
   bool get isLinuxPlatform => Platform.isLinux;
 
   @override
+  bool get isMacOSPlatform => Platform.isMacOS;
+
+  @override
+  String get hostCpuArch {
+    final v = Platform.version.toLowerCase();
+    if (v.contains('arm64') || v.contains('aarch64')) return 'arm64';
+    return 'x64';
+  }
+
+  @override
   String get currentAppVersion => agentMcpVersion;
 
   @override

@@ -42,6 +42,8 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
         isWindows: widget.backend.isWindowsPlatform,
         isAndroid: widget.backend.isAndroidPlatform,
         isLinux: widget.backend.isLinuxPlatform,
+        isMacOS: widget.backend.isMacOSPlatform,
+        cpuArch: widget.backend.hostCpuArch,
       );
 
   String _formatPublishedDate(String raw) {

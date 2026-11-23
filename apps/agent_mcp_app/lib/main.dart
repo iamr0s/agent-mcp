@@ -504,7 +504,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.3.0').toString();
+      _version = (auth['version'] ?? '3.4.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1079,7 +1079,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       PrismThemeCrossFade.runThemeTransition(
         context,
         () => widget.onThemeChanged(next),
-        origin: origin ?? _themeToggleOrigin(),
+        origin: origin,
+        fallbackOrigin: _themeToggleOrigin(),
       ),
     );
     unawaited(
@@ -1107,7 +1108,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
           }
           widget.onAccentChanged?.call(next);
         },
-        origin: origin ?? _themeToggleOrigin(),
+        origin: origin,
+        fallbackOrigin: _themeToggleOrigin(),
       ),
     );
     unawaited(
@@ -1119,7 +1121,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   void _cycleTheme(PrismPalette c) {
     final next = c.isDark ? ThemeMode.light : ThemeMode.dark;
-    _applyThemeWithSnapshot(next, origin: _themeToggleOrigin());
+    _applyThemeWithSnapshot(next);
   }
 
   @override

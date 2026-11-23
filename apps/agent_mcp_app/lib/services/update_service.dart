@@ -139,15 +139,36 @@ class UpdateInfo {
     required bool isWindows,
     required bool isAndroid,
     required bool isLinux,
+    bool isMacOS = false,
+    String cpuArch = 'x64',
   }) {
+    final isArm64 = cpuArch.toLowerCase().contains('arm64') ||
+        cpuArch.toLowerCase().contains('aarch64');
     if (isWindows) {
       return assets['windows_sfx'] ?? assets['windows_portable'];
     }
     if (isAndroid) {
       return assets['android_arm64'] ?? assets['android_universal'];
     }
+    if (isMacOS) {
+      if (isArm64) {
+        return assets['macos_arm64_dmg'] ??
+            assets['macos_arm64_app'] ??
+            assets['macos_x64_dmg'];
+      }
+      return assets['macos_x64_dmg'] ??
+          assets['macos_x64_app'] ??
+          assets['macos_arm64_dmg'];
+    }
     if (isLinux) {
-      return assets['linux_x64_cli'] ?? assets['linux_cli'];
+      if (isArm64) {
+        return assets['linux_arm64_gui'] ??
+            assets['linux_arm64_cli'] ??
+            assets['linux_x64_gui'];
+      }
+      return assets['linux_x64_gui'] ??
+          assets['linux_x64_cli'] ??
+          assets['linux_cli'];
     }
     return null;
   }
@@ -228,10 +249,27 @@ class UpdateInfo {
           key = 'android_x86_64';
         } else if (lower.contains('android') && lower.endsWith('.apk')) {
           key = 'android_universal';
+        } else if (lower.contains('linux-arm64') &&
+            lower.endsWith('-gui.tar.gz')) {
+          key = 'linux_arm64_gui';
+        } else if (lower.contains('linux-x64') &&
+            lower.endsWith('-gui.tar.gz')) {
+          key = 'linux_x64_gui';
         } else if (lower.contains('linux-arm64') && lower.endsWith('.tar.gz')) {
           key = 'linux_arm64_cli';
         } else if (lower.contains('linux') && lower.endsWith('.tar.gz')) {
           key = 'linux_x64_cli';
+        } else if (lower.contains('macos-arm64') && lower.endsWith('.dmg')) {
+          key = 'macos_arm64_dmg';
+        } else if (lower.contains('macos-x64') && lower.endsWith('.dmg')) {
+          key = 'macos_x64_dmg';
+        } else if (lower.contains('macos-arm64') &&
+            lower.endsWith('-app.zip')) {
+          key = 'macos_arm64_app';
+        } else if (lower.contains('macos-x64') && lower.endsWith('-app.zip')) {
+          key = 'macos_x64_app';
+        } else if (lower.contains('macos-x64') && lower.endsWith('.tar.gz')) {
+          key = 'macos_x64_cli';
         } else if (lower.contains('macos') && lower.endsWith('.tar.gz')) {
           key = 'macos_arm64_cli';
         }
