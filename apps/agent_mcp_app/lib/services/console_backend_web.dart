@@ -52,7 +52,7 @@ class _WebConsoleBackend extends ConsoleBackend {
   Future<void> hideWindowToTray() async {}
 
   @override
-  Future<void> syncNativeWindowTheme(bool isDark) async {}
+  Future<void> syncNativeWindowTheme(bool isDark, {int? accentRgb}) async {}
 
   @override
   Future<bool> setWindowEffect(bool enabled) async {

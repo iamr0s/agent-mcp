@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 import 'profile_endpoints_helper.dart';
 
 class ProfileEditDialog extends StatefulWidget {
@@ -261,7 +261,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   }
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final compact = MediaQuery.sizeOf(context).width < 540;
     final unboundIps = _unboundSelectedIps;
     final previewEps = _previewDirectEndpoints;
@@ -273,7 +273,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -292,7 +292,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
             children: [
               Row(
                 children: [
-                  const ClaudeSparkIcon(size: 18),
+                  const PrismSparkIcon(size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -322,7 +322,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                         label: '传输协议',
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: ClaudeSegmented<String>(
+                          child: PrismSegmented<String>(
                             value: _transport,
                             items: const [
                               ('dual', 'dual 双模'),
@@ -337,7 +337,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                         label: '接入与隧道',
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: ClaudeSegmented<String>(
+                          child: PrismSegmented<String>(
                             value: _tunnelMode,
                             items: const [
                               ('none', '直连 / 反代'),
@@ -348,7 +348,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ),
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _tunnelMode == 'none',
                         builder: (_) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
@@ -357,7 +357,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                             padding: const EdgeInsets.all(13),
                             decoration: ShapeDecoration(
                               color: c.recessed,
-                              shape: claudeSuperellipse(
+                              shape: prismSuperellipse(
                                 18,
                                 side: BorderSide(
                                   color: c.hairline.withValues(alpha: 0.65),
@@ -385,7 +385,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     Wrap(
                                       spacing: 6,
                                       children: [
-                                        ClaudeButton(
+                                        PrismButton(
                                           label: '选局域网与组网',
                                           compact: true,
                                           onPressed: () {
@@ -400,10 +400,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                           },
                                         ),
                                         if (_selectedDirectIps.isNotEmpty)
-                                          ClaudeButton(
+                                          PrismButton(
                                             label: '清空',
                                             compact: true,
-                                            variant: ClaudeBtnVariant.ghost,
+                                            variant: PrismBtnVariant.ghost,
                                             onPressed: () => setState(
                                               _selectedDirectIps.clear,
                                             ),
@@ -447,7 +447,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                       color: c.clay.withValues(
                                         alpha: c.isDark ? 0.14 : 0.08,
                                       ),
-                                      shape: claudeSuperellipse(
+                                      shape: prismSuperellipse(
                                         14,
                                         side: BorderSide(
                                           color: c.clay.withValues(alpha: 0.30),
@@ -468,7 +468,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                           ),
                                         ),
                                         const SizedBox(height: 5),
-                                        ClaudeCheckToggle(
+                                        PrismCheckToggle(
                                           value: _syncBindHosts,
                                           label: '保存时自动开放所选网卡监听并平滑重启',
                                           onChanged: (v) =>
@@ -499,12 +499,12 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                         ),
                                       ),
                                     ),
-                                    ClaudeButton(
+                                    PrismButton(
                                       label: _showManualUrls
                                           ? '收起自定义域名'
                                           : '添加反代域名 / 自定义地址',
                                       compact: true,
-                                      variant: ClaudeBtnVariant.ghost,
+                                      variant: PrismBtnVariant.ghost,
                                       leading: Icon(
                                         _showManualUrls
                                             ? Icons.keyboard_arrow_up_rounded
@@ -518,7 +518,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     ),
                                   ],
                                 ),
-                                ClaudeCollapsible(
+                                PrismCollapsible(
                                   expanded: _showManualUrls,
                                   builder: (_) => Padding(
                                     padding: const EdgeInsets.only(top: 8),
@@ -557,7 +557,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                                       .trim()
                                                       .isNotEmpty) ...[
                                                 const SizedBox(width: 6),
-                                                ClaudeButton(
+                                                PrismButton(
                                                   label: '',
                                                   compact: true,
                                                   tooltip: '移除该行',
@@ -572,11 +572,11 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                                   _manualUrlCtrls.length -
                                                       1) ...[
                                                 const SizedBox(width: 6),
-                                                ClaudeButton(
+                                                PrismButton(
                                                   label: '',
                                                   compact: true,
                                                   variant:
-                                                      ClaudeBtnVariant.clay,
+                                                      PrismBtnVariant.clay,
                                                   tooltip: '再添加一个自定义地址',
                                                   leading: const Icon(
                                                     Icons.add_rounded,
@@ -596,13 +596,13 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ),
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _tunnelMode == 'token',
                         builder: (_) => Column(
                           children: [
                             _ModalGridRow(
                               label: 'Tunnel Token',
-                              child: ClaudePasswordField(
+                              child: PrismPasswordField(
                                 controller: _tunTokenCtrl,
                                 hintText: 'Cloudflare Zero Trust eyJ... Token',
                               ),
@@ -620,7 +620,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ],
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _tunnelMode == 'quick',
                         builder: (_) => Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -630,11 +630,11 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ),
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _tunnelMode != 'none',
                         builder: (_) => Padding(
                           padding: const EdgeInsets.only(bottom: 10),
-                          child: ClaudeCheckToggle(
+                          child: PrismCheckToggle(
                             value: _tunnelAuto,
                             label: '跟随 MCP 服务自动启停该隧道',
                             onChanged: (v) => setState(() => _tunnelAuto = v),
@@ -645,7 +645,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                         label: '鉴权方式',
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: ClaudeSegmented<String>(
+                          child: PrismSegmented<String>(
                             value: _authMode,
                             items: const [
                               ('oauth-local', 'OAuth 2.1'),
@@ -656,7 +656,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ),
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _authMode == 'oauth-local',
                         builder: (_) => Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -667,7 +667,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                             ),
                             decoration: ShapeDecoration(
                               color: c.paper2,
-                              shape: claudeSuperellipse(
+                              shape: prismSuperellipse(
                                 10,
                                 side: BorderSide(color: c.hairline),
                               ),
@@ -702,12 +702,12 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                         ),
                                       ],
                                     ),
-                                    ClaudeButton(
+                                    PrismButton(
                                       label: _showStaticOAuthCreds
                                           ? '收起静态凭证'
                                           : '高级静态凭证（备用）',
                                       compact: true,
-                                      variant: ClaudeBtnVariant.ghost,
+                                      variant: PrismBtnVariant.ghost,
                                       onPressed: () => setState(
                                         () => _showStaticOAuthCreds =
                                             !_showStaticOAuthCreds,
@@ -715,7 +715,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     ),
                                   ],
                                 ),
-                                ClaudeCollapsible(
+                                PrismCollapsible(
                                   expanded: _showStaticOAuthCreds,
                                   builder: (_) => Padding(
                                     padding: const EdgeInsets.only(top: 10),
@@ -723,7 +723,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                       children: [
                                         _ModalGridRow(
                                           label: 'Client ID (备选)',
-                                          trailing: ClaudeButton(
+                                          trailing: PrismButton(
                                             label: '随机',
                                             compact: true,
                                             onPressed: () => setState(() {
@@ -745,7 +745,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                         ),
                                         _ModalGridRow(
                                           label: 'Client Secret',
-                                          trailing: ClaudeButton(
+                                          trailing: PrismButton(
                                             label: '随机',
                                             compact: true,
                                             onPressed: () => setState(() {
@@ -756,7 +756,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                               );
                                             }),
                                           ),
-                                          child: ClaudePasswordField(
+                                          child: PrismPasswordField(
                                             controller: _csecCtrl,
                                           ),
                                         ),
@@ -785,11 +785,11 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           ),
                         ),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _authMode == 'bearer',
                         builder: (_) => _ModalGridRow(
                           label: 'API Key',
-                          trailing: ClaudeButton(
+                          trailing: PrismButton(
                             label: '随机',
                             compact: true,
                             onPressed: () => setState(() {
@@ -797,16 +797,16 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                   generateRandomToken('sk-mcp-', 28);
                             }),
                           ),
-                          child: ClaudePasswordField(controller: _apiKeyCtrl),
+                          child: PrismPasswordField(controller: _apiKeyCtrl),
                         ),
                       ),
                       Divider(color: c.hairline, height: 22),
-                      ClaudeCheckToggle(
+                      PrismCheckToggle(
                         value: _inheritPerm,
                         label: '继承全局默认权限（取消勾选可为该入口单独指定权限）',
                         onChanged: (v) => setState(() => _inheritPerm = v),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: !_inheritPerm,
                         builder: (_) => Padding(
                           padding: const EdgeInsets.only(top: 10),
@@ -817,19 +817,19 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                 spacing: 16,
                                 runSpacing: 6,
                                 children: [
-                                  ClaudeCheckToggle(
+                                  PrismCheckToggle(
                                     value: _writable,
                                     label: '允许写入与执行',
                                     onChanged: (v) =>
                                         setState(() => _writable = v),
                                   ),
-                                  ClaudeCheckToggle(
+                                  PrismCheckToggle(
                                     value: _allowSecrets,
                                     label: '允许敏感文件',
                                     onChanged: (v) =>
                                         setState(() => _allowSecrets = v),
                                   ),
-                                  ClaudeCheckToggle(
+                                  PrismCheckToggle(
                                     value: _relaxedCmd,
                                     label: '客户端免弹窗声明',
                                     onChanged: (v) =>
@@ -863,15 +863,15 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                 spacing: 10,
                 runSpacing: 8,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '取消',
                     compact: true,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: '确定保存',
                     compact: true,
-                    variant: ClaudeBtnVariant.clay,
+                    variant: PrismBtnVariant.clay,
                     onPressed: _submit,
                   ),
                 ],
@@ -933,7 +933,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
   }
 
   Widget _copyRow(
-    ClaudePalette c,
+    PrismPalette c,
     String label,
     String val,
     bool stackRow, {
@@ -944,7 +944,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8.5),
       decoration: ShapeDecoration(
         color: c.recessed,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           14,
           side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
         ),
@@ -974,7 +974,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
               widget.onToast('已复制 $label (${opt.badge})');
             },
           )
-        : ClaudeButton(
+        : PrismButton(
             label: '复制',
             compact: true,
             leading: const Icon(Icons.copy_rounded),
@@ -1022,7 +1022,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final p = widget.profile;
     final base = _selectedBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final tr = (p['transport'] ?? 'dual').toString();
@@ -1037,7 +1037,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -1060,7 +1060,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                   Expanded(
                     child: Row(
                       children: [
-                        const ClaudeSparkIcon(size: 18),
+                        const PrismSparkIcon(size: 18),
                         const SizedBox(width: 10),
                         Flexible(
                           child: Text(
@@ -1074,7 +1074,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ClaudeButton(
+                  PrismButton(
                     label: '关闭',
                     compact: true,
                     onPressed: () => Navigator.of(context).pop(),
@@ -1108,13 +1108,13 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                                       color: c.muted,
                                     ),
                                   ),
-                                  ClaudeDropMenu<String>(
+                                  PrismDropMenu<String>(
                                     value: _selectedBaseUrl,
                                     leadingIcon: Icons.lan_outlined,
                                     minMenuWidth: 240,
                                     items: [
                                       for (final u in widget.effectiveBaseUrls)
-                                        ClaudeDropMenuItem(
+                                        PrismDropMenuItem(
                                           value: u,
                                           label: u,
                                           icon: u.startsWith('https://')
@@ -1164,7 +1164,7 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
                               ),
                               decoration: ShapeDecoration(
                                 color: c.sageBg,
-                                shape: claudeSuperellipse(
+                                shape: prismSuperellipse(
                                   16,
                                   side: BorderSide(
                                     color: c.sage.withValues(alpha: 0.25),
@@ -1215,12 +1215,12 @@ class _ProfileConnectDialogState extends State<ProfileConnectDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: _checking ? '测试中...' : '测试 /health 连通性',
                     compact: true,
                     loading: _checking,
                     leading: const Icon(Icons.monitor_heart_outlined),
-                    variant: ClaudeBtnVariant.ink,
+                    variant: PrismBtnVariant.ink,
                     onPressed: _checking ? null : _testHealth,
                   ),
                 ],
@@ -1246,7 +1246,7 @@ class _ModalGridRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return LayoutBuilder(
       builder: (ctx, box) {
         if (box.maxWidth < 480) {
@@ -1312,7 +1312,7 @@ class _DialogHealthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final ok = result['ok'] == true;
     final rawBody = (result['body'] ?? '').toString().trim();
     final topErr = (result['error'] ?? '').toString().trim();
@@ -1337,7 +1337,7 @@ class _DialogHealthCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: ShapeDecoration(
         color: bg,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           18,
           side: BorderSide(color: accent.withValues(alpha: 0.35)),
         ),
@@ -1365,7 +1365,7 @@ class _DialogHealthCard extends StatelessWidget {
                 ),
               ),
               if (ok && parsedBody != null && parsedBody['server_name'] != null)
-                ClaudePill(
+                PrismPill(
                   text: '${parsedBody['server_name']}',
                   mono: false,
                   bg: c.paper2.withValues(alpha: 0.82),
@@ -1378,7 +1378,7 @@ class _DialogHealthCard extends StatelessWidget {
               if (i > 0) const SizedBox(height: 5),
               Row(
                 children: [
-                  ClaudePill(
+                  PrismPill(
                     text: '${probes[i]['protocol'] ?? ''}'.toUpperCase(),
                     fg: '${probes[i]['protocol']}'.toUpperCase() == 'HTTPS'
                         ? c.sage
@@ -1394,7 +1394,7 @@ class _DialogHealthCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  ClaudePill(
+                  PrismPill(
                     text:
                         '${probes[i]['ok'] == true ? "✓ " : "✕ "}${probes[i]['status_text'] ?? ""}',
                     mono: false,

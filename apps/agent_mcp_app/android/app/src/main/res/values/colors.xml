@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="claude_paper_light">#FAF9F5</color>
-    <color name="claude_paper_dark">#141413</color>
+    <color name="prism_paper_light">#FAFAFB</color>
+    <color name="prism_paper_dark">#0A0A0C</color>
 </resources>

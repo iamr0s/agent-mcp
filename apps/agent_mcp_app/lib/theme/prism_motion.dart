@@ -9,7 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 /// Physics-backed & editorial motion primitives built on native spring physics
-/// and Anthropic's calm, tactile design language.
+/// and the Concentric Liquid Prism tactile design language.
 class SpringCurve extends Curve {
   SpringCurve(SpringDescription spring, {required this.seconds})
       : _simulation = SpringSimulation(spring, 0, 1, 0);
@@ -36,11 +36,11 @@ class _ThemeSwitchingScope extends InheritedWidget {
       oldWidget.isSwitching != isSwitching;
 }
 
-abstract final class ClaudeMotion {
-  /// Anthropic editorial exponential deceleration (`cubic-bezier(0.16, 1, 0.3, 1)`).
+abstract final class PrismMotion {
+  /// Prism editorial exponential deceleration (`cubic-bezier(0.16, 1, 0.3, 1)`).
   static const Curve editorialOut = Cubic(0.16, 1.0, 0.3, 1.0);
 
-  /// Anthropic standard token (`cubic-bezier(0.2, 0, 0, 1)`).
+  /// Prism standard token (`cubic-bezier(0.2, 0, 0, 1)`).
   static const Curve standard = Cubic(0.2, 0.0, 0.0, 1.0);
 
   /// Clean exit curve without sluggish tail.
@@ -105,12 +105,12 @@ abstract final class ClaudeMotion {
 /// Pre-captures the outgoing frame *before* mutating `ThemeMode`, swaps all
 /// underlying widget colors instantaneously in 1 pass, and cross-fades / clips
 /// smoothly without `debugNeedsPaint` aborts or competing `AnimatedContainer` lag.
-class ClaudeThemeCrossFade extends StatefulWidget {
+class PrismThemeCrossFade extends StatefulWidget {
   final ThemeMode themeMode;
   final Brightness platformBrightness;
   final Widget child;
 
-  const ClaudeThemeCrossFade({
+  const PrismThemeCrossFade({
     super.key,
     required this.themeMode,
     required this.platformBrightness,
@@ -124,7 +124,7 @@ class ClaudeThemeCrossFade extends StatefulWidget {
     VoidCallback applyThemeChange, {
     Offset? origin,
   }) async {
-    final state = context.findAncestorStateOfType<_ClaudeThemeCrossFadeState>();
+    final state = context.findAncestorStateOfType<_PrismThemeCrossFadeState>();
     if (state == null) {
       applyThemeChange();
       return;
@@ -133,10 +133,10 @@ class ClaudeThemeCrossFade extends StatefulWidget {
   }
 
   @override
-  State<ClaudeThemeCrossFade> createState() => _ClaudeThemeCrossFadeState();
+  State<PrismThemeCrossFade> createState() => _PrismThemeCrossFadeState();
 }
 
-class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
+class _PrismThemeCrossFadeState extends State<PrismThemeCrossFade>
     with SingleTickerProviderStateMixin {
   final GlobalKey _repaintKey = GlobalKey();
   late final AnimationController _ctrl = AnimationController(
@@ -169,7 +169,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
   }
 
   @override
-  void didUpdateWidget(covariant ClaudeThemeCrossFade oldWidget) {
+  void didUpdateWidget(covariant PrismThemeCrossFade oldWidget) {
     super.didUpdateWidget(oldWidget);
     final nextBrightness = _resolveBrightness(
       widget.themeMode,
@@ -268,6 +268,7 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
       isSwitching: _switching,
       child: Stack(
         alignment: Alignment.topLeft,
+        textDirection: TextDirection.ltr,
         fit: StackFit.passthrough,
         children: [
           RepaintBoundary(
@@ -295,6 +296,8 @@ class _ClaudeThemeCrossFadeState extends State<ClaudeThemeCrossFade>
                         final radius = maxR * t;
                         final ringOpacity = (1.0 - t).clamp(0.0, 1.0) * 0.55;
                         return Stack(
+                          alignment: Alignment.topLeft,
+                          textDirection: TextDirection.ltr,
                           fit: StackFit.expand,
                           children: [
                             ClipPath(
@@ -350,12 +353,12 @@ Future<T> runWithMinDuration<T>(
 ///   inactive tabs so background tabs cost 0ms per 120Hz frame.
 /// - Supports directional slide + fade (`Axis.vertical` for sidebar,
 ///   `Axis.horizontal` for mobile bottom dock) with a constant widget tree.
-class ClaudeKeepAliveTabs extends StatefulWidget {
+class PrismKeepAliveTabs extends StatefulWidget {
   final int index;
   final List<Widget> children;
   final Axis axis;
 
-  const ClaudeKeepAliveTabs({
+  const PrismKeepAliveTabs({
     super.key,
     required this.index,
     required this.children,
@@ -363,10 +366,10 @@ class ClaudeKeepAliveTabs extends StatefulWidget {
   });
 
   @override
-  State<ClaudeKeepAliveTabs> createState() => _ClaudeKeepAliveTabsState();
+  State<PrismKeepAliveTabs> createState() => _PrismKeepAliveTabsState();
 }
 
-class _ClaudeKeepAliveTabsState extends State<ClaudeKeepAliveTabs>
+class _PrismKeepAliveTabsState extends State<PrismKeepAliveTabs>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
@@ -386,7 +389,7 @@ class _ClaudeKeepAliveTabsState extends State<ClaudeKeepAliveTabs>
   int _direction = 1;
 
   @override
-  void didUpdateWidget(covariant ClaudeKeepAliveTabs oldWidget) {
+  void didUpdateWidget(covariant PrismKeepAliveTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_visited.length != widget.children.length) {
       final nextVisited = List<bool>.filled(widget.children.length, false);
@@ -405,7 +408,7 @@ class _ClaudeKeepAliveTabsState extends State<ClaudeKeepAliveTabs>
         _visited[widget.index] = true;
       }
       _direction = widget.index > oldWidget.index ? 1 : -1;
-      final d = ClaudeMotion.duration(
+      final d = PrismMotion.duration(
         context,
         const Duration(milliseconds: 220),
       );
@@ -485,7 +488,7 @@ class _KeepAliveTabLayer extends StatelessWidget {
               if (isActive) {
                 final t = animation.isCompleted
                     ? 1.0
-                    : ClaudeMotion.editorialOut
+                    : PrismMotion.editorialOut
                         .transform(animation.value)
                         .clamp(0.0, 1.0);
                 opacity = t;
@@ -520,11 +523,11 @@ class _KeepAliveTabLayer extends StatelessWidget {
 }
 
 /// Legacy single-child wrapper preserved for compatibility.
-class ClaudePageSwitcher extends StatelessWidget {
+class PrismPageSwitcher extends StatelessWidget {
   final int index;
   final Widget child;
 
-  const ClaudePageSwitcher({
+  const PrismPageSwitcher({
     super.key,
     required this.index,
     required this.child,
@@ -535,13 +538,13 @@ class ClaudePageSwitcher extends StatelessWidget {
 }
 
 /// Pass-through reveal container: page-level transitions are handled once by
-/// [ClaudeKeepAliveTabs] so inner sections never double-flash on tab switch.
-class ClaudeStaggeredReveal extends StatelessWidget {
+/// [PrismKeepAliveTabs] so inner sections never double-flash on tab switch.
+class PrismStaggeredReveal extends StatelessWidget {
   final int index;
   final Widget child;
   final double offsetY;
 
-  const ClaudeStaggeredReveal({
+  const PrismStaggeredReveal({
     super.key,
     required this.index,
     required this.child,
@@ -553,12 +556,12 @@ class ClaudeStaggeredReveal extends StatelessWidget {
 }
 
 /// High-frame-rate accordion drawer that unmounts hidden subtrees once closed.
-class ClaudeCollapsible extends StatefulWidget {
+class PrismCollapsible extends StatefulWidget {
   final bool expanded;
   final WidgetBuilder builder;
   final Duration duration;
 
-  const ClaudeCollapsible({
+  const PrismCollapsible({
     super.key,
     required this.expanded,
     required this.builder,
@@ -566,10 +569,10 @@ class ClaudeCollapsible extends StatefulWidget {
   });
 
   @override
-  State<ClaudeCollapsible> createState() => _ClaudeCollapsibleState();
+  State<PrismCollapsible> createState() => _PrismCollapsibleState();
 }
 
-class _ClaudeCollapsibleState extends State<ClaudeCollapsible>
+class _PrismCollapsibleState extends State<PrismCollapsible>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
@@ -580,10 +583,10 @@ class _ClaudeCollapsibleState extends State<ClaudeCollapsible>
     });
 
   @override
-  void didUpdateWidget(covariant ClaudeCollapsible oldWidget) {
+  void didUpdateWidget(covariant PrismCollapsible oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.expanded != oldWidget.expanded) {
-      final d = ClaudeMotion.duration(context, widget.duration);
+      final d = PrismMotion.duration(context, widget.duration);
       _ctrl.duration = d;
       if (d == Duration.zero) {
         _ctrl.value = widget.expanded ? 1.0 : 0.0;
@@ -610,7 +613,7 @@ class _ClaudeCollapsibleState extends State<ClaudeCollapsible>
       animation: _ctrl,
       builder: (ctx, child) {
         final t = widget.expanded
-            ? ClaudeMotion.editorialOut.transform(_ctrl.value)
+            ? PrismMotion.editorialOut.transform(_ctrl.value)
             : Curves.easeInCubic.transform(_ctrl.value);
         return ClipRect(
           child: Align(
@@ -629,12 +632,12 @@ class _ClaudeCollapsibleState extends State<ClaudeCollapsible>
 }
 
 /// Pure opacity cross-fade without scale wobble, preventing subpixel text jitter.
-class ClaudeFadeBox extends StatelessWidget {
+class PrismFadeBox extends StatelessWidget {
   final Widget child;
   final AlignmentGeometry alignment;
   final Duration duration;
 
-  const ClaudeFadeBox({
+  const PrismFadeBox({
     super.key,
     required this.child,
     this.alignment = Alignment.centerLeft,
@@ -644,8 +647,8 @@ class ClaudeFadeBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: ClaudeMotion.duration(context, duration),
-      switchInCurve: ClaudeMotion.editorialOut,
+      duration: PrismMotion.duration(context, duration),
+      switchInCurve: PrismMotion.editorialOut,
       switchOutCurve: Curves.easeOut,
       layoutBuilder: (current, previous) => Stack(
         alignment: alignment,
@@ -668,12 +671,12 @@ class ClaudeFadeBox extends StatelessWidget {
 ///   (eliminating the 8dp row jump when services or tunnels toggle!).
 /// - Isolated inside its own `RepaintBoundary` + `CustomPaint` so breathing
 ///   ripples never dirty ancestor layouts or list cards.
-/// Global shared 120Hz phase clock driving all pulsing [ClaudeStatusDot]s from
+/// Global shared 120Hz phase clock driving all pulsing [PrismStatusDot]s from
 /// a single synchronized [Ticker], automatically stopping and disposing the
 /// ticker when zero pulsing dots are mounted or when the window is minimized/hidden.
-class ClaudePulseClock extends ChangeNotifier implements ValueListenable<double> {
-  static final ClaudePulseClock instance = ClaudePulseClock._();
-  ClaudePulseClock._();
+class PrismPulseClock extends ChangeNotifier implements ValueListenable<double> {
+  static final PrismPulseClock instance = PrismPulseClock._();
+  PrismPulseClock._();
 
   static const int _periodUs = 2200000;
   Ticker? _ticker;
@@ -728,12 +731,12 @@ class ClaudePulseClock extends ChangeNotifier implements ValueListenable<double>
   }
 }
 
-class ClaudeStatusDot extends StatefulWidget {
+class PrismStatusDot extends StatefulWidget {
   final Color color;
   final bool pulsing;
   final double size;
 
-  const ClaudeStatusDot({
+  const PrismStatusDot({
     super.key,
     required this.color,
     this.pulsing = false,
@@ -741,19 +744,19 @@ class ClaudeStatusDot extends StatefulWidget {
   });
 
   @override
-  State<ClaudeStatusDot> createState() => _ClaudeStatusDotState();
+  State<PrismStatusDot> createState() => _PrismStatusDotState();
 }
 
-class _ClaudeStatusDotState extends State<ClaudeStatusDot> {
+class _PrismStatusDotState extends State<PrismStatusDot> {
   bool _subscribed = false;
 
   void _updateSubscription(bool wantPulse) {
     if (wantPulse && !_subscribed) {
       _subscribed = true;
-      ClaudePulseClock.instance.subscribe();
+      PrismPulseClock.instance.subscribe();
     } else if (!wantPulse && _subscribed) {
       _subscribed = false;
-      ClaudePulseClock.instance.unsubscribe();
+      PrismPulseClock.instance.unsubscribe();
     }
   }
 
@@ -765,7 +768,7 @@ class _ClaudeStatusDotState extends State<ClaudeStatusDot> {
   }
 
   @override
-  void didUpdateWidget(covariant ClaudeStatusDot oldWidget) {
+  void didUpdateWidget(covariant PrismStatusDot oldWidget) {
     super.didUpdateWidget(oldWidget);
     final reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     _updateSubscription(widget.pulsing && !reducedMotion);
@@ -789,7 +792,7 @@ class _ClaudeStatusDotState extends State<ClaudeStatusDot> {
         child: CustomPaint(
           painter: _StatusDotPainter(
             phaseListenable:
-                effectivePulsing ? ClaudePulseClock.instance : null,
+                effectivePulsing ? PrismPulseClock.instance : null,
             color: widget.color,
             dotSize: widget.size,
             pulsing: effectivePulsing,
@@ -891,19 +894,19 @@ class _CircularWaveRingPainter extends CustomPainter {
 ///
 /// Unlike Flutter's default [AnimatedSwitcher], which centers outgoing/incoming
 /// children in a [Stack] and causes shorter sub-pages inside a scroll view to
-/// float in the middle and snap to `y = 0` on completion, [ClaudeSharedAxisSwitcher]
+/// float in the middle and snap to `y = 0` on completion, [PrismSharedAxisSwitcher]
 /// pins outgoing children via [Positioned] at `top: 0, left: 0, right: 0` so:
 /// 1. Intrinsic layout height immediately matches the incoming child (zero snap).
 /// 2. Outgoing content exits quickly (~85ms) before incoming glides into place,
 ///    eliminating muddy 50/50 text overlap.
-class ClaudeSharedAxisSwitcher extends StatefulWidget {
+class PrismSharedAxisSwitcher extends StatefulWidget {
   final Widget child;
   final Axis axis;
   final bool reverse;
   final Duration duration;
   final double distance;
 
-  const ClaudeSharedAxisSwitcher({
+  const PrismSharedAxisSwitcher({
     super.key,
     required this.child,
     this.axis = Axis.vertical,
@@ -913,11 +916,11 @@ class ClaudeSharedAxisSwitcher extends StatefulWidget {
   });
 
   @override
-  State<ClaudeSharedAxisSwitcher> createState() =>
-      _ClaudeSharedAxisSwitcherState();
+  State<PrismSharedAxisSwitcher> createState() =>
+      _PrismSharedAxisSwitcherState();
 }
 
-class _ClaudeSharedAxisSwitcherState extends State<ClaudeSharedAxisSwitcher>
+class _PrismSharedAxisSwitcherState extends State<PrismSharedAxisSwitcher>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
@@ -934,13 +937,13 @@ class _ClaudeSharedAxisSwitcherState extends State<ClaudeSharedAxisSwitcher>
   bool _reverse = false;
 
   @override
-  void didUpdateWidget(covariant ClaudeSharedAxisSwitcher oldWidget) {
+  void didUpdateWidget(covariant PrismSharedAxisSwitcher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.duration != oldWidget.duration) {
       _ctrl.duration = widget.duration;
     }
     if (widget.child.key != _currentChild.key) {
-      final effectiveDur = ClaudeMotion.duration(context, widget.duration);
+      final effectiveDur = PrismMotion.duration(context, widget.duration);
       if (effectiveDur == Duration.zero) {
         _outgoingChild = null;
         _currentChild = widget.child;
@@ -985,7 +988,7 @@ class _ClaudeSharedAxisSwitcherState extends State<ClaudeSharedAxisSwitcher>
 
         // Smooth incoming glide (0.08 -> 1.0) with editorial deceleration
         final inRaw = ((t - 0.08) / 0.92).clamp(0.0, 1.0);
-        final inCurve = ClaudeMotion.editorialOut.transform(inRaw);
+        final inCurve = PrismMotion.editorialOut.transform(inRaw);
         final inOpacity = ((t - 0.06) / 0.68).clamp(0.0, 1.0);
         final inShift = sign * widget.distance * (1.0 - inCurve);
 

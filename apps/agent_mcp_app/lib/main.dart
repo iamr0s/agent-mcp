@@ -10,7 +10,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 
 import 'services/console_backend.dart';
-import 'theme/claude_theme.dart';
+import 'theme/prism_theme.dart';
 import 'views/activity_page.dart';
 import 'views/exposure_page.dart';
 import 'views/setup_page.dart';
@@ -59,6 +59,7 @@ class AgentMcpConsoleApp extends StatefulWidget {
 
 class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
   ThemeMode _themeMode = ThemeMode.system;
+  PrismAccentId _accentId = PrismAccentId.indigo;
   bool _dynamicColor = false;
   bool _dynamicColorSupported = false;
   final ValueNotifier<({String? message, int tick})> _toastNotifier =
@@ -68,6 +69,7 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
   @override
   void initState() {
     super.initState();
+    PrismPalette.configureAccent(_accentId);
     _initAndroidDynamicColor();
   }
 
@@ -78,7 +80,7 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
       final lVal = dyn['accentLight'];
       final dVal = dyn['accentDark'];
       if (lVal is int && dVal is int) {
-        ClaudePalette.configureDynamicColor(
+        PrismPalette.configureDynamicColor(
           enabled: _dynamicColor,
           lightAccent: Color(lVal),
           darkAccent: Color(dVal),
@@ -91,9 +93,16 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
   }
 
   void _setDynamicColor(bool enabled) {
-    ClaudePalette.configureDynamicColor(enabled: enabled);
+    PrismPalette.configureDynamicColor(enabled: enabled);
     if (_dynamicColor != enabled) {
       setState(() => _dynamicColor = enabled);
+    }
+  }
+
+  void _setAccentTheme(PrismAccentId next) {
+    PrismPalette.configureAccent(next);
+    if (_accentId != next) {
+      setState(() => _accentId = next);
     }
   }
 
@@ -120,10 +129,11 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
 
   @override
   Widget build(BuildContext context) {
+    PrismPalette.configureAccent(_accentId);
     final platformBrightness = MediaQuery.maybePlatformBrightnessOf(context) ??
         WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
-    return ClaudeThemeCrossFade(
+    return PrismThemeCrossFade(
       themeMode: _themeMode,
       platformBrightness: platformBrightness,
       child: MaterialApp(
@@ -131,8 +141,8 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const _ConsoleScrollBehavior(),
         themeAnimationDuration: Duration.zero,
-        theme: buildClaudeTheme(ClaudePalette.activeLight),
-        darkTheme: buildClaudeTheme(ClaudePalette.activeDark),
+        theme: buildPrismTheme(PrismPalette.activeLight),
+        darkTheme: buildPrismTheme(PrismPalette.activeDark),
         themeMode: _themeMode,
         builder: (ctx, navChild) {
           return Stack(
@@ -145,9 +155,11 @@ class _AgentMcpConsoleAppState extends State<AgentMcpConsoleApp> {
         home: ConsoleShellScreen(
           backend: widget.backend,
           themeMode: _themeMode,
+          accentId: _accentId,
           dynamicColor: _dynamicColor,
           dynamicColorSupported: _dynamicColorSupported,
           onDynamicColorChanged: _setDynamicColor,
+          onAccentChanged: _setAccentTheme,
           onGlobalToast: _showTopLevelToast,
           onThemeChanged: (m) {
             if (_themeMode != m) {
@@ -167,7 +179,7 @@ class _TopLevelToastLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     final safePad = MediaQuery.paddingOf(context);
@@ -183,15 +195,15 @@ class _TopLevelToastLayer extends StatelessWidget {
             child: Align(
               alignment: Alignment.bottomRight,
               child: AnimatedSwitcher(
-                duration: ClaudeMotion.duration(
+                duration: PrismMotion.duration(
                   context,
                   const Duration(milliseconds: 230),
                 ),
-                reverseDuration: ClaudeMotion.duration(
+                reverseDuration: PrismMotion.duration(
                   context,
                   const Duration(milliseconds: 150),
                 ),
-                switchInCurve: ClaudeMotion.snappySpring,
+                switchInCurve: PrismMotion.snappySpring,
                 switchOutCurve: Curves.easeInCubic,
                 transitionBuilder: (child, anim) {
                   return FadeTransition(
@@ -210,7 +222,7 @@ class _TopLevelToastLayer extends StatelessWidget {
                     : Material(
                         key: ValueKey('toast-${state.tick}'),
                         type: MaterialType.transparency,
-                        child: ClaudeGlassBar(
+                        child: PrismGlassBar(
                           blurSigma: 20,
                           borderRadius: 14,
                           tintColor: c.isDark
@@ -237,7 +249,7 @@ class _TopLevelToastLayer extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                ClaudeSparkIcon(
+                                PrismSparkIcon(
                                   size: 14,
                                   color: c.isDark
                                       ? c.clay
@@ -272,9 +284,11 @@ class _TopLevelToastLayer extends StatelessWidget {
 class ConsoleShellScreen extends StatefulWidget {
   final ConsoleBackend backend;
   final ThemeMode themeMode;
+  final PrismAccentId accentId;
   final bool dynamicColor;
   final bool dynamicColorSupported;
   final ValueChanged<bool>? onDynamicColorChanged;
+  final ValueChanged<PrismAccentId>? onAccentChanged;
   final ValueChanged<ThemeMode> onThemeChanged;
   final ValueChanged<String>? onGlobalToast;
 
@@ -282,9 +296,11 @@ class ConsoleShellScreen extends StatefulWidget {
     super.key,
     required this.backend,
     required this.themeMode,
+    this.accentId = PrismAccentId.indigo,
     this.dynamicColor = false,
     this.dynamicColorSupported = false,
     this.onDynamicColorChanged,
+    this.onAccentChanged,
     required this.onThemeChanged,
     this.onGlobalToast,
   });
@@ -298,7 +314,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '3.2.1';
+  String _version = '3.3.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -308,6 +324,9 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _restartingService = false;
   int _evSeq = 0;
   bool? _lastSyncedWindowDark;
+  int? _lastSyncedAccentRgb;
+  String? _lastConfigThemeMode;
+  String? _lastConfigAccentKey;
   String _lastStatusSignature = '';
   String _remoteConnError = '';
 
@@ -358,7 +377,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     final appBackgrounded = _appLifecycle == AppLifecycleState.paused ||
         _appLifecycle == AppLifecycleState.hidden ||
         _appLifecycle == AppLifecycleState.detached;
-    ClaudePulseClock.instance.setPaused(winHidden || appBackgrounded);
+    PrismPulseClock.instance.setPaused(winHidden || appBackgrounded);
   }
 
   @override
@@ -427,7 +446,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     final targetVal = shouldCollapse ? 0.0 : 1.0;
     if ((_sidebarCtrl.value - targetVal).abs() > 0.001 &&
         !_sidebarCtrl.isAnimating) {
-      final d = ClaudeMotion.duration(
+      final d = PrismMotion.duration(
         context,
         const Duration(milliseconds: 240),
       );
@@ -438,7 +457,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
           _sidebarCtrl.animateTo(
             targetVal,
             duration: d,
-            curve: ClaudeMotion.editorialOut,
+            curve: PrismMotion.editorialOut,
           ),
         );
       }
@@ -485,7 +504,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.2.1').toString();
+      _version = (auth['version'] ?? '3.3.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -528,7 +547,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   Future<void> _openCommandPalette() async {
     if (!mounted || !_authenticated) return;
-    final res = await showClaudeDialog<Map<String, dynamic>>(
+    final res = await showPrismDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _GlobalCommandPaletteDialog(
         serverName: _serverName,
@@ -602,7 +621,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _updatePeriodicTimer = Timer.periodic(const Duration(hours: 1), (_) {
       if (mounted &&
           _authenticated &&
-          !ClaudePulseClock.instance.isPaused &&
+          !PrismPulseClock.instance.isPaused &&
           _updatePrefs.isCheckDue()) {
         unawaited(_checkForUpdates(manual: false));
       }
@@ -657,7 +676,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     if (!mounted || _updateDialogOpen) return;
     _updateDialogOpen = true;
     try {
-      final outcome = await showClaudeDialog<UpdateDialogOutcome>(
+      final outcome = await showPrismDialog<UpdateDialogOutcome>(
         context: context,
         builder: (_) => UpdateAvailableDialog(
           backend: widget.backend,
@@ -692,7 +711,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _eventSub = widget.backend.subscribeEvents().listen(_upsertEvent);
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!ClaudePulseClock.instance.isPaused) {
+      if (!PrismPulseClock.instance.isPaused) {
         _refreshStatus();
       }
     });
@@ -789,6 +808,30 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             WidgetsBinding.instance.addPostFrameCallback((_) {
               widget.onDynamicColorChanged?.call(nextDyn);
             });
+          }
+          final rawMode = (_config['theme_mode'] ?? '').toString().trim().toLowerCase();
+          if (rawMode.isNotEmpty && rawMode != _lastConfigThemeMode) {
+            _lastConfigThemeMode = rawMode;
+            final parsedMode = switch (rawMode) {
+              'light' => ThemeMode.light,
+              'dark' => ThemeMode.dark,
+              _ => ThemeMode.system,
+            };
+            if (parsedMode != widget.themeMode) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                widget.onThemeChanged(parsedMode);
+              });
+            }
+          }
+          final rawAccent = (_config['accent_theme'] ?? '').toString().trim().toLowerCase();
+          if (rawAccent.isNotEmpty && rawAccent != _lastConfigAccentKey) {
+            _lastConfigAccentKey = rawAccent;
+            final parsedAccent = PrismAccentId.fromKey(rawAccent);
+            if (parsedAccent != widget.accentId) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                widget.onAccentChanged?.call(parsedAccent);
+              });
+            }
           }
         }
         if (st['tunnels'] is Map) {
@@ -1021,28 +1064,79 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     return null;
   }
 
+  static String _themeModeKey(ThemeMode m) => switch (m) {
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+        ThemeMode.system => 'system',
+      };
+
   void _applyThemeWithSnapshot(ThemeMode next, {Offset? origin}) {
     if (widget.themeMode == next) return;
+    final key = _themeModeKey(next);
+    _lastConfigThemeMode = key;
+    _config['theme_mode'] = key;
     unawaited(
-      ClaudeThemeCrossFade.runThemeTransition(
+      PrismThemeCrossFade.runThemeTransition(
         context,
         () => widget.onThemeChanged(next),
         origin: origin ?? _themeToggleOrigin(),
       ),
     );
+    unawaited(
+      widget.backend.saveConfig({'theme_mode': key}).catchError(
+        (_) => <String, dynamic>{},
+      ),
+    );
   }
 
-  void _cycleTheme(ClaudePalette c) {
+  void _applyAccentWithSnapshot(PrismAccentId next, {Offset? origin}) {
+    if (widget.accentId == next && !widget.dynamicColor) return;
+    _lastConfigAccentKey = next.key;
+    _config['accent_theme'] = next.key;
+    final patch = <String, dynamic>{'accent_theme': next.key};
+    if (widget.dynamicColor) {
+      _config['dynamic_color'] = false;
+      patch['dynamic_color'] = false;
+    }
+    unawaited(
+      PrismThemeCrossFade.runThemeTransition(
+        context,
+        () {
+          if (widget.dynamicColor) {
+            widget.onDynamicColorChanged?.call(false);
+          }
+          widget.onAccentChanged?.call(next);
+        },
+        origin: origin ?? _themeToggleOrigin(),
+      ),
+    );
+    unawaited(
+      widget.backend.saveConfig(patch).catchError(
+        (_) => <String, dynamic>{},
+      ),
+    );
+  }
+
+  void _cycleTheme(PrismPalette c) {
     final next = c.isDark ? ThemeMode.light : ThemeMode.dark;
     _applyThemeWithSnapshot(next, origin: _themeToggleOrigin());
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
-    if ((widget.backend.hasCustomTitleBar || widget.backend.isAndroidPlatform) && _lastSyncedWindowDark != c.isDark) {
+    final c = PrismPalette.of(context);
+    final curAccentRgb = c.accentRgb24;
+    if ((widget.backend.hasCustomTitleBar || widget.backend.isAndroidPlatform) &&
+        (_lastSyncedWindowDark != c.isDark ||
+            _lastSyncedAccentRgb != curAccentRgb)) {
       _lastSyncedWindowDark = c.isDark;
-      unawaited(widget.backend.syncNativeWindowTheme(c.isDark));
+      _lastSyncedAccentRgb = curAccentRgb;
+      unawaited(
+        widget.backend.syncNativeWindowTheme(
+          c.isDark,
+          accentRgb: curAccentRgb,
+        ),
+      );
     }
 
     return ValueListenableBuilder<DesktopWindowState>(
@@ -1065,7 +1159,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     showAuthControls: false,
                   ),
                 const Expanded(
-                  child: Center(child: ClaudeSparkIcon(size: 28)),
+                  child: Center(child: PrismSparkIcon(size: 28)),
                 ),
               ],
             ),
@@ -1106,7 +1200,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   }
 
   Widget _buildEditorialHeaderBar(
-    ClaudePalette c, {
+    PrismPalette c, {
     required DesktopWindowState winState,
     required bool micaActive,
     bool showAuthControls = true,
@@ -1159,7 +1253,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           _setupNavHandle.inMobileSubpage;
                       return AnimatedSwitcher(
                         duration: const Duration(milliseconds: 190),
-                        switchInCurve: ClaudeMotion.editorialOut,
+                        switchInCurve: PrismMotion.editorialOut,
                         switchOutCurve: Curves.easeInCubic,
                         layoutBuilder: (currentChild, previousChildren) => Stack(
                           alignment: Alignment.centerLeft,
@@ -1185,10 +1279,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                       borderRadius: BorderRadius.circular(999),
                                       child: CustomPaint(
                                         foregroundPainter:
-                                            ClaudeSpecularRimPainter(
+                                            PrismSpecularRimPainter(
                                           radius: 999,
                                           isDark: c.isDark,
-                                          accentTint: c.sage,
+                                          accentTint: c.navTint,
                                           intensity: 0.92,
                                         ),
                                         child: Container(
@@ -1204,10 +1298,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                               begin: Alignment.topCenter,
                                               end: Alignment.bottomCenter,
                                               colors: [
-                                                c.isDark
-                                                    ? const Color(0x2E10B981)
-                                                    : const Color(0xF2FFFFFF),
-                                                c.sageBg,
+                                                c.navCapsuleTop,
+                                                c.navCapsuleBottom,
                                               ],
                                             ),
                                             shape: const StadiumBorder(),
@@ -1229,7 +1321,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                 Icons
                                                     .arrow_back_ios_new_rounded,
                                                 size: 11.5,
-                                                color: c.sage,
+                                                color: c.navActiveIcon,
                                               ),
                                               const SizedBox(width: 4),
                                               Flexible(
@@ -1242,7 +1334,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                     c,
                                                     size: 12.0,
                                                     weight: FontWeight.w600,
-                                                    color: c.ink,
+                                                    color: c.navActiveText,
                                                   ),
                                                 ),
                                               ),
@@ -1259,7 +1351,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                 ignoring: hasCustomBar,
                                 child: Row(
                                   children: [
-                                    const ClaudeSparkIcon(size: 16.5),
+                                    const PrismSparkIcon(size: 16.5),
                                     const SizedBox(width: 8),
                                     Flexible(
                                       child: Text(
@@ -1276,7 +1368,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                     ),
                                     if (showModeBadge) ...[
                                       const SizedBox(width: 8),
-                                      ClaudePill(
+                                      PrismPill(
                                         text: modeBadgeText,
                                         mono: false,
                                         bg: c.paper2,
@@ -1345,11 +1437,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (showAuthControls && isMobileHeader) ...[
-                      ClaudeActionMenuButton(
+                      PrismActionMenuButton(
                         tooltip: 'MCP 服务运行控制',
                         minMenuWidth: 192,
                         actions: [
-                          ClaudeMenuAction(
+                          PrismMenuAction(
                             label: _isRunning ? '停止 MCP 服务' : '启动 MCP 服务',
                             badge: _isRunning
                                 ? ':${_config['port'] ?? 8000}'
@@ -1361,12 +1453,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             highlight: !_isRunning,
                             onTap: _restartingService ? null : _toggleService,
                           ),
-                          ClaudeMenuAction(
+                          PrismMenuAction(
                             label: '平滑重启服务',
                             icon: Icons.restart_alt_rounded,
                             onTap: _togglingService ? null : _restartService,
                           ),
-                          ClaudeMenuAction(
+                          PrismMenuAction(
                             label: '关于与版本更新',
                             badge: 'v${widget.backend.currentAppVersion}',
                             icon: Icons.verified_outlined,
@@ -1375,7 +1467,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           ),
                         ],
                         customTrigger: CustomPaint(
-                          foregroundPainter: ClaudeSpecularRimPainter(
+                          foregroundPainter: PrismSpecularRimPainter(
                             radius: 999,
                             isDark: c.isDark,
                             accentTint: _isRunning ? c.sage : null,
@@ -1418,7 +1510,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                ClaudeStatusDot(
+                                PrismStatusDot(
                                   color: _isRunning ? c.sage : c.meta,
                                   pulsing: _isRunning,
                                   size: 6.4,
@@ -1464,7 +1556,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                               ? 58
                               : (viewW < 430 ? 108 : 196),
                         ),
-                        child: ClaudeDropMenu<String>(
+                        child: PrismDropMenu<String>(
                           value: activeNode.id,
                           tooltip: '切换本机或远程节点',
                           leadingIcon: activeNode.isLocal
@@ -1476,7 +1568,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           minMenuWidth: 236,
                           items: [
                             for (final n in nodes)
-                              ClaudeDropMenuItem<String>(
+                              PrismDropMenuItem<String>(
                                 value: n.id,
                                 label: (hasCustomBar && viewW < 460 && n.isLocal)
                                     ? '本机'
@@ -1490,7 +1582,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                     : Icons.computer_rounded,
                                 badge: n.isLocal ? 'LOCAL' : n.hostLabel,
                               ),
-                            const ClaudeDropMenuItem<String>(
+                            const PrismDropMenuItem<String>(
                               value: '__manage_nodes__',
                               label: '管理远程节点...',
                               icon: Icons.add_link_rounded,
@@ -1502,13 +1594,76 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                       ),
                       const SizedBox(width: 6),
                     ],
-                    ClaudeButton(
+                    if (showAuthControls &&
+                        viewW >= (hasCustomBar ? 620 : 460)) ...[
+                      PrismActionMenuButton(
+                        tooltip:
+                            '切换主题色 · 当前：${PrismAccentSpec.of(widget.accentId).label}',
+                        minMenuWidth: 208,
+                        actions: [
+                          for (final spec in PrismAccentSpec.presets)
+                            PrismMenuAction(
+                              label: spec.label,
+                              badge: widget.accentId == spec.id &&
+                                      !widget.dynamicColor
+                                  ? '当前'
+                                  : (spec.badge.isNotEmpty ? spec.badge : null),
+                              icon: widget.accentId == spec.id &&
+                                      !widget.dynamicColor
+                                  ? Icons.radio_button_checked_rounded
+                                  : Icons.circle,
+                              highlight: widget.accentId == spec.id &&
+                                  !widget.dynamicColor,
+                              onTap: () => _applyAccentWithSnapshot(spec.id),
+                            ),
+                        ],
+                        customTrigger: Container(
+                          key: const ValueKey('header-accent-palette-btn'),
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: ShapeDecoration(
+                            color: c.paper3.withValues(alpha: 0.55),
+                            shape: StadiumBorder(
+                              side: BorderSide(
+                                color: c.hairline.withValues(alpha: 0.72),
+                              ),
+                            ),
+                          ),
+                          child: Container(
+                            width: 12.5,
+                            height: 12.5,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  PrismAccentSpec.of(widget.accentId)
+                                      .swatchStart,
+                                  PrismAccentSpec.of(widget.accentId)
+                                      .swatchEnd,
+                                ],
+                              ),
+                              border: Border.all(
+                                color: Colors.white.withValues(
+                                  alpha: c.isDark ? 0.35 : 0.85,
+                                ),
+                                width: 1.1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    PrismButton(
                       key: _themeBtnKey,
                       label: '',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
-                      tooltip: c.isDark ? '切换至冷瓷浅色' : '切换至曜石暗色',
-                      leading: ClaudeFadeBox(
+                      variant: PrismBtnVariant.ghost,
+                      tooltip: c.isDark ? '切换至浅色模式' : '切换至暗色模式',
+                      leading: PrismFadeBox(
                         alignment: Alignment.center,
                         child: Icon(
                           c.isDark
@@ -1522,7 +1677,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     ),
                     if (showAuthControls && _dashboardMode) ...[
                       const SizedBox(width: 6),
-                      ClaudeButton(
+                      PrismButton(
                         label: viewW >= 480 ? '退出登录' : '',
                         compact: true,
                         tooltip: '退出登录',
@@ -1541,7 +1696,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         color: c.hairline,
                       ),
                       const SizedBox(width: 2),
-                      ClaudeWindowCaptionActions(
+                      PrismWindowCaptionActions(
                         isMaximized: winState.isMaximized,
                         isPinned: winState.isPinned,
                         onTogglePin: widget.backend.togglePinWindow,
@@ -1612,7 +1767,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
   Widget _buildConsoleShell(
     BuildContext context,
-    ClaudePalette c, {
+    PrismPalette c, {
     required DesktopWindowState winState,
     required bool micaActive,
   }) {
@@ -1648,7 +1803,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     final safeLeft = safePad.left;
     final safeRight = safePad.right;
 
-    final chromeDur = ClaudeMotion.duration(
+    final chromeDur = PrismMotion.duration(
       context,
       const Duration(milliseconds: 220),
     );
@@ -1709,9 +1864,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         exposureSummary: _exposureSummary,
         isRunning: _isRunning,
         themeMode: widget.themeMode,
+        accentId: widget.accentId,
         topPadding: pageTopInset,
         extraBottomPadding: pageExtraBottom,
         onThemeChanged: _applyThemeWithSnapshot,
+        onAccentChanged: _applyAccentWithSnapshot,
         dynamicColor: widget.dynamicColor,
         dynamicColorSupported: widget.dynamicColorSupported,
         onDynamicColorChanged: (v) async {
@@ -1849,10 +2006,10 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                           height: 32,
                                           child: Row(
                                             children: [
-                                              ClaudeButton(
+                                              PrismButton(
                                                 label: '',
                                                 compact: true,
-                                                variant: ClaudeBtnVariant.ghost,
+                                                variant: PrismBtnVariant.ghost,
                                                 tooltip: shouldCollapse
                                                     ? '展开侧边栏'
                                                     : '收起侧边栏',
@@ -1860,12 +2017,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                   turns:
                                                       shouldCollapse ? 0.5 : 0.0,
                                                   duration:
-                                                      ClaudeMotion.duration(
+                                                      PrismMotion.duration(
                                                     context,
-                                                    ClaudeMotion.base,
+                                                    PrismMotion.base,
                                                   ),
                                                   curve:
-                                                      ClaudeMotion.editorialOut,
+                                                      PrismMotion.editorialOut,
                                                   child: const Icon(
                                                     Icons.chevron_left_rounded,
                                                     size: 17,
@@ -1887,7 +2044,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                               .animateTo(
                                                             next,
                                                             duration:
-                                                                ClaudeMotion
+                                                                PrismMotion
                                                                     .duration(
                                                               context,
                                                               const Duration(
@@ -1895,7 +2052,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                                     220,
                                                               ),
                                                             ),
-                                                            curve: ClaudeMotion
+                                                            curve: PrismMotion
                                                                 .editorialOut,
                                                           ),
                                                         );
@@ -1912,7 +2069,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                       ),
                                                       child: Row(
                                                         children: [
-                                                          ClaudeStatusDot(
+                                                          PrismStatusDot(
                                                             color: _isRunning
                                                                 ? c.sage
                                                                 : c.meta,
@@ -1958,7 +2115,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                           const SizedBox(height: 8),
                                           Opacity(
                                             opacity: labelOpacity,
-                                            child: ClaudeDropMenu<String>(
+                                            child: PrismDropMenu<String>(
                                               value: activeNode.id,
                                               expandTrigger: true,
                                               tooltip: '切换工作节点（本机或远程设备）',
@@ -1973,7 +2130,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                               minMenuWidth: 224,
                                               items: [
                                                 for (final n in nodes)
-                                                  ClaudeDropMenuItem<String>(
+                                                  PrismDropMenuItem<String>(
                                                     value: n.id,
                                                     label: n.name,
                                                     subtitle: n.isLocal
@@ -1991,7 +2148,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                         ? 'LOCAL'
                                                         : n.hostLabel,
                                                   ),
-                                                const ClaudeDropMenuItem<
+                                                const PrismDropMenuItem<
                                                     String>(
                                                   value: '__manage_nodes__',
                                                   label: '管理远程节点...',
@@ -2070,7 +2227,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                             ),
                                                           ),
                                                         ),
-                                                        ClaudePill(
+                                                        PrismPill(
                                                           text: (_latestUpdate !=
                                                                       null &&
                                                                   compareSemVer(
@@ -2131,7 +2288,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                           Row(
                                             children: [
                                               Expanded(
-                                                child: ClaudeButton(
+                                                child: PrismButton(
                                                   label: _togglingService
                                                       ? (_isRunning
                                                           ? '停止中...'
@@ -2148,15 +2305,15 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                   ),
                                                   loading: _togglingService,
                                                   variant: _isRunning
-                                                      ? ClaudeBtnVariant.neutral
-                                                      : ClaudeBtnVariant.clay,
+                                                      ? PrismBtnVariant.neutral
+                                                      : PrismBtnVariant.clay,
                                                   onPressed: _restartingService
                                                       ? null
                                                       : _toggleService,
                                                 ),
                                               ),
                                               const SizedBox(width: 5),
-                                              ClaudeButton(
+                                              PrismButton(
                                                 label: '',
                                                 compact: true,
                                                 loading: _restartingService,
@@ -2170,11 +2327,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                               ),
                                               if (!widget.backend.isWebMode) ...[
                                                 const SizedBox(width: 4),
-                                                ClaudeButton(
+                                                PrismButton(
                                                   label: '',
                                                   compact: true,
                                                   variant:
-                                                      ClaudeBtnVariant.ghost,
+                                                      PrismBtnVariant.ghost,
                                                   tooltip: '完全退出应用',
                                                   leading: const Icon(
                                                     Icons
@@ -2187,14 +2344,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                             ],
                                           )
                                         else ...[
-                                          ClaudeButton(
+                                          PrismButton(
                                             label: '',
                                             compact: true,
                                             expand: true,
                                             loading: _togglingService,
                                             variant: _isRunning
-                                                ? ClaudeBtnVariant.neutral
-                                                : ClaudeBtnVariant.clay,
+                                                ? PrismBtnVariant.neutral
+                                                : PrismBtnVariant.clay,
                                             tooltip: _isRunning
                                                 ? '停止服务'
                                                 : '启动服务',
@@ -2208,7 +2365,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                                 : _toggleService,
                                           ),
                                           const SizedBox(height: 6),
-                                          ClaudeButton(
+                                          PrismButton(
                                             label: '',
                                             compact: true,
                                             expand: true,
@@ -2240,7 +2397,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                         decoration: !isMobile
                             ? ShapeDecoration(
                                 color: c.paper,
-                                shape: claudeSuperellipse(
+                                shape: prismSuperellipse(
                                   24,
                                   side: BorderSide(
                                     color: c.hairline.withValues(alpha: 0.65),
@@ -2270,7 +2427,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                                 onPointerPanZoomUpdate: _handlePanZoomUpdate,
                                 child: NotificationListener<ScrollNotification>(
                                   onNotification: _handleShellScroll,
-                                  child: ClaudeKeepAliveTabs(
+                                  child: PrismKeepAliveTabs(
                                     index: _tabIndex,
                                     axis: isMobile
                                         ? Axis.horizontal
@@ -2348,7 +2505,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             currentVersion: widget.backend.currentAppVersion,
                           ),
                           borderRadius: BorderRadius.circular(999),
-                          child: ClaudePill(
+                          child: PrismPill(
                             text: '新版本 v${_latestUpdate!.version}',
                             fg: c.clay,
                             bg: c.clay.withValues(alpha: 0.12),
@@ -2394,7 +2551,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               child: IgnorePointer(
                 child: AnimatedOpacity(
                   duration: chromeDur,
-                  curve: ClaudeMotion.editorialOut,
+                  curve: PrismMotion.editorialOut,
                   opacity: showTopChrome ? 0.0 : 1.0,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -2436,11 +2593,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               child: RepaintBoundary(
                 child: AnimatedSlide(
                   duration: chromeDur,
-                  curve: ClaudeMotion.editorialOut,
+                  curve: PrismMotion.editorialOut,
                   offset: showTopChrome ? Offset.zero : const Offset(0, -1.08),
                   child: AnimatedOpacity(
                     duration: chromeDur,
-                    curve: ClaudeMotion.editorialOut,
+                    curve: PrismMotion.editorialOut,
                     opacity: showTopChrome ? 1.0 : 0.0,
                     child: IgnorePointer(
                       ignoring: !showTopChrome,
@@ -2463,7 +2620,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               child: IgnorePointer(
                 child: AnimatedOpacity(
                   duration: chromeDur,
-                  curve: ClaudeMotion.editorialOut,
+                  curve: PrismMotion.editorialOut,
                   opacity: _chromeVisible ? 1.0 : 0.0,
                   child: _ProgressiveScrollEdgeVeil(
                     palette: c,
@@ -2480,11 +2637,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               child: RepaintBoundary(
                 child: AnimatedSlide(
                   duration: chromeDur,
-                  curve: ClaudeMotion.editorialOut,
+                  curve: PrismMotion.editorialOut,
                   offset: _chromeVisible ? Offset.zero : const Offset(0, 1.24),
                   child: AnimatedOpacity(
                     duration: chromeDur,
-                    curve: ClaudeMotion.editorialOut,
+                    curve: PrismMotion.editorialOut,
                     opacity: _chromeVisible ? 1.0 : 0.0,
                     child: IgnorePointer(
                       ignoring: !_chromeVisible,
@@ -2517,12 +2674,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                   minimum: const EdgeInsets.only(bottom: 8),
                   child: AnimatedSlide(
                     duration: chromeDur,
-                    curve: ClaudeMotion.editorialOut,
+                    curve: PrismMotion.editorialOut,
                     offset:
                         _chromeVisible ? const Offset(0, 1.6) : Offset.zero,
                     child: AnimatedOpacity(
                       duration: chromeDur,
-                      curve: ClaudeMotion.editorialOut,
+                      curve: PrismMotion.editorialOut,
                       opacity: _chromeVisible ? 0.0 : 1.0,
                       child: IgnorePointer(
                         ignoring: _chromeVisible,
@@ -2543,15 +2700,15 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             child: Align(
               alignment: Alignment.bottomRight,
               child: AnimatedSwitcher(
-                duration: ClaudeMotion.duration(
+                duration: PrismMotion.duration(
                   context,
                   const Duration(milliseconds: 230),
                 ),
-                reverseDuration: ClaudeMotion.duration(
+                reverseDuration: PrismMotion.duration(
                   context,
                   const Duration(milliseconds: 150),
                 ),
-                switchInCurve: ClaudeMotion.snappySpring,
+                switchInCurve: PrismMotion.snappySpring,
                 switchOutCurve: Curves.easeInCubic,
                 transitionBuilder: (child, anim) {
                   return FadeTransition(
@@ -2570,7 +2727,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     : Material(
                         key: ValueKey('toast-$_toastTick'),
                         color: Colors.transparent,
-                        child: ClaudeGlassBar(
+                        child: PrismGlassBar(
                           blurSigma: 20,
                           borderRadius: 14,
                           tintColor: c.isDark
@@ -2592,7 +2749,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                ClaudeSparkIcon(
+                                PrismSparkIcon(
                                   size: 14,
                                   color: c.isDark
                                       ? c.clay
@@ -2643,7 +2800,7 @@ class _ConsoleScrollBehavior extends MaterialScrollBehavior {
 /// Melts scrolling content smoothly into the canvas behind the floating glass dock
 /// instead of slicing cards with a harsh 1px horizontal line.
 class _ProgressiveScrollEdgeVeil extends StatelessWidget {
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final bool enableBlur;
 
   const _ProgressiveScrollEdgeVeil({
@@ -2780,7 +2937,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
     if (oldWidget.selectedIndex != widget.selectedIndex && !_isDragging) {
       _targetSlotPos = widget.selectedIndex.toDouble();
       _lastHoverReportedIdx = widget.selectedIndex;
-      if (ClaudeMotion.reduceMotion(context)) {
+      if (PrismMotion.reduceMotion(context)) {
         _lensSlotPos = _targetSlotPos;
         _lensVel = 0.0;
       } else {
@@ -2857,7 +3014,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
 
   void _handleSlotTap(int idx) {
     if (idx == widget.selectedIndex) {
-      if (!ClaudeMotion.reduceMotion(context)) {
+      if (!PrismMotion.reduceMotion(context)) {
         _liftVel = 2.6;
         _ensureTicker();
       }
@@ -2876,7 +3033,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final items = <(IconData, IconData, String, String?)>[
       (Icons.bolt_outlined, Icons.bolt_rounded, '调用流', null),
       (
@@ -2928,15 +3085,21 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
 
     final baseTrayGradient = widget.micaActive
         ? (c.isDark
-            ? const LinearGradient(
+            ? LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xCC182320), Color(0xE00D1413)],
+                colors: [
+                  Color.lerp(const Color(0xCC161820), c.navTint, 0.10)!,
+                  Color.lerp(const Color(0xE00C0D12), c.navTint, 0.06)!,
+                ],
               )
-            : const LinearGradient(
+            : LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xDEFFFFFF), Color(0xC6F0F7F4)],
+                colors: [
+                  const Color(0xE0FFFFFF),
+                  Color.lerp(const Color(0xCCF4F5F8), c.navTint, 0.06)!,
+                ],
               ))
         : LinearGradient(
             begin: Alignment.topCenter,
@@ -2975,7 +3138,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                   _isPressing = true;
                   _fingerNormX =
                       (ev.localPosition.dx / barWidth).clamp(0.04, 0.96);
-                  if (!ClaudeMotion.reduceMotion(context)) {
+                  if (!PrismMotion.reduceMotion(context)) {
                     _liftTarget = 1.0;
                     _ensureTicker();
                   } else {
@@ -2986,7 +3149,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                   if (!_isDragging) {
                     _isPressing = false;
                     _liftTarget = 0.0;
-                    if (ClaudeMotion.reduceMotion(context)) {
+                    if (PrismMotion.reduceMotion(context)) {
                       setState(() => _liftVal = 0.0);
                     } else {
                       _ensureTicker();
@@ -2997,7 +3160,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                   if (!_isDragging) {
                     _isPressing = false;
                     _liftTarget = 0.0;
-                    if (ClaudeMotion.reduceMotion(context)) {
+                    if (PrismMotion.reduceMotion(context)) {
                       setState(() => _liftVal = 0.0);
                     } else {
                       _ensureTicker();
@@ -3033,7 +3196,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                     final snappedIdx = _targetSlotPos.round().clamp(0, 3);
                     _targetSlotPos = snappedIdx.toDouble();
                     _lastHoverReportedIdx = snappedIdx;
-                    if (ClaudeMotion.reduceMotion(context)) {
+                    if (PrismMotion.reduceMotion(context)) {
                       _lensSlotPos = _targetSlotPos;
                       _liftVal = 0.0;
                       setState(() {});
@@ -3069,10 +3232,10 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                             sigmaY: blurSigma,
                           ),
                           child: CustomPaint(
-                            foregroundPainter: ClaudeSpecularRimPainter(
+                            foregroundPainter: PrismSpecularRimPainter(
                               radius: 999,
                               isDark: c.isDark,
-                              accentTint: c.sage,
+                              accentTint: c.navTint,
                               intensity: 0.86 + 0.14 * tLift,
                             ),
                             child: DecoratedBox(
@@ -3088,11 +3251,11 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                                           ),
                                           radius: 1.25,
                                           colors: [
-                                            c.sage.withValues(
+                                            c.navTint.withValues(
                                               alpha: (c.isDark ? 0.24 : 0.18) *
                                                   tLift,
                                             ),
-                                            c.sage.withValues(alpha: 0.0),
+                                            c.navTint.withValues(alpha: 0.0),
                                           ],
                                         )
                                       : null,
@@ -3172,7 +3335,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
   }
 
   Widget _buildLensSlot({
-    required ClaudePalette c,
+    required PrismPalette c,
     required int index,
     required (IconData, IconData, String, String?) item,
     required double tLift,
@@ -3184,10 +3347,8 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
     final magScale = 1.0 + prox * (0.035 + 0.125 * tLift);
     final liftIconDy = -1.1 * prox * tLift;
 
-    final activeIconCol =
-        c.isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
-    final activeTextCol =
-        c.isDark ? const Color(0xFFECFDF5) : const Color(0xFF064E3B);
+    final activeIconCol = c.navActiveIcon;
+    final activeTextCol = c.navActiveText;
     final iconCol = Color.lerp(c.muted, activeIconCol, prox)!;
     final textCol = Color.lerp(c.muted, activeTextCol, prox)!;
     final badge = item.$4;
@@ -3230,7 +3391,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                               decoration: ShapeDecoration(
                                 color: underLens
                                     ? activeIconCol
-                                    : c.sage.withValues(alpha: 0.18),
+                                    : c.navTint.withValues(alpha: 0.16),
                                 shape: const StadiumBorder(),
                               ),
                               child: Text(
@@ -3239,11 +3400,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                                   c,
                                   size: 8.8,
                                   weight: FontWeight.w700,
-                                  color: underLens
-                                      ? (c.isDark
-                                          ? const Color(0xFF06281E)
-                                          : Colors.white)
-                                      : c.sage,
+                                  color: underLens ? c.onClay : c.navTint,
                                   height: 1.1,
                                 ),
                               ),
@@ -3278,7 +3435,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
 
 /// Top-Header Matching Translucent Jade Cabochon & Lifted Optical Refraction Lens.
 class _LiquidJadeLensPill extends StatelessWidget {
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final double liftProgress;
 
   const _LiquidJadeLensPill({
@@ -3294,8 +3451,9 @@ class _LiquidJadeLensPill extends StatelessWidget {
 
     final topColor = isDark
         ? Color.lerp(
-            const Color(0xEE1C382F),
-            const Color(0xB8244D40),
+            palette.navCapsuleTop.withValues(alpha: 0.94),
+            Color.lerp(palette.navCapsuleTop, palette.navTint, 0.24)!
+                .withValues(alpha: 0.78),
             t,
           )!
         : Color.lerp(
@@ -3305,13 +3463,15 @@ class _LiquidJadeLensPill extends StatelessWidget {
           )!;
     final bottomColor = isDark
         ? Color.lerp(
-            const Color(0xF211221D),
-            const Color(0xC8142B24),
+            palette.navCapsuleBottom.withValues(alpha: 0.95),
+            Color.lerp(palette.navCapsuleBottom, palette.navTint, 0.18)!
+                .withValues(alpha: 0.82),
             t,
           )!
         : Color.lerp(
-            const Color(0xECF0FAF5),
-            const Color(0x9CE6F9F0),
+            palette.navCapsuleBottom.withValues(alpha: 0.94),
+            Color.lerp(palette.navCapsuleBottom, palette.navTint, 0.10)!
+                .withValues(alpha: 0.68),
             t,
           )!;
 
@@ -3319,7 +3479,7 @@ class _LiquidJadeLensPill extends StatelessWidget {
     final shadowDy = lerpDouble(3.0, 7.5, t)!;
     final shadowAlpha = isDark
         ? lerpDouble(0.52, 0.72, t)!
-        : lerpDouble(0.15, 0.25, t)!;
+        : lerpDouble(0.14, 0.24, t)!;
 
     return DecoratedBox(
       decoration: ShapeDecoration(
@@ -3331,7 +3491,7 @@ class _LiquidJadeLensPill extends StatelessWidget {
         shape: const StadiumBorder(),
         shadows: [
           BoxShadow(
-            color: (isDark ? Colors.black : const Color(0xFF106E50))
+            color: (isDark ? Colors.black : palette.navTint)
                 .withValues(alpha: shadowAlpha),
             blurRadius: shadowBlur,
             spreadRadius: -2.0,
@@ -3346,17 +3506,17 @@ class _LiquidJadeLensPill extends StatelessWidget {
             center: const Alignment(-0.42, -0.68),
             radius: 1.35,
             colors: [
-              palette.sage.withValues(
+              palette.navTint.withValues(
                 alpha: (isDark ? 0.24 : 0.15) + 0.10 * t,
               ),
-              palette.sage.withValues(alpha: 0.0),
+              palette.navTint.withValues(alpha: 0.0),
             ],
           ),
         ),
         child: CustomPaint(
           foregroundPainter: _LiquidJadeCabochonRimPainter(
             isDark: isDark,
-            sage: palette.sage,
+            sage: palette.navTint,
             liftProgress: t,
           ),
           child: const SizedBox.expand(),
@@ -3468,7 +3628,7 @@ class _MobileCollapsedRestorePillState
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return Tooltip(
       message: '展开导航栏',
       waitDuration: const Duration(milliseconds: 350),
@@ -3487,12 +3647,12 @@ class _MobileCollapsedRestorePillState
           onTap: widget.onRestore,
           child: AnimatedScale(
             scale: _pressed ? 0.92 : (_hovered ? 1.04 : 1.0),
-            duration: ClaudeMotion.duration(
+            duration: PrismMotion.duration(
               context,
               const Duration(milliseconds: 130),
             ),
-            curve: ClaudeMotion.editorialOut,
-            child: ClaudeGlassBar(
+            curve: PrismMotion.editorialOut,
+            child: PrismGlassBar(
               blurSigma: 16,
               borderRadius: 99,
               tintColor: c.isDark
@@ -3556,7 +3716,7 @@ class _SidebarNavGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final items = <(IconData, String, String?)>[
       (Icons.bolt_rounded, '活动与调用流', null),
       (
@@ -3573,7 +3733,7 @@ class _SidebarNavGroup extends StatelessWidget {
     ];
 
     final activeTop = selectedIndex * (_itemH + _gap);
-    final slideDur = ClaudeMotion.duration(
+    final slideDur = PrismMotion.duration(
       context,
       const Duration(milliseconds: 220),
     );
@@ -3584,34 +3744,25 @@ class _SidebarNavGroup extends StatelessWidget {
         children: [
           AnimatedPositioned(
             duration: slideDur,
-            curve: ClaudeMotion.snappySpring,
+            curve: PrismMotion.snappySpring,
             top: activeTop,
             left: 0,
             right: 0,
             height: _itemH,
             child: CustomPaint(
-              foregroundPainter: ClaudeSpecularRimPainter(
+              foregroundPainter: PrismSpecularRimPainter(
                 radius: 999,
                 isDark: c.isDark,
-                accentTint: c.sage,
+                accentTint: c.navTint,
                 intensity: 0.90,
               ),
               child: DecoratedBox(
                 decoration: ShapeDecoration(
-                  gradient: c.isDark
-                      ? const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xE81C332B),
-                            Color(0xF012221D),
-                          ],
-                        )
-                      : const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0xFFFFFFFF), Color(0xFFF0FAF5)],
-                        ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [c.navCapsuleTop, c.navCapsuleBottom],
+                  ),
                   shape: const StadiumBorder(),
                   shadows: [
                     BoxShadow(
@@ -3676,12 +3827,12 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final collapsed = widget.expandProgress < 0.35;
     final labelAlpha = ((widget.expandProgress - 0.3) / 0.7).clamp(0.0, 1.0);
 
     Widget row = AnimatedContainer(
-      duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
+      duration: PrismMotion.duration(context, PrismMotion.fast),
       height: widget.height,
       padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 12),
       decoration: ShapeDecoration(
@@ -3698,7 +3849,7 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
             widget.icon,
             size: 18,
             color: widget.active
-                ? c.sage
+                ? c.navActiveIcon
                 : (_hovered ? c.inkSoft : c.muted),
           ),
           if (!collapsed) ...[
@@ -3828,7 +3979,7 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return Scaffold(
       backgroundColor: c.paper,
       body: SafeArea(
@@ -3837,10 +3988,10 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
           padding: const EdgeInsets.all(20),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: ClaudeStaggeredReveal(
+            child: PrismStaggeredReveal(
               index: 0,
               offsetY: 10,
-              child: ClaudeCard(
+              child: PrismCard(
                 radius: 28,
                 padding: const EdgeInsets.fromLTRB(28, 30, 28, 26),
                 child: Column(
@@ -3854,10 +4005,10 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                           height: 42,
                           decoration: ShapeDecoration(
                             color: c.sageBg,
-                            shape: claudeSuperellipse(14),
+                            shape: prismSuperellipse(14),
                           ),
                           alignment: Alignment.center,
-                          child: const ClaudeSparkIcon(size: 20),
+                          child: const PrismSparkIcon(size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -3879,19 +4030,19 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 22),
-                    ClaudePasswordField(
+                    PrismPasswordField(
                       controller: _pwdCtrl,
                       hintText: '输入管理密码...',
                       onSubmitted: (_) => _submit(),
                     ),
                     const SizedBox(height: 16),
-                    ClaudeButton(
+                    PrismButton(
                       label: _loading ? '正在验证...' : '进入控制台',
-                      variant: ClaudeBtnVariant.clay,
+                      variant: PrismBtnVariant.clay,
                       expand: true,
                       onPressed: _loading ? null : _submit,
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _error.isNotEmpty,
                       builder: (_) => Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -3903,7 +4054,7 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                           ),
                           decoration: ShapeDecoration(
                             color: c.dangerBg,
-                            shape: claudeSuperellipse(
+                            shape: prismSuperellipse(
                               14,
                               side: BorderSide(
                                 color: c.danger.withValues(alpha: 0.28),
@@ -3931,17 +4082,17 @@ class _DashboardLoginScreenState extends State<_DashboardLoginScreen> {
                         runSpacing: 8,
                         children: [
                           if (widget.onSwitchToLocal != null)
-                            ClaudeButton(
+                            PrismButton(
                               label: '切回本机服务',
                               compact: true,
                               leading: const Icon(Icons.smartphone_rounded),
                               onPressed: widget.onSwitchToLocal,
                             ),
                           if (widget.onManageNodes != null)
-                            ClaudeButton(
+                            PrismButton(
                               label: '管理远程节点',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               leading: const Icon(Icons.hub_outlined),
                               onPressed: widget.onManageNodes,
                             ),
@@ -4103,7 +4254,7 @@ class _GlobalCommandPaletteDialogState
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final entries = _buildEntries();
     if (_selectedIdx >= entries.length) _selectedIdx = 0;
 
@@ -4112,7 +4263,7 @@ class _GlobalCommandPaletteDialogState
       elevation: 0,
       alignment: const Alignment(0, -0.45),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),

@@ -1,7 +1,7 @@
 name: agent_mcp_app
-description: Anthropic Editorial-Style Desktop & Web Console for Agent MCP
+description: Concentric Liquid Prism Desktop, Mobile & Web Console for Agent MCP
 publish_to: none
-version: 3.2.1+3201
+version: 3.3.0+3300
 
 resolution: workspace
 
@@ -29,23 +29,23 @@ flutter:
     - assets/app_icon.ico
     - assets/app_icon.png
   fonts:
-    - family: AnthropicSerif
+    - family: PrismSerif
       fonts:
-        - asset: assets/fonts/AnthropicSerif-Regular.ttf
+        - asset: assets/fonts/PrismSerif-Regular.ttf
           weight: 400
-        - asset: assets/fonts/AnthropicSerif-Medium.ttf
+        - asset: assets/fonts/PrismSerif-Medium.ttf
           weight: 500
-        - asset: assets/fonts/AnthropicSerif-Medium.ttf
+        - asset: assets/fonts/PrismSerif-Medium.ttf
           weight: 600
-    - family: AnthropicSans
+    - family: PrismSans
       fonts:
-        - asset: assets/fonts/AnthropicSans-Regular.ttf
+        - asset: assets/fonts/PrismSans-Regular.ttf
           weight: 400
-        - asset: assets/fonts/AnthropicSans-Medium.ttf
+        - asset: assets/fonts/PrismSans-Medium.ttf
           weight: 500
-        - asset: assets/fonts/AnthropicSans-SemiBold.ttf
+        - asset: assets/fonts/PrismSans-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/AnthropicSans-SemiBold.ttf
+        - asset: assets/fonts/PrismSans-SemiBold.ttf
           weight: 700
     - family: JetBrainsMono
       fonts:

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 Future<void> showRemoteNodesManagerDialog(
   BuildContext context, {
@@ -10,7 +10,7 @@ Future<void> showRemoteNodesManagerDialog(
   required ValueChanged<String> onToast,
   required Future<void> Function(String nodeId) onSwitchNode,
 }) {
-  return showClaudeDialog<void>(
+  return showPrismDialog<void>(
     context: context,
     builder: (ctx) => _RemoteNodesDialog(
       backend: backend,
@@ -146,7 +146,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
   }
 
   Future<void> _confirmDeleteNode(ConsoleNodeProfile node, String activeId) async {
-    final ok = await showClaudeConfirmDialog(
+    final ok = await showPrismConfirmDialog(
       context,
       title: '移除远程节点',
       message: '确认移除远程节点「${node.name}」吗？（不会影响远端正在运行的服务）',
@@ -166,7 +166,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final nodes = widget.backend.savedNodes;
     final activeId = widget.backend.activeNode.id;
     final lanIps = widget.backend.deviceLanIps;
@@ -176,7 +176,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
         backgroundColor: c.paper,
         elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           28,
           side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
         ),
@@ -195,7 +195,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                       height: 38,
                       decoration: ShapeDecoration(
                         color: c.sageBg,
-                        shape: claudeSuperellipse(13),
+                        shape: prismSuperellipse(13),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
@@ -220,10 +220,10 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                         ],
                       ),
                     ),
-                    ClaudeButton(
+                    PrismButton(
                       label: '',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
+                      variant: PrismBtnVariant.ghost,
                       leading: const Icon(Icons.close_rounded, size: 18),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
@@ -237,7 +237,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      ClaudeListGroup(
+                      PrismListGroup(
                         dividerIndent: 46,
                         children: [
                           for (final node in nodes)
@@ -265,21 +265,21 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                       if (!_formOpen)
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: ClaudeButton(
+                          child: PrismButton(
                             label: '添加远程节点（服务器 / 电脑 / 手机）',
                             compact: true,
                             leading: const Icon(Icons.add_rounded),
                             onPressed: _startAdd,
                           ),
                         ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: _formOpen,
                         builder: (_) => Container(
                           margin: const EdgeInsets.only(top: 4),
                           padding: const EdgeInsets.all(14),
                           decoration: ShapeDecoration(
                             color: c.paper2,
-                            shape: claudeSuperellipse(
+                            shape: prismSuperellipse(
                               20,
                               side: BorderSide(
                                 color: c.hairline.withValues(alpha: 0.65),
@@ -305,10 +305,10 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                     ),
                                   ),
                                   if (nodes.length > 1)
-                                    ClaudeButton(
+                                    PrismButton(
                                       label: '收起',
                                       compact: true,
-                                      variant: ClaudeBtnVariant.ghost,
+                                      variant: PrismBtnVariant.ghost,
                                       onPressed: () =>
                                           setState(() => _formOpen = false),
                                     ),
@@ -334,7 +334,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              ClaudePasswordField(
+                              PrismPasswordField(
                                 controller: _pwdCtrl,
                                 hintText: '管理密码或 API Key（可选保存，免重复输入）',
                               ),
@@ -347,7 +347,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                   ),
                                   decoration: ShapeDecoration(
                                     color: _probeOk ? c.sageBg : c.dangerBg,
-                                    shape: claudeSuperellipse(14),
+                                    shape: prismSuperellipse(14),
                                   ),
                                   child: Text(
                                     _probeMsg!,
@@ -366,7 +366,7 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
-                                  ClaudeButton(
+                                  PrismButton(
                                     label: _probing ? '探测中...' : '测试连通',
                                     compact: true,
                                     loading: _probing,
@@ -375,11 +375,11 @@ class _RemoteNodesDialogState extends State<_RemoteNodesDialog> {
                                     ),
                                     onPressed: _saving ? null : _probeDraft,
                                   ),
-                                  ClaudeButton(
+                                  PrismButton(
                                     label: _saving ? '连接中...' : '保存并切换连接',
                                     compact: true,
                                     loading: _saving,
-                                    variant: ClaudeBtnVariant.clay,
+                                    variant: PrismBtnVariant.clay,
                                     leading: const Icon(Icons.link_rounded),
                                     onPressed:
                                         _probing ? null : _saveAndConnect,
@@ -423,7 +423,7 @@ class _NodeProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final subText = node.isLocal
         ? (lanIps.isNotEmpty
             ? '本机内置引擎 · 局域网 ${lanIps.first}'
@@ -459,14 +459,14 @@ class _NodeProfileTile extends StatelessWidget {
                         color: c.ink,
                       ),
                     ),
-                    ClaudePill(
+                    PrismPill(
                       text: node.isLocal ? '本机' : '远程',
                       mono: false,
                       fg: isActive ? c.clay : c.muted,
                       bg: c.paper3,
                     ),
                     if (!node.isLocal && node.savedPassword.isNotEmpty)
-                      ClaudePill(
+                      PrismPill(
                         text: '免密记忆',
                         mono: false,
                         fg: c.sage,
@@ -491,19 +491,19 @@ class _NodeProfileTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           if (onEdit != null)
-            ClaudeButton(
+            PrismButton(
               label: '',
               compact: true,
-              variant: ClaudeBtnVariant.ghost,
+              variant: PrismBtnVariant.ghost,
               tooltip: '编辑节点',
               leading: const Icon(Icons.edit_outlined, size: 15.5),
               onPressed: onEdit,
             ),
           if (onDelete != null)
-            ClaudeButton(
+            PrismButton(
               label: '',
               compact: true,
-              variant: ClaudeBtnVariant.ghost,
+              variant: PrismBtnVariant.ghost,
               tooltip: '移除节点',
               leading: Icon(
                 Icons.delete_outline_rounded,
@@ -513,10 +513,10 @@ class _NodeProfileTile extends StatelessWidget {
               onPressed: onDelete,
             ),
           const SizedBox(width: 4),
-          ClaudeButton(
+          PrismButton(
             label: isActive ? '当前' : '切换',
             compact: true,
-            variant: isActive ? ClaudeBtnVariant.ghost : ClaudeBtnVariant.clay,
+            variant: isActive ? PrismBtnVariant.ghost : PrismBtnVariant.clay,
             onPressed: isActive ? null : onConnect,
           ),
         ],

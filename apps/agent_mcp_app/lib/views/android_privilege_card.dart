@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 class AndroidPrivilegeCard extends StatefulWidget {
   final ConsoleBackend backend;
@@ -104,7 +104,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final st = _privStatus;
     final reqMode = _requestedMode;
     final bridgeReady = st['bridge_ready'] == true;
@@ -153,10 +153,10 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
             ? rootManagers.map((m) => m['name'] ?? '').join(' / ')
             : 'UID 0');
 
-    return ClaudeListGroup(
+    return PrismListGroup(
       headerLabel: 'Android 运行权限级别',
-      headerTrailing: ClaudePill(
-        leading: ClaudeStatusDot(
+      headerTrailing: PrismPill(
+        leading: PrismStatusDot(
           color: statusColor,
           pulsing: bridgeReady,
           size: 7,
@@ -233,7 +233,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
               );
             },
           ),
-          ClaudeCollapsible(
+          PrismCollapsible(
             expanded: reqMode != 'none',
             builder: (_) => Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -242,7 +242,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                 padding: const EdgeInsets.all(13),
                 decoration: ShapeDecoration(
                   color: c.recessed,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     18,
                     side: BorderSide(
                       color: isDegraded
@@ -255,7 +255,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (reqMode == 'root') ...[
-                      ClaudeCheckToggle(
+                      PrismCheckToggle(
                         value: _mountMaster,
                         label: '全局挂载命名空间 (--mount-master，推荐开启以访问全局挂载点)',
                         onChanged: (v) =>
@@ -328,15 +328,15 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                           if (canLaunchLocalApps &&
                               shizukuRunning &&
                               !shizukuAuthorized)
-                            ClaudeButton(
+                            PrismButton(
                               label: _requestingPerm ? '请求中...' : '授权 Shizuku',
                               compact: true,
                               loading: _requestingPerm,
-                              variant: ClaudeBtnVariant.clay,
+                              variant: PrismBtnVariant.clay,
                               leading: const Icon(Icons.vpn_key_outlined),
                               onPressed: _requestShizukuAuth,
                             ),
-                          ClaudeButton(
+                          PrismButton(
                             label: _switchingMode == 'shizuku'
                                 ? '连接中...'
                                 : '检测并重连',
@@ -346,7 +346,7 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                             onPressed: () => _selectMode('shizuku'),
                           ),
                           if (canLaunchLocalApps && shizukuInstalled)
-                            ClaudeButton(
+                            PrismButton(
                               label: '打开 Shizuku',
                               compact: true,
                               leading: const Icon(Icons.open_in_new_rounded),
@@ -360,21 +360,21 @@ class _AndroidPrivilegeCardState extends State<AndroidPrivilegeCard> {
                             ),
                         ],
                         if (reqMode == 'root') ...[
-                          ClaudeButton(
+                          PrismButton(
                             label: _switchingMode == 'root'
                                 ? '请求 Root 中...'
                                 : (bridgeReady ? '重新握手验证' : '检测并连接 Root'),
                             compact: true,
                             loading: _switchingMode == 'root',
                             variant: bridgeReady
-                                ? ClaudeBtnVariant.neutral
-                                : ClaudeBtnVariant.clay,
+                                ? PrismBtnVariant.neutral
+                                : PrismBtnVariant.clay,
                             leading: const Icon(Icons.refresh_rounded),
                             onPressed: () => _selectMode('root'),
                           ),
                           if (canLaunchLocalApps)
                             for (final mgr in rootManagers)
-                              ClaudeButton(
+                              PrismButton(
                                 label: '打开 ${mgr['name']} 授权',
                                 compact: true,
                                 leading: const Icon(Icons.open_in_new_rounded),
@@ -433,7 +433,7 @@ class _AuthorizerModeTileState extends State<_AuthorizerModeTile> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final sel = widget.selected;
     final borderColor = sel
         ? (widget.activeReady ? c.sage : c.clay)
@@ -452,12 +452,12 @@ class _AuthorizerModeTileState extends State<_AuthorizerModeTile> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.loading ? null : widget.onTap,
         child: AnimatedContainer(
-          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-          curve: ClaudeMotion.editorialOut,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.editorialOut,
           padding: const EdgeInsets.all(13),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(
+            shape: prismSuperellipse(
               18,
               side: BorderSide(
                 color: borderColor,
@@ -501,7 +501,7 @@ class _AuthorizerModeTileState extends State<_AuthorizerModeTile> {
                       ),
                     )
                   else
-                    ClaudePill(
+                    PrismPill(
                       text: widget.badge,
                       mono: false,
                       fg: sel

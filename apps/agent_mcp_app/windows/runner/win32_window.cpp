@@ -198,6 +198,72 @@ bool QuerySystemDarkMode() {
   return (result == ERROR_SUCCESS && light_mode == 0);
 }
 
+// Windows 11 hides newly registered Win32 Shell_NotifyIconW icons inside the
+// taskbar '^' overflow drawer by default (IsPromoted unset). Promote our own
+// executable once so the user immediately sees the tray icon on the taskbar,
+// while respecting any subsequent manual toggle in Windows Settings.
+void PromoteTrayIconOnWindows11Once() {
+  if (!IsWindows11OrGreater()) return;
+  wchar_t exe_buf[MAX_PATH] = {0};
+  const DWORD exe_len = GetModuleFileNameW(nullptr, exe_buf, MAX_PATH);
+  if (exe_len == 0 || exe_len >= MAX_PATH) return;
+  const std::wstring exe_path(exe_buf, exe_len);
+
+  HKEY root_key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\NotifyIconSettings", 0,
+                    KEY_READ, &root_key) != ERROR_SUCCESS) {
+    return;
+  }
+
+  wchar_t subkey_name[256] = {0};
+  for (DWORD idx = 0;; ++idx) {
+    DWORD name_len = 256;
+    const LSTATUS enum_res = RegEnumKeyExW(
+        root_key, idx, subkey_name, &name_len, nullptr, nullptr, nullptr,
+        nullptr);
+    if (enum_res != ERROR_SUCCESS) break;
+
+    HKEY item_key = nullptr;
+    if (RegOpenKeyExW(root_key, subkey_name, 0, KEY_READ | KEY_WRITE,
+                      &item_key) != ERROR_SUCCESS) {
+      continue;
+    }
+
+    wchar_t item_exe[MAX_PATH * 2] = {0};
+    DWORD item_exe_bytes = sizeof(item_exe);
+    DWORD reg_type = 0;
+    const LSTATUS path_res = RegQueryValueExW(
+        item_key, L"ExecutablePath", nullptr, &reg_type,
+        reinterpret_cast<LPBYTE>(item_exe), &item_exe_bytes);
+    if (path_res == ERROR_SUCCESS &&
+        (reg_type == REG_SZ || reg_type == REG_EXPAND_SZ)) {
+      const std::wstring recorded(item_exe);
+      const bool matches =
+          (_wcsicmp(recorded.c_str(), exe_path.c_str()) == 0) ||
+          (recorded.size() >= 18 &&
+           _wcsicmp(recorded.c_str() + recorded.size() - 18,
+                    L"\\agent_mcp_app.exe") == 0);
+      if (matches) {
+        DWORD already_marked = 0;
+        DWORD marked_size = sizeof(already_marked);
+        if (RegQueryValueExW(item_key, L"AgentMcpPromotedOnce", nullptr,
+                             nullptr, reinterpret_cast<LPBYTE>(&already_marked),
+                             &marked_size) != ERROR_SUCCESS ||
+            already_marked == 0) {
+          const DWORD one = 1;
+          RegSetValueExW(item_key, L"IsPromoted", 0, REG_DWORD,
+                         reinterpret_cast<const BYTE*>(&one), sizeof(one));
+          RegSetValueExW(item_key, L"AgentMcpPromotedOnce", 0, REG_DWORD,
+                         reinterpret_cast<const BYTE*>(&one), sizeof(one));
+        }
+      }
+    }
+    RegCloseKey(item_key);
+  }
+
+  RegCloseKey(root_key);
+}
+
 }  // namespace
 
 class WindowClassRegistrar {
@@ -329,6 +395,9 @@ void Win32Window::InitTrayIcon(const std::wstring& tooltip) {
 
   wcsncpy_s(tray_nid_.szTip, tooltip.c_str(), _TRUNCATE);
   tray_added_ = (Shell_NotifyIconW(NIM_ADD, &tray_nid_) != FALSE);
+  if (tray_added_) {
+    PromoteTrayIconOnWindows11Once();
+  }
 }
 
 void Win32Window::SetTrayTooltip(const std::wstring& tooltip) {
@@ -354,7 +423,8 @@ void Win32Window::RemoveTrayIcon() {
 void Win32Window::SetTrayState(const std::wstring& server_name,
                                bool is_running,
                                int port,
-                               bool is_dark) {
+                               bool is_dark,
+                               int accent_rgb) {
   if (!server_name.empty()) {
     tray_server_name_ = server_name;
   }
@@ -363,13 +433,27 @@ void Win32Window::SetTrayState(const std::wstring& server_name,
     tray_port_ = port;
   }
   is_dark_mode_ = is_dark;
+  if (accent_rgb >= 0) {
+    tray_accent_rgb_ = accent_rgb & 0xFFFFFF;
+  }
+
+  wchar_t tip_buf[120]{};
+  if (tray_service_running_) {
+    swprintf_s(tip_buf, L"%s \u00b7 \u8fd0\u884c\u4e2d (:%d)",
+               tray_server_name_.c_str(), tray_port_);
+  } else {
+    swprintf_s(tip_buf, L"%s \u00b7 \u670d\u52a1\u5df2\u505c\u6b62",
+               tray_server_name_.c_str());
+  }
+  SetTrayTooltip(tip_buf);
+
   if (tray_flyout_hwnd_ && IsWindow(tray_flyout_hwnd_)) {
     BOOL enable_dark = is_dark_mode_ ? TRUE : FALSE;
     DwmSetWindowAttribute(tray_flyout_hwnd_, DWMWA_USE_IMMERSIVE_DARK_MODE,
                           &enable_dark, sizeof(enable_dark));
     if (IsWindows11OrGreater()) {
       COLORREF border_col =
-          is_dark_mode_ ? RGB(0x36, 0x34, 0x2F) : RGB(0xDC, 0xD8, 0xCE);
+          is_dark_mode_ ? RGB(0x22, 0x22, 0x28) : RGB(0xE6, 0xE6, 0xEA);
       DwmSetWindowAttribute(tray_flyout_hwnd_, DWMWA_BORDER_COLOR, &border_col,
                             sizeof(border_col));
     }
@@ -451,25 +535,31 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
   g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-  // Swiss Craft A+B Fusion Palette (Warm Ivory #FAF9F6 / Graphite #181A20 + Indigo Ink #4338CA)
+  // v3.3.0 Concentric Gallery Palette + Dynamic Theme Accent Synchronization
+  const BYTE acR = static_cast<BYTE>((tray_accent_rgb_ >> 16) & 0xFF);
+  const BYTE acG = static_cast<BYTE>((tray_accent_rgb_ >> 8) & 0xFF);
+  const BYTE acB = static_cast<BYTE>(tray_accent_rgb_ & 0xFF);
+
   const Gdiplus::Color bgCol =
-      dark ? Gdiplus::Color(255, 0x18, 0x1A, 0x20)
-           : Gdiplus::Color(255, 0xFA, 0xF9, 0xF6);
+      dark ? Gdiplus::Color(255, 0x12, 0x12, 0x16)
+           : Gdiplus::Color(255, 0xFA, 0xFA, 0xFB);
   const Gdiplus::Color inkCol =
-      dark ? Gdiplus::Color(255, 0xF4, 0xF5, 0xF8)
-           : Gdiplus::Color(255, 0x1A, 0x1D, 0x24);
+      dark ? Gdiplus::Color(255, 0xFA, 0xFA, 0xFA)
+           : Gdiplus::Color(255, 0x11, 0x11, 0x13);
   const Gdiplus::Color iconCol =
-      dark ? Gdiplus::Color(255, 0x94, 0xA3, 0xB8)
-           : Gdiplus::Color(255, 0x64, 0x74, 0x8B);
+      dark ? Gdiplus::Color(255, 0x8E, 0x8E, 0x98)
+           : Gdiplus::Color(255, 0x71, 0x71, 0x7A);
   const Gdiplus::Color hairlineCol =
-      dark ? Gdiplus::Color(255, 0x2B, 0x30, 0x3E)
-           : Gdiplus::Color(255, 0xE2, 0xE8, 0xF0);
+      dark ? Gdiplus::Color(255, 0x22, 0x22, 0x28)
+           : Gdiplus::Color(255, 0xE6, 0xE6, 0xEA);
   const Gdiplus::Color hoverFill =
-      dark ? Gdiplus::Color(255, 0x25, 0x29, 0x36)
-           : Gdiplus::Color(255, 0xEF, 0xF2, 0xF6);
-  const Gdiplus::Color accentCol =
-      dark ? Gdiplus::Color(255, 0x81, 0x8C, 0xF8)
-           : Gdiplus::Color(255, 0x43, 0x38, 0xCA);
+      dark ? Gdiplus::Color(46, acR, acG, acB)
+           : Gdiplus::Color(24, acR, acG, acB);
+  const Gdiplus::Color accentCol(255, acR, acG, acB);
+  const Gdiplus::Color badgeEndCol(
+      255, static_cast<BYTE>(max(0, static_cast<int>(acR) - 42)),
+      static_cast<BYTE>(max(0, static_cast<int>(acG) - 42)),
+      static_cast<BYTE>(max(0, static_cast<int>(acB) - 36)));
   const Gdiplus::Color sageCol =
       dark ? Gdiplus::Color(255, 0x34, 0xD3, 0x99)
            : Gdiplus::Color(255, 0x05, 0x96, 0x69);
@@ -506,11 +596,17 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
   {
     Gdiplus::RectF badgeRect(14.0f * s, 14.0f * s, 38.0f * s, 38.0f * s);
     Gdiplus::GraphicsPath badgePath;
-    AddRoundedRectPath(badgePath, badgeRect, 11.0f * s);
+    AddRoundedRectPath(badgePath, badgeRect, 12.0f * s);
+    const Gdiplus::Color badgeStart =
+        (acR == 0xF4 && acG == 0xF4 && acB == 0xF6)
+            ? Gdiplus::Color(255, 0x3F, 0x3F, 0x46)
+            : accentCol;
+    const Gdiplus::Color badgeEnd =
+        (acR == 0xF4 && acG == 0xF4 && acB == 0xF6)
+            ? Gdiplus::Color(255, 0x18, 0x18, 0x1B)
+            : badgeEndCol;
     Gdiplus::LinearGradientBrush badgeGrad(
-        badgeRect,
-        Gdiplus::Color(255, 0x4F, 0x46, 0xE5),
-        Gdiplus::Color(255, 0x31, 0x2E, 0x81),
+        badgeRect, badgeStart, badgeEnd,
         Gdiplus::LinearGradientModeForwardDiagonal);
     g.FillPath(&badgeGrad, &badgePath);
 
@@ -587,7 +683,7 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
 
     if (hovered) {
       Gdiplus::GraphicsPath hoverPath;
-      AddRoundedRectPath(hoverPath, row, 8.5f * s);
+      AddRoundedRectPath(hoverPath, row, row.Height * 0.5f);
       Gdiplus::SolidBrush hBrush(isDanger ? dangerHoverFill : hoverFill);
       g.FillPath(&hBrush, &hoverPath);
     }
@@ -1104,9 +1200,10 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   if (taskbar_created_msg_ != 0 && message == taskbar_created_msg_) {
-    tray_added_ = false;
-    Shell_NotifyIconW(NIM_ADD, &tray_nid_);
-    tray_added_ = true;
+    tray_added_ = (Shell_NotifyIconW(NIM_ADD, &tray_nid_) != FALSE);
+    if (tray_added_) {
+      PromoteTrayIconOnWindows11Once();
+    }
     return 0;
   }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 class SubMcpGatewayPage extends StatefulWidget {
   final ConsoleBackend backend;
@@ -60,7 +60,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
     Map<String, dynamic>? existing,
     bool jsonMode = false,
   }) async {
-    final saved = await showClaudeDialog<bool>(
+    final saved = await showPrismDialog<bool>(
       context: context,
       builder: (ctx) => _SubMcpModalDialog(
         backend: widget.backend,
@@ -76,7 +76,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final enabledCount =
         widget.servers.where((s) => s['enabled'] != false).length;
 
@@ -89,18 +89,18 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
-              ClaudeStaggeredReveal(
+              PrismStaggeredReveal(
                 index: 0,
-                child: ClaudeEditorialPageHeader(
+                child: PrismEditorialPageHeader(
                   eyebrow: 'SUB-MCP GATEWAY',
-                  leadingDot: ClaudeStatusDot(
+                  leadingDot: PrismStatusDot(
                     color: enabledCount > 0 ? c.sage : c.meta,
                     pulsing: enabledCount > 0,
                     size: 6.0,
                   ),
                   title: '子 MCP 网关',
                   titleBadge: widget.servers.isNotEmpty
-                      ? ClaudePill(
+                      ? PrismPill(
                           text: '$enabledCount / ${widget.servers.length} 已启用',
                           mono: false,
                           fg: enabledCount > 0 ? c.sage : c.muted,
@@ -112,17 +112,17 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ClaudeButton(
+                      PrismButton(
                         label: '粘贴 JSON 导入',
                         compact: true,
                         leading: const Icon(Icons.data_object_rounded),
                         onPressed: () => _openEditModal(jsonMode: true),
                       ),
-                      ClaudeButton(
+                      PrismButton(
                         label: '添加子 MCP',
                         compact: true,
                         leading: const Icon(Icons.add_rounded),
-                        variant: ClaudeBtnVariant.clay,
+                        variant: PrismBtnVariant.clay,
                         onPressed: () => _openEditModal(),
                       ),
                     ],
@@ -136,11 +136,11 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
         if (widget.servers.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: ClaudeStaggeredReveal(
+            child: PrismStaggeredReveal(
               index: 1,
               child: Center(
                 key: const ValueKey('empty-submcp'),
-                child: ClaudeCard(
+                child: PrismCard(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
                     vertical: 38,
@@ -153,7 +153,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                         height: 46,
                         decoration: ShapeDecoration(
                           color: c.sageBg,
-                          shape: claudeSuperellipse(
+                          shape: prismSuperellipse(
                             15,
                             side: BorderSide(
                               color: c.sage.withValues(alpha: 0.24),
@@ -195,7 +195,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                 bottom: (MediaQuery.sizeOf(context).width < 700 ? 124 : 32) +
                     widget.extraBottomPadding,
               ),
-              child: ClaudeListGroup(
+              child: PrismListGroup(
                 dividerIndent: 68,
                 children: [
                   for (var idx = 0; idx < widget.servers.length; idx++)
@@ -210,7 +210,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
 
   Widget _buildServerRow(
     BuildContext context,
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> s,
   ) {
     final name = (s['name'] ?? '').toString();
@@ -277,7 +277,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                           height: 40,
                           decoration: ShapeDecoration(
                             color: c.recessed,
-                            shape: claudeSuperellipse(
+                            shape: prismSuperellipse(
                               13.5,
                               side: BorderSide(
                                 color: c.hairline.withValues(alpha: 0.65),
@@ -302,7 +302,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                               color: c.paper2,
                               shape: BoxShape.circle,
                             ),
-                            child: ClaudeStatusDot(
+                            child: PrismStatusDot(
                               color: dotColor,
                               pulsing: isTesting || (enabled && status == 'ok'),
                               size: 6.5,
@@ -333,7 +333,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                                   color: c.ink,
                                 ),
                               ),
-                              ClaudePill(
+                              PrismPill(
                                 text: tr.toUpperCase(),
                                 fg: trColor,
                                 bg: trColor.withValues(alpha: 0.10),
@@ -354,17 +354,17 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                     const SizedBox(width: 10),
                     // Right controls: Tool count / Probe + Switch + ⋯ Menu
                     if (tools.isNotEmpty)
-                      ClaudeButton(
+                      PrismButton(
                         label: MediaQuery.sizeOf(context).width < 430
                             ? '${tools.length}'
                             : '${tools.length} 工具',
                         compact: true,
-                        variant: ClaudeBtnVariant.ghost,
+                        variant: PrismBtnVariant.ghost,
                         leading: AnimatedRotation(
                           turns: open ? 0.5 : 0.0,
-                          duration: ClaudeMotion.duration(
+                          duration: PrismMotion.duration(
                             context,
-                            ClaudeMotion.fast,
+                            PrismMotion.fast,
                           ),
                           child: const Icon(Icons.expand_more_rounded),
                         ),
@@ -379,16 +379,16 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                         },
                       )
                     else
-                      ClaudeButton(
+                      PrismButton(
                         label: isTesting ? '探测中' : '探测',
                         compact: true,
                         loading: isTesting,
-                        variant: ClaudeBtnVariant.ghost,
+                        variant: PrismBtnVariant.ghost,
                         leading: const Icon(Icons.radar_rounded),
                         onPressed: isTesting ? null : () => _testServer(name),
                       ),
                     const SizedBox(width: 8),
-                    ClaudeSwitch(
+                    PrismSwitch(
                       value: enabled,
                       onChanged: (v) async {
                         await widget.backend.toggleSubMcp(name, v);
@@ -396,22 +396,22 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                       },
                     ),
                     const SizedBox(width: 6),
-                    ClaudeActionMenuButton(
+                    PrismActionMenuButton(
                       tooltip: '更多操作',
                       actions: [
-                        ClaudeMenuAction(
+                        PrismMenuAction(
                           label: isTesting ? '正在探测工具...' : '探测并刷新工具列表',
                           icon: Icons.radar_rounded,
                           onSelected: () {
                             if (!isTesting) _testServer(name);
                           },
                         ),
-                        ClaudeMenuAction(
+                        PrismMenuAction(
                           label: '编辑服务配置',
                           icon: Icons.edit_outlined,
                           onSelected: () => _openEditModal(existing: s),
                         ),
-                        ClaudeMenuAction(
+                        PrismMenuAction(
                           label: tr == 'stdio' ? '复制启动命令' : '复制服务地址',
                           subtitle: endpoint,
                           icon: Icons.copy_rounded,
@@ -420,13 +420,13 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                             widget.onToast('已复制：$endpoint');
                           },
                         ),
-                        ClaudeMenuAction(
+                        PrismMenuAction(
                           label: '删除此子 MCP',
                           icon: Icons.delete_outline_rounded,
                           dividerBefore: true,
                           destructive: true,
                           onSelected: () async {
-                            final ok = await showClaudeConfirmDialog(
+                            final ok = await showPrismConfirmDialog(
                               context,
                               title: '删除子 MCP',
                               message: '确定移除嵌套子 MCP「$name」吗？',
@@ -446,7 +446,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                 ),
               ),
             ),
-            ClaudeCollapsible(
+            PrismCollapsible(
               expanded: lastErr.isNotEmpty,
               builder: (_) => Container(
                 width: double.infinity,
@@ -457,7 +457,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                 ),
                 decoration: ShapeDecoration(
                   color: c.dangerBg,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     14,
                     side: BorderSide(color: c.danger.withValues(alpha: 0.28)),
                   ),
@@ -468,7 +468,7 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                 ),
               ),
             ),
-            ClaudeCollapsible(
+            PrismCollapsible(
               expanded: open && tools.isNotEmpty,
               builder: (_) => Container(
                 decoration: BoxDecoration(
@@ -536,7 +536,7 @@ class _SubMcpToolRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final name = (tool['name'] ?? '').toString();
     final desc = (tool['description'] ?? '').toString().trim();
     final schema = tool['inputSchema'] is Map
@@ -584,7 +584,7 @@ class _SubMcpToolRow extends StatelessWidget {
                   const Spacer(),
                 if (props.isNotEmpty) ...[
                   const SizedBox(width: 6),
-                  ClaudePill(
+                  PrismPill(
                     text: '${props.length} 参数',
                     mono: false,
                     bg: c.paper2,
@@ -615,7 +615,7 @@ class _SubMcpToolRow extends StatelessWidget {
                 ),
               ],
             ),
-            ClaudeCollapsible(
+            PrismCollapsible(
               expanded: expanded,
               builder: (_) => Padding(
                 padding: const EdgeInsets.fromLTRB(19, 6, 4, 4),
@@ -641,7 +641,7 @@ class _SubMcpToolRow extends StatelessWidget {
                         padding: const EdgeInsets.all(11),
                         decoration: ShapeDecoration(
                           color: c.paper2,
-                          shape: claudeSuperellipse(
+                          shape: prismSuperellipse(
                             14,
                             side: BorderSide(
                               color: c.hairline.withValues(alpha: 0.65),
@@ -681,10 +681,10 @@ class _SubMcpToolRow extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(width: 6),
-                                        ClaudePill(text: pType),
+                                        PrismPill(text: pType),
                                         if (isReq) ...[
                                           const SizedBox(width: 5),
-                                          ClaudePill(
+                                          PrismPill(
                                             text: '必填',
                                             mono: false,
                                             fg: c.clay,
@@ -882,7 +882,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final compact = MediaQuery.sizeOf(context).width < 540;
 
     return Dialog(
@@ -892,7 +892,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -911,7 +911,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
               ),
               child: Row(
                 children: [
-                  const ClaudeSparkIcon(size: 17),
+                  const PrismSparkIcon(size: 17),
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
@@ -920,17 +920,17 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                     ),
                   ),
                   if (widget.existing == null) ...[
-                    ClaudeSegmented<bool>(
+                    PrismSegmented<bool>(
                       value: _jsonMode,
                       items: const [(false, '表单配置'), (true, '粘贴 JSON')],
                       onChanged: (v) => setState(() => _jsonMode = v),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  ClaudeButton(
+                  PrismButton(
                     label: '',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
+                    variant: PrismBtnVariant.ghost,
                     leading: const Icon(Icons.close_rounded, size: 17),
                     onPressed: () => Navigator.of(context).pop(false),
                   ),
@@ -975,14 +975,14 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                         key: const ValueKey('form-mode'),
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          ClaudeFormRow(
+                          PrismFormRow(
                             label: '传输协议',
                             labelWidth: 100,
                             stackBreakpoint: 430,
                             horizontalAlignment: CrossAxisAlignment.center,
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: ClaudeSegmented<String>(
+                              child: PrismSegmented<String>(
                                 value: _proto,
                                 items: const [
                                   ('stdio', 'stdio 进程'),
@@ -993,11 +993,11 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                               ),
                             ),
                           ),
-                          ClaudeCollapsible(
+                          PrismCollapsible(
                             expanded: _proto == 'stdio',
                             builder: (_) => Column(
                               children: [
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '启动命令',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1013,7 +1013,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                                     ),
                                   ),
                                 ),
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '命令参数',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1031,7 +1031,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                                     ),
                                   ),
                                 ),
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '工作目录',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1047,7 +1047,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                                     ),
                                   ),
                                 ),
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '环境变量',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1067,11 +1067,11 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                               ],
                             ),
                           ),
-                          ClaudeCollapsible(
+                          PrismCollapsible(
                             expanded: _proto != 'stdio',
                             builder: (_) => Column(
                               children: [
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '服务地址 URL',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1087,7 +1087,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                                     ),
                                   ),
                                 ),
-                                ClaudeFormRow(
+                                PrismFormRow(
                                   label: '请求头 Headers',
                                   labelWidth: 100,
                                   stackBreakpoint: 430,
@@ -1107,7 +1107,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                               ],
                             ),
                           ),
-                          ClaudeFormRow(
+                          PrismFormRow(
                             label: '子 MCP 名称',
                             labelWidth: 100,
                             stackBreakpoint: 430,
@@ -1127,7 +1127,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                ClaudeButton(
+                                PrismButton(
                                   label: _probing ? '探测中...' : '自动探测',
                                   compact: true,
                                   loading: _probing,
@@ -1139,7 +1139,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                               ],
                             ),
                           ),
-                          ClaudeFormRow(
+                          PrismFormRow(
                             label: '功能简介',
                             labelWidth: 100,
                             stackBreakpoint: 430,
@@ -1151,7 +1151,7 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
                               ),
                             ),
                           ),
-                          ClaudeFormRow(
+                          PrismFormRow(
                             label: '超时（秒）',
                             labelWidth: 100,
                             stackBreakpoint: 430,
@@ -1185,17 +1185,17 @@ class _SubMcpModalDialogState extends State<_SubMcpModalDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '取消',
                     compact: true,
                     onPressed: () => Navigator.of(context).pop(false),
                   ),
                   const SizedBox(width: 8),
-                  ClaudeButton(
+                  PrismButton(
                     label: _saving ? '保存中...' : '保存配置',
                     compact: true,
                     loading: _saving,
-                    variant: ClaudeBtnVariant.clay,
+                    variant: PrismBtnVariant.clay,
                     onPressed: _saving ? null : _save,
                   ),
                 ],

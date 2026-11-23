@@ -30,6 +30,7 @@ class _IoConsoleBackend extends ConsoleBackend {
 
   bool _initialized = false;
   bool? _lastSyncedDark;
+  int? _lastSyncedAccentRgb;
   String _lastTraySig = '';
   String _lastAndroidFgsSig = '';
 
@@ -487,7 +488,8 @@ class _IoConsoleBackend extends ConsoleBackend {
       final cfg = _ctrl.loadCurrentServerConfig();
       final running = _ctrl.isRunning;
       final dark = _lastSyncedDark ?? false;
-      final sig = '${cfg.serverName}|$running|${cfg.port}|$dark';
+      final accentRgb = _lastSyncedAccentRgb ?? (dark ? 0x818CF8 : 0x4F46E5);
+      final sig = '${cfg.serverName}|$running|${cfg.port}|$dark|$accentRgb';
       if (sig == _lastTraySig) return;
       _lastTraySig = sig;
       await _winChannel.invokeMethod<void>('setTrayState', <String, Object>{
@@ -495,6 +497,7 @@ class _IoConsoleBackend extends ConsoleBackend {
         'running': running,
         'port': cfg.port,
         'dark': dark,
+        'accentRgb': accentRgb,
       });
     } catch (_) {}
   }
@@ -653,10 +656,17 @@ class _IoConsoleBackend extends ConsoleBackend {
   }
 
   @override
-  Future<void> syncNativeWindowTheme(bool isDark) async {
-    if (_lastSyncedDark == isDark) return;
+  Future<void> syncNativeWindowTheme(bool isDark, {int? accentRgb}) async {
+    final darkChanged = _lastSyncedDark != isDark;
+    final accentChanged =
+        accentRgb != null && _lastSyncedAccentRgb != accentRgb;
+    if (!darkChanged && !accentChanged) return;
     _lastSyncedDark = isDark;
+    if (accentRgb != null) {
+      _lastSyncedAccentRgb = accentRgb;
+    }
     if (Platform.isAndroid) {
+      if (!darkChanged) return;
       SystemChrome.setSystemUIOverlayStyle(
         SystemUiOverlayStyle(
           statusBarColor: const Color(0x00000000),
@@ -674,9 +684,11 @@ class _IoConsoleBackend extends ConsoleBackend {
       return;
     }
     if (!Platform.isWindows) return;
-    try {
-      await _winChannel.invokeMethod<void>('setDarkTheme', isDark);
-    } catch (_) {}
+    if (darkChanged) {
+      try {
+        await _winChannel.invokeMethod<void>('setDarkTheme', isDark);
+      } catch (_) {}
+    }
     unawaited(_syncNativeTrayState());
   }
 

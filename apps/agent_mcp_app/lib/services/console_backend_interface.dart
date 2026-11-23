@@ -191,7 +191,7 @@ abstract class ConsoleBackend {
   Future<Map<String, dynamic>> getAndroidDynamicColors() async => const {'supported': false};
   bool get isWindowsPlatform => false;
   bool get isLinuxPlatform => false;
-  String get currentAppVersion => '3.2.1';
+  String get currentAppVersion => '3.3.0';
   bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;
@@ -249,7 +249,7 @@ abstract class ConsoleBackend {
   Future<void> toggleMaximizeWindow();
   Future<void> togglePinWindow();
   Future<void> hideWindowToTray();
-  Future<void> syncNativeWindowTheme(bool isDark);
+  Future<void> syncNativeWindowTheme(bool isDark, {int? accentRgb});
   Future<bool> setWindowEffect(bool enabled);
 
   Future<Map<String, dynamic>> checkAuthState();

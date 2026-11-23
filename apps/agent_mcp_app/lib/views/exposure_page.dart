@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 import 'profile_endpoints_helper.dart';
 
 String inferShareModeFromPath(String rawPath) {
@@ -189,7 +189,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     _dialogOpen = true;
     Map<String, dynamic>? created;
     try {
-      created = await showClaudeDialog<Map<String, dynamic>>(
+      created = await showPrismDialog<Map<String, dynamic>>(
         context: context,
         builder: (_) => _CreateExposureDialog(
           backend: widget.backend,
@@ -215,7 +215,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
   }
 
   Future<void> _openQrModal(String title, String url) async {
-    await showClaudeDialog<void>(
+    await showPrismDialog<void>(
       context: context,
       builder: (_) => _ShareQrDialog(
         title: title,
@@ -227,7 +227,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final items = _items;
     final ts = _tsStatus;
     final tsReachable = ts['reachable'] == true;
@@ -272,25 +272,25 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClaudeEditorialPageHeader(
+          PrismEditorialPageHeader(
             eyebrow: 'NETWORK & SHARE',
-            leadingDot: ClaudeStatusDot(
+            leadingDot: PrismStatusDot(
               color: channelReady ? c.sage : (_enabled ? c.clay : c.meta),
               pulsing: channelReady,
               size: 6.0,
             ),
             title: '外网映射与链接分享',
-            titleBadge: ClaudeActionMenuButton(
+            titleBadge: PrismActionMenuButton(
               label: channelPillLabel,
               tooltip: '查看网络通道就绪状态',
               minMenuWidth: 310,
-              leading: ClaudeStatusDot(
+              leading: PrismStatusDot(
                 color: channelReady ? c.sage : (_enabled ? c.clay : c.meta),
                 pulsing: channelReady,
                 size: 6.5,
               ),
               actions: [
-                ClaudeMenuAction(
+                PrismMenuAction(
                   label: 'Tailscale 组网 / Funnel',
                   subtitle: tsSummary,
                   icon: Icons.hub_rounded,
@@ -306,7 +306,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     }
                   },
                 ),
-                ClaudeMenuAction(
+                PrismMenuAction(
                   label: '网关直享通道 (/share)',
                   subtitle: gwSummary,
                   icon: Icons.bolt_rounded,
@@ -320,14 +320,14 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                     }
                   },
                 ),
-                ClaudeMenuAction(
+                PrismMenuAction(
                   label: 'Cloudflared 临时隧道',
                   subtitle: cfSummary,
                   icon: Icons.cloud_outlined,
                   badge: _cfInstalled ? '就绪' : '可选',
                   onTap: _doRefresh,
                 ),
-                ClaudeMenuAction(
+                PrismMenuAction(
                   label: '重新检测通道状态',
                   icon: Icons.refresh_rounded,
                   dividerBefore: true,
@@ -339,26 +339,26 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                ClaudeButton(
+                PrismButton(
                   label: _refreshing ? '刷新中...' : '刷新',
                   compact: true,
-                  variant: ClaudeBtnVariant.ghost,
+                  variant: PrismBtnVariant.ghost,
                   loading: _refreshing,
                   leading: const Icon(Icons.refresh_rounded),
                   onPressed: _doRefresh,
                 ),
                 if (items.isNotEmpty)
-                  ClaudeButton(
+                  PrismButton(
                     label: _closingAll ? '关闭中...' : '全部关闭 (${items.length})',
                     compact: true,
                     loading: _closingAll,
                     leading: const Icon(Icons.link_off_rounded),
                     onPressed: _closeAll,
                   ),
-                ClaudeButton(
+                PrismButton(
                   label: '新建外网分享',
                   compact: true,
-                  variant: ClaudeBtnVariant.clay,
+                  variant: PrismBtnVariant.clay,
                   leading: const Icon(Icons.add_link_rounded),
                   onPressed: _enabled
                       ? () => _openCreateDialog(initialMode: 'wizard')
@@ -370,9 +370,9 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
           const SizedBox(height: 16),
 
           if (!_enabled) ...[
-            ClaudeListGroup(
+            PrismListGroup(
               children: [
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   leading: Icon(
                     Icons.pause_circle_outline_rounded,
                     color: c.clay,
@@ -380,11 +380,11 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                   ),
                   title: '外链分享目前已暂停',
                   subtitle: '暂停期间外部无法访问任何分享链接，点击右侧按钮可随时恢复。',
-                  trailing: ClaudeButton(
+                  trailing: PrismButton(
                     label: _togglingMaster ? '开启中...' : '立即开启',
                     compact: true,
                     loading: _togglingMaster,
-                    variant: ClaudeBtnVariant.clay,
+                    variant: PrismBtnVariant.clay,
                     onPressed: _enableMasterNow,
                   ),
                 ),
@@ -437,24 +437,24 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                         spacing: 4,
                         runSpacing: 4,
                         children: [
-                          ClaudeButton(
+                          PrismButton(
                             label: '传文件',
                             compact: true,
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'file'),
                           ),
-                          ClaudeButton(
+                          PrismButton(
                             label: '传目录 / 网站',
                             compact: true,
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'folder'),
                           ),
-                          ClaudeButton(
+                          PrismButton(
                             label: '映射端口',
                             compact: true,
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             onPressed: () =>
                                 _openCreateDialog(initialMode: 'port'),
                           ),
@@ -470,7 +470,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
           if (items.isEmpty)
             _buildEmptyState(c)
           else
-            ClaudeListGroup(
+            PrismListGroup(
               headerLabel: '活跃分享 (${items.length})',
               dividerIndent: 54,
               children: [
@@ -498,7 +498,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     );
   }
 
-  Widget _buildEmptyState(ClaudePalette c) {
+  Widget _buildEmptyState(PrismPalette c) {
     final heroBody = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Column(
@@ -508,7 +508,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
             height: 46,
             decoration: ShapeDecoration(
               color: c.clay.withValues(alpha: c.isDark ? 0.16 : 0.09),
-              shape: claudeSuperellipse(13),
+              shape: prismSuperellipse(13),
             ),
             child: Icon(
               widget.backend.isAndroidPlatform
@@ -552,20 +552,20 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '选择文件',
                     compact: true,
-                    variant: ClaudeBtnVariant.clay,
+                    variant: PrismBtnVariant.clay,
                     leading: const Icon(Icons.insert_drive_file_outlined),
                     onPressed: () => _openCreateDialog(initialMode: 'file'),
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: '文件夹 / 网站',
                     compact: true,
                     leading: const Icon(Icons.folder_open_rounded),
                     onPressed: () => _openCreateDialog(initialMode: 'folder'),
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: '映射本地端口',
                     compact: true,
                     leading: const Icon(Icons.podcasts_rounded),
@@ -592,7 +592,7 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       width: double.infinity,
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           22,
           side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
         ),
@@ -609,7 +609,7 @@ class _MobileQuickShareGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     const modes = <(String, IconData, String, String)>[
       ('file', Icons.insert_drive_file_outlined, '单文件', '流式播放 / 直下'),
       ('folder', Icons.folder_open_rounded, '文件夹', '目录树在线浏览'),
@@ -629,7 +629,7 @@ class _MobileQuickShareGrid extends StatelessWidget {
                 width: w,
                 child: Material(
                   color: c.paper2,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     20,
                     side: BorderSide(
                       color: c.hairline.withValues(alpha: 0.62),
@@ -652,7 +652,7 @@ class _MobileQuickShareGrid extends StatelessWidget {
                               color: c.clay.withValues(
                                 alpha: c.isDark ? 0.16 : 0.10,
                               ),
-                              shape: claudeSuperellipse(12),
+                              shape: prismSuperellipse(12),
                             ),
                             child: Icon(m.$2, size: 17.5, color: c.clay),
                           ),
@@ -724,7 +724,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final item = widget.item;
     final kind = (item['kind'] ?? 'file').toString();
     final label = (item['label'] ?? '未命名分享').toString();
@@ -816,27 +816,27 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
             '已复制 ${opt.badge} 地址：${opt.url}',
           ),
         ),
-        ClaudeButton(
+        PrismButton(
           label: '',
           compact: true,
-          variant: ClaudeBtnVariant.ghost,
+          variant: PrismBtnVariant.ghost,
           tooltip: '查看二维码',
           leading: const Icon(Icons.qr_code_rounded, size: 16),
           onPressed: () => widget.onShowQr(label, primaryUrl),
         ),
-        ClaudeButton(
+        PrismButton(
           label: '',
           compact: true,
-          variant: ClaudeBtnVariant.ghost,
+          variant: PrismBtnVariant.ghost,
           tooltip: '浏览器打开预览',
           leading: const Icon(Icons.open_in_new_rounded, size: 16),
           onPressed: () => widget.onOpenBrowser(primaryUrl),
         ),
-        ClaudeButton(
+        PrismButton(
           label: '',
           compact: true,
           loading: widget.closing,
-          variant: ClaudeBtnVariant.ghost,
+          variant: PrismBtnVariant.ghost,
           tooltip: '关闭分享',
           leading: Icon(
             Icons.link_off_rounded,
@@ -875,7 +875,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                         color: c.clay.withValues(
                           alpha: c.isDark ? 0.16 : 0.10,
                         ),
-                        shape: claudeSuperellipse(13.5),
+                        shape: prismSuperellipse(13.5),
                       ),
                       alignment: Alignment.center,
                       child: Icon(kindIcon, size: 18.5, color: c.clay),
@@ -914,7 +914,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                               color: c.ink,
                             ),
                           ),
-                          ClaudePill(
+                          PrismPill(
                             text: kindLabel,
                             mono: false,
                             fg: c.sage,
@@ -928,7 +928,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                                         '已复制提取码：$pinCode',
                                       )
                                   : null,
-                              child: ClaudePill(
+                              child: PrismPill(
                                 text: pinCode.isNotEmpty
                                     ? '提取码 $pinCode'
                                     : '口令保护',
@@ -1144,7 +1144,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final compact = MediaQuery.sizeOf(context).width < 560;
     final curRaw = _targetCtrl.text.trim();
     final curText = curRaw.toLowerCase();
@@ -1201,7 +1201,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         horizontal: compact ? 14 : 28,
         vertical: 18,
       ),
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -1227,7 +1227,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
               ),
               child: Row(
                 children: [
-                  const ClaudeSparkIcon(size: 18),
+                  const PrismSparkIcon(size: 18),
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
@@ -1235,10 +1235,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                       style: serifTitleStyle(c, size: 17.5),
                     ),
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: '',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
+                    variant: PrismBtnVariant.ghost,
                     leading: const Icon(Icons.close_rounded, size: 18),
                     onPressed: _submitting
                         ? null
@@ -1313,10 +1313,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                       if (_folderStep) ...[
                         Row(
                           children: [
-                            ClaudeButton(
+                            PrismButton(
                               label: '更换类型',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               leading: const Icon(
                                 Icons.arrow_back_ios_new_rounded,
                                 size: 13,
@@ -1367,10 +1367,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                       ] else if (widget.initialMode == 'wizard') ...[
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: ClaudeButton(
+                          child: PrismButton(
                             label: '更换分享类型',
                             compact: true,
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             leading: const Icon(
                               Icons.arrow_back_ios_new_rounded,
                               size: 13,
@@ -1409,7 +1409,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         padding: const EdgeInsets.all(15),
                         decoration: ShapeDecoration(
                           color: c.paper2,
-                          shape: claudeSuperellipse(
+                          shape: prismSuperellipse(
                             20,
                             side: BorderSide(
                               color: c.hairline.withValues(alpha: 0.65),
@@ -1429,7 +1429,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                       color: c.clay.withValues(
                                         alpha: c.isDark ? 0.16 : 0.10,
                                       ),
-                                      shape: claudeSuperellipse(13),
+                                      shape: prismSuperellipse(13),
                                     ),
                                     child: Icon(
                                       Icons.podcasts_rounded,
@@ -1495,7 +1495,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                 runSpacing: 6,
                                 children: [
                                   for (final p in defaultPorts)
-                                    ClaudeButton(
+                                    PrismButton(
                                       label:
                                           widget.activeLocalPorts.contains(p)
                                               ? ':$p · 在线'
@@ -1505,8 +1505,8 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           _targetCtrl.text.trim() == '$p' ||
                                                   widget.activeLocalPorts
                                                       .contains(p)
-                                              ? ClaudeBtnVariant.clay
-                                              : ClaudeBtnVariant.neutral,
+                                              ? PrismBtnVariant.clay
+                                              : PrismBtnVariant.neutral,
                                       onPressed: () => setState(
                                         () => _targetCtrl.text = '$p',
                                       ),
@@ -1526,7 +1526,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           color: c.clay.withValues(
                                             alpha: c.isDark ? 0.16 : 0.10,
                                           ),
-                                          shape: claudeSuperellipse(13),
+                                          shape: prismSuperellipse(13),
                                         ),
                                         child: Icon(
                                           _mode == 'folder'
@@ -1589,7 +1589,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                     children: [
                                       if (!widget.backend.isAndroidPlatform) ...[
                                         if (_mode == 'file' || _mode == 'site')
-                                          ClaudeButton(
+                                          PrismButton(
                                             label: _picking
                                                 ? '选择中...'
                                                 : (_mode == 'site'
@@ -1599,8 +1599,8 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                                         : '更换文件')),
                                             compact: true,
                                             variant: curRaw.isEmpty
-                                                ? ClaudeBtnVariant.clay
-                                                : ClaudeBtnVariant.neutral,
+                                                ? PrismBtnVariant.clay
+                                                : PrismBtnVariant.neutral,
                                             leading: const Icon(
                                               Icons.insert_drive_file_outlined,
                                             ),
@@ -1612,7 +1612,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           ),
                                         if (_mode == 'folder' ||
                                             _mode == 'site')
-                                          ClaudeButton(
+                                          PrismButton(
                                             label: _picking
                                                 ? '选择中...'
                                                 : (_mode == 'site'
@@ -1623,8 +1623,8 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                             compact: true,
                                             variant: curRaw.isEmpty &&
                                                     _mode == 'folder'
-                                                ? ClaudeBtnVariant.clay
-                                                : ClaudeBtnVariant.neutral,
+                                                ? PrismBtnVariant.clay
+                                                : PrismBtnVariant.neutral,
                                             leading: const Icon(
                                               Icons.folder_open_rounded,
                                             ),
@@ -1634,15 +1634,15 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                                     _pickPath(directory: true),
                                           ),
                                       ],
-                                      ClaudeButton(
+                                      PrismButton(
                                         label: _editingRawPath ? '完成' : '粘贴路径',
                                         compact: true,
                                         tooltip: _editingRawPath
                                             ? '收起手动路径框'
                                             : '手动输入或粘贴路径',
                                         variant: _editingRawPath
-                                            ? ClaudeBtnVariant.neutral
-                                            : ClaudeBtnVariant.ghost,
+                                            ? PrismBtnVariant.neutral
+                                            : PrismBtnVariant.ghost,
                                         onPressed: () => setState(
                                           () => _editingRawPath =
                                               !_editingRawPath,
@@ -1671,7 +1671,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                   );
                                 },
                               ),
-                              ClaudeCollapsible(
+                              PrismCollapsible(
                                 expanded: _editingRawPath ||
                                     widget.backend.isAndroidPlatform ||
                                     widget.backend.isWebMode,
@@ -1723,9 +1723,9 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      ClaudeListGroup(
+                      PrismListGroup(
                         children: [
-                          ClaudeSettingsRow(
+                          PrismSettingsRow(
                             onTap: () => setState(
                               () =>
                                   _showAdvancedOptions = !_showAdvancedOptions,
@@ -1761,7 +1761,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                               ],
                             ),
                           ),
-                          ClaudeCollapsible(
+                          PrismCollapsible(
                             expanded: _showAdvancedOptions,
                             builder: (_) => Padding(
                               padding: const EdgeInsets.fromLTRB(
@@ -1788,7 +1788,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           color: c.muted,
                                         ),
                                       ),
-                                      ClaudeSegmented<String>(
+                                      PrismSegmented<String>(
                                         value: _scope,
                                         items: const [
                                           ('auto', '智能优选'),
@@ -1817,7 +1817,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                           color: c.muted,
                                         ),
                                       ),
-                                      ClaudeSegmented<int>(
+                                      PrismSegmented<int>(
                                         value: const [30, 120, 1440, 0]
                                                 .contains(_ttlMinutes)
                                             ? _ttlMinutes
@@ -1857,7 +1857,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                         ),
                                       ),
                                       if (_mode == 'file' || _mode == 'folder')
-                                        ClaudeSegmented<int>(
+                                        PrismSegmented<int>(
                                           value: _maxDownloads,
                                           items: const [
                                             (0, '不限次数'),
@@ -1886,7 +1886,7 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                   ),
                                   if (_mode == 'site') ...[
                                     const SizedBox(height: 10),
-                                    ClaudeCheckToggle(
+                                    PrismCheckToggle(
                                       value: _spa,
                                       label: '前端单页应用路由模式（未知子路径回退至 index.html）',
                                       onChanged: (v) =>
@@ -1922,21 +1922,21 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '取消',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
+                    variant: PrismBtnVariant.ghost,
                     onPressed: _submitting
                         ? null
                         : () => Navigator.of(context).pop(),
                   ),
                   if (!_inStep1) ...[
                     const SizedBox(width: 8),
-                    ClaudeButton(
+                    PrismButton(
                       label: _submitting ? '正在生成链接...' : '生成分享链接',
                       compact: true,
                       loading: _submitting,
-                      variant: ClaudeBtnVariant.clay,
+                      variant: PrismBtnVariant.clay,
                       leading: const Icon(Icons.link_rounded),
                       onPressed: _submit,
                     ),
@@ -1965,14 +1965,14 @@ class _ShareQrDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final qrImgUrl =
         'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${Uri.encodeComponent(url)}';
 
     return Dialog(
       backgroundColor: c.paper,
       elevation: 0,
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -2001,7 +2001,7 @@ class _ShareQrDialog extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: ShapeDecoration(
                   color: Colors.white,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     20,
                     side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
                   ),
@@ -2024,7 +2024,7 @@ class _ShareQrDialog extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: ShapeDecoration(
                   color: c.recessed,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     16,
                     side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
                   ),
@@ -2039,17 +2039,17 @@ class _ShareQrDialog extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '关闭',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
+                    variant: PrismBtnVariant.ghost,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const SizedBox(width: 8),
-                  ClaudeButton(
+                  PrismButton(
                     label: '复制链接',
                     compact: true,
-                    variant: ClaudeBtnVariant.clay,
+                    variant: PrismBtnVariant.clay,
                     leading: const Icon(Icons.copy_rounded),
                     onPressed: () {
                       onCopy();
@@ -2194,7 +2194,7 @@ class _TailscaleExposureSettingsCardState
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final ts = _tsStatus;
     final reachable = ts['reachable'] == true;
     final ips = ((ts['tailscale_ips'] as List?) ?? const [])
@@ -2209,13 +2209,13 @@ class _TailscaleExposureSettingsCardState
             : '基础直享就绪');
     final pillActive = _exposeEnabled && reachable;
 
-    return ClaudeListGroup(
+    return PrismListGroup(
       headerLabel: 'Tailscale 与外网分享设置',
       headerTrailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ClaudePill(
-            leading: ClaudeStatusDot(
+          PrismPill(
+            leading: PrismStatusDot(
               color: pillActive
                   ? c.sage
                   : (_exposeEnabled ? c.clay : c.meta),
@@ -2228,7 +2228,7 @@ class _TailscaleExposureSettingsCardState
             bg: pillActive ? c.sageBg : c.paper2,
           ),
           const SizedBox(width: 8),
-          ClaudeButton(
+          PrismButton(
             label: _probing ? '检测中...' : '检测 Tailscale',
             compact: true,
             loading: _probing,
@@ -2238,10 +2238,10 @@ class _TailscaleExposureSettingsCardState
         ],
       ),
       children: [
-        ClaudeSettingsRow(
+        PrismSettingsRow(
           title: '允许外网分享与 AI 自动映射 (manage_expose)',
           subtitle: '开启后对 AI 说一句话即可拿到文件、目录或网站的预览链接；关闭后立即阻断所有外部访问。',
-          trailing: ClaudeSwitch(
+          trailing: PrismSwitch(
             value: _exposeEnabled,
             onChanged: (v) => _patch(
               {'expose_enabled': v},
@@ -2252,14 +2252,14 @@ class _TailscaleExposureSettingsCardState
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClaudeSettingsRow(
+            PrismSettingsRow(
               title: '启用 Tailscale 组网与 Funnel 联动',
               subtitle: dns.isNotEmpty
                   ? '已识别节点域名 $dns，自动生成 Tailscale 专属访问链接'
                   : (ips.isNotEmpty
                       ? '已识别组网地址 ${ips.join(", ")}，同账号设备可直接打开'
                       : '开启后自动识别本机 Tailscale 100.x 地址及 Serve / Funnel 域名'),
-              trailing: ClaudeSwitch(
+              trailing: PrismSwitch(
                 value: _tsEnabled,
                 onChanged: !_exposeEnabled
                     ? null
@@ -2269,7 +2269,7 @@ class _TailscaleExposureSettingsCardState
                         ),
               ),
             ),
-            ClaudeCollapsible(
+            PrismCollapsible(
               expanded: _exposeEnabled && _tsEnabled,
               builder: (_) => Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -2283,7 +2283,7 @@ class _TailscaleExposureSettingsCardState
                       'Tailscale 默认映射方式',
                       style: sansStyle(c, size: 12.2, color: c.muted),
                     ),
-                    ClaudeSegmented<String>(
+                    PrismSegmented<String>(
                       value: _tsMode,
                       items: const [
                         ('funnel', 'Funnel 公网优先'),
@@ -2302,10 +2302,10 @@ class _TailscaleExposureSettingsCardState
             ),
           ],
         ),
-        ClaudeSettingsRow(
+        PrismSettingsRow(
           title: '无固定公网域名时自动拉起临时公网隧道',
           subtitle: '分享本地网站端口（如 :3000）或未配置固定域名时，自动用 cloudflared 生成临时 HTTPS 链接。',
-          trailing: ClaudeSwitch(
+          trailing: PrismSwitch(
             value: _cfFallback,
             onChanged: !_exposeEnabled
                 ? null
@@ -2332,7 +2332,7 @@ class _TailscaleExposureSettingsCardState
                   color: c.ink,
                 ),
               ),
-              ClaudeSegmented<int>(
+              PrismSegmented<int>(
                 value: const [30, 120, 1440, 0].contains(_ttlMinutes)
                     ? _ttlMinutes
                     : 120,
@@ -2464,7 +2464,7 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -2478,7 +2478,7 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
             color: _hovered
                 ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.06)
                 : c.paper2,
-            shape: claudeSuperellipse(
+            shape: prismSuperellipse(
               20,
               side: BorderSide(
                 color: _hovered
@@ -2494,7 +2494,7 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
                 height: 40,
                 decoration: ShapeDecoration(
                   color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
-                  shape: claudeSuperellipse(13.5),
+                  shape: prismSuperellipse(13.5),
                 ),
                 child: Icon(widget.icon, size: 18.5, color: c.clay),
               ),
@@ -2629,7 +2629,7 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final active = widget.active;
     final bg = active
         ? c.clay
@@ -2654,21 +2654,21 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
         onTap: widget.onTap,
         child: AnimatedScale(
           scale: _pressed ? 0.97 : 1.0,
-          duration: ClaudeMotion.duration(
+          duration: PrismMotion.duration(
             context,
             const Duration(milliseconds: 120),
           ),
-          curve: ClaudeMotion.snappySpring,
+          curve: PrismMotion.snappySpring,
           child: AnimatedContainer(
-            duration: ClaudeMotion.duration(
+            duration: PrismMotion.duration(
               context,
               const Duration(milliseconds: 180),
             ),
-            curve: ClaudeMotion.editorialOut,
+            curve: PrismMotion.editorialOut,
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
             decoration: ShapeDecoration(
               color: bg,
-              shape: claudeSuperellipse(
+              shape: prismSuperellipse(
                 18,
                 side: BorderSide(
                   color: active
@@ -2699,7 +2699,7 @@ class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
                     color: active
                         ? c.onClay.withValues(alpha: 0.14)
                         : c.recessed,
-                    shape: claudeSuperellipse(10),
+                    shape: prismSuperellipse(10),
                   ),
                   alignment: Alignment.center,
                   child: Icon(widget.icon, size: 15, color: iconFg),
@@ -2763,7 +2763,7 @@ class _FolderKindChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -2773,7 +2773,7 @@ class _FolderKindChip extends StatelessWidget {
           color: active
               ? c.clay.withValues(alpha: c.isDark ? 0.18 : 0.09)
               : c.paper2,
-          shape: claudeSuperellipse(
+          shape: prismSuperellipse(
             18,
             side: BorderSide(
               color: active ? c.clay : c.hairline.withValues(alpha: 0.65),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 @immutable
 class HostIpOption {
@@ -295,30 +295,30 @@ class EndpointCopyDropButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     if (options.isEmpty) {
-      return ClaudeButton(
+      return PrismButton(
         label: label,
         compact: true,
-        variant: useSplitPrimary ? ClaudeBtnVariant.clay : ClaudeBtnVariant.neutral,
+        variant: useSplitPrimary ? PrismBtnVariant.clay : PrismBtnVariant.neutral,
         leading: const Icon(Icons.copy_rounded),
         onPressed: onPrimaryTap,
       );
     }
     if (options.length == 1) {
-      return ClaudeButton(
+      return PrismButton(
         label: label,
         compact: true,
-        variant: useSplitPrimary ? ClaudeBtnVariant.clay : ClaudeBtnVariant.neutral,
+        variant: useSplitPrimary ? PrismBtnVariant.clay : PrismBtnVariant.neutral,
         tooltip: '复制地址',
         leading: const Icon(Icons.copy_rounded),
         onPressed: onPrimaryTap ?? () => onSelect(options.first),
       );
     }
 
-    final actions = <ClaudeMenuAction>[
+    final actions = <PrismMenuAction>[
       for (final opt in options)
-        ClaudeMenuAction(
+        PrismMenuAction(
           badge: opt.badge,
           label: opt.displayLabel ?? opt.url,
           icon: opt.isCopyAll
@@ -331,10 +331,10 @@ class EndpointCopyDropButton extends StatelessWidget {
     ];
 
     if (useSplitPrimary) {
-      return ClaudeSplitButton(
+      return PrismSplitButton(
         label: label,
         icon: Icons.copy_rounded,
-        variant: ClaudeBtnVariant.clay,
+        variant: PrismBtnVariant.clay,
         onPrimaryPressed: onPrimaryTap ?? () => onSelect(options.first),
         menuActions: actions,
         minMenuWidth: 268,
@@ -342,7 +342,7 @@ class EndpointCopyDropButton extends StatelessWidget {
       );
     }
 
-    return ClaudeActionMenuButton(
+    return PrismActionMenuButton(
       actions: actions,
       tooltip: '选择地址并复制',
       minMenuWidth: 268,
@@ -400,7 +400,7 @@ class _SelectableIpChipState extends State<SelectableIpChip> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final sel = widget.selected;
     final opt = widget.option;
     final isVpnOrLan = opt.kind == 'vpn' || opt.kind == 'lan';
@@ -429,8 +429,8 @@ class _SelectableIpChipState extends State<SelectableIpChip> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-          curve: ClaudeMotion.editorialOut,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.editorialOut,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 const Map<String, (IconData, String)> kToolMeta = {
   'read_file': (Icons.description_outlined, '读取文件'),
@@ -171,7 +171,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     var toolCalls = 0;
     var errCount = 0;
     var msSum = 0.0;
@@ -249,7 +249,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
         final filterBarWidget = DecoratedBox(
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(
+            shape: prismSuperellipse(
               22,
               side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
             ),
@@ -320,7 +320,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     _searchCtrl.text.trim().isNotEmpty;
 
                 final filterChips = <Widget>[
-                  ClaudeSegmented<String>(
+                  PrismSegmented<String>(
                     value: _cat,
                     items: const [
                       ('ALL', '全部'),
@@ -330,23 +330,23 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     ],
                     onChanged: (v) => setState(() => _cat = v),
                   ),
-                  ClaudeDropMenu<String>(
+                  PrismDropMenu<String>(
                     value: _sort,
                     leadingIcon: Icons.swap_vert_rounded,
                     highlightActive: _sort != 'newest',
                     minMenuWidth: 152,
                     items: const [
-                      ClaudeDropMenuItem(
+                      PrismDropMenuItem(
                         value: 'newest',
                         label: '最新优先',
                         icon: Icons.schedule_rounded,
                       ),
-                      ClaudeDropMenuItem(
+                      PrismDropMenuItem(
                         value: 'oldest',
                         label: '最早优先',
                         icon: Icons.history_rounded,
                       ),
-                      ClaudeDropMenuItem(
+                      PrismDropMenuItem(
                         value: 'slowest',
                         label: '耗时最长',
                         icon: Icons.speed_rounded,
@@ -355,20 +355,20 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     onChanged: (v) => setState(() => _sort = v),
                   ),
                   if (sortedSources.isNotEmpty)
-                    ClaudeDropMenu<String>(
+                    PrismDropMenu<String>(
                       value: _activeSource,
                       leadingIcon: Icons.login_rounded,
                       highlightActive: _activeSource != 'ALL',
                       minMenuWidth: 184,
                       items: [
-                        ClaudeDropMenuItem(
+                        PrismDropMenuItem(
                           value: 'ALL',
                           label: '全部入口',
                           icon: Icons.public_rounded,
                           badge: '${widget.events.length}',
                         ),
                         for (final sName in sortedSources)
-                          ClaudeDropMenuItem(
+                          PrismDropMenuItem(
                             value: sName,
                             label: sName,
                             icon: Icons.login_rounded,
@@ -378,21 +378,21 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                       onChanged: (v) => setState(() => _activeSource = v),
                     ),
                   if (sortedTools.isNotEmpty)
-                    ClaudeDropMenu<String>(
+                    PrismDropMenu<String>(
                       value: _activeTool,
                       leadingIcon: Icons.handyman_outlined,
                       highlightActive: _activeTool != 'ALL',
                       minMenuWidth: 206,
                       searchable: sortedTools.length >= 6,
                       items: [
-                        ClaudeDropMenuItem(
+                        PrismDropMenuItem(
                           value: 'ALL',
                           label: '全部工具',
                           icon: Icons.apps_rounded,
                           badge: '$toolCalls',
                         ),
                         for (final tName in sortedTools)
-                          ClaudeDropMenuItem(
+                          PrismDropMenuItem(
                             value: tName,
                             label: resolveToolMeta(tName).$2,
                             subtitle: tName,
@@ -403,10 +403,10 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                       onChanged: (v) => setState(() => _activeTool = v),
                     ),
                   if (hasActiveFilter)
-                    ClaudeButton(
+                    PrismButton(
                       label: '重置',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
+                      variant: PrismBtnVariant.ghost,
                       leading: const Icon(Icons.filter_alt_off_outlined),
                       onPressed: () {
                         _searchCtrl.clear();
@@ -426,7 +426,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     children: [
                       searchField,
                       const SizedBox(height: 6),
-                      ClaudeScrollHintRow(
+                      PrismScrollHintRow(
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -452,7 +452,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: ClaudeScrollHintRow(
+                      child: PrismScrollHintRow(
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -476,11 +476,11 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
-              ClaudeStaggeredReveal(
+              PrismStaggeredReveal(
                 index: 0,
-                child: ClaudeEditorialPageHeader(
+                child: PrismEditorialPageHeader(
                   eyebrow: 'LIVE INSPECTOR',
-                  leadingDot: ClaudeStatusDot(
+                  leadingDot: PrismStatusDot(
                     color: errCount > 0 ? c.danger : c.sage,
                     pulsing: widget.events.isNotEmpty,
                     size: 6.0,
@@ -498,7 +498,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       if (canSplit)
-                        ClaudeSegmented<bool>(
+                        PrismSegmented<bool>(
                           value: _splitView,
                           items: const [
                             (true, '分栏预览'),
@@ -506,13 +506,13 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                           ],
                           onChanged: (v) => setState(() => _splitView = v),
                         ),
-                      ClaudeButton(
+                      PrismButton(
                         label: '清空',
                         compact: true,
                         leading: const Icon(Icons.delete_sweep_outlined),
                         onPressed: widget.onClear,
                       ),
-                      ClaudeButton(
+                      PrismButton(
                         label: '导出日志',
                         compact: true,
                         leading: const Icon(Icons.download_outlined),
@@ -523,7 +523,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              ClaudeStaggeredReveal(index: 1, child: filterBarWidget),
+              PrismStaggeredReveal(index: 1, child: filterBarWidget),
               const SizedBox(height: 8),
             ],
           ),
@@ -533,11 +533,11 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
         if (filtered.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: ClaudeStaggeredReveal(
+            child: PrismStaggeredReveal(
               index: 2,
               child: Center(
                 key: const ValueKey('empty-feed'),
-                child: ClaudeCard(
+                child: PrismCard(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
                     vertical: 38,
@@ -550,10 +550,10 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                         height: 44,
                         decoration: ShapeDecoration(
                           color: c.clay.withValues(alpha: 0.12),
-                          shape: claudeSuperellipse(14),
+                          shape: prismSuperellipse(14),
                         ),
                         alignment: Alignment.center,
-                        child: const ClaudeSparkIcon(size: 20),
+                        child: const PrismSparkIcon(size: 20),
                       ),
                       const SizedBox(height: 14),
                       Text(
@@ -641,9 +641,9 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ClaudeEditorialPageHeader(
+                  PrismEditorialPageHeader(
                     eyebrow: 'LIVE INSPECTOR',
-                    leadingDot: ClaudeStatusDot(
+                    leadingDot: PrismStatusDot(
                       color: errCount > 0 ? c.danger : c.sage,
                       pulsing: widget.events.isNotEmpty,
                       size: 6.0,
@@ -660,7 +660,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                       runSpacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        ClaudeSegmented<bool>(
+                        PrismSegmented<bool>(
                           value: _splitView,
                           items: const [
                             (true, '分栏预览'),
@@ -668,13 +668,13 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                           ],
                           onChanged: (v) => setState(() => _splitView = v),
                         ),
-                        ClaudeButton(
+                        PrismButton(
                           label: '清空',
                           compact: true,
                           leading: const Icon(Icons.delete_sweep_outlined),
                           onPressed: widget.onClear,
                         ),
-                        ClaudeButton(
+                        PrismButton(
                           label: '导出日志',
                           compact: true,
                           leading: const Icon(Icons.download_outlined),
@@ -732,7 +732,7 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
                         padding: EdgeInsets.only(
                           bottom: 24 + widget.extraBottomPadding,
                         ),
-                        child: ClaudeFadeBox(
+                        child: PrismFadeBox(
                           duration: const Duration(milliseconds: 140),
                           alignment: Alignment.topLeft,
                           child: KeyedSubtree(
@@ -774,7 +774,7 @@ class _InlineTelemetryRibbon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     Widget item(String label, String val, {Color? accent}) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -845,7 +845,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final ev = widget.ev;
     final kind = (ev['kind'] ?? 'info').toString();
     final status = (ev['status'] ?? 'done').toString();
@@ -881,7 +881,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
       if (resultStr.isNotEmpty) 'result': resultStr,
     });
 
-    return ClaudeCard(
+    return PrismCard(
       radius: 12,
       padding: EdgeInsets.zero,
       child: Column(
@@ -898,7 +898,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClaudeStatusDot(
+                    PrismStatusDot(
                       color: accent,
                       pulsing: isRunning,
                       size: 6.5,
@@ -928,7 +928,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                   spacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    ClaudePill(
+                    PrismPill(
                       text: ms != null
                           ? '$badge · ${ms.toStringAsFixed(1)} ms'
                           : badge,
@@ -936,7 +936,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                       fg: accent,
                       bg: accent.withValues(alpha: 0.12),
                     ),
-                    ClaudeSegmented<String>(
+                    PrismSegmented<String>(
                       value: _tab,
                       items: const [
                         ('overview', '结构化'),
@@ -967,7 +967,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                               ].join('  ·  '),
                               style: monoStyle(c, size: 11.2, color: c.muted),
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: '复制 JSON',
                               compact: true,
                               leading: const Icon(Icons.copy_rounded),
@@ -1038,7 +1038,7 @@ class _EventCardState extends State<_EventCard> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final ev = widget.ev;
     final kind = (ev['kind'] ?? 'info').toString();
     final status = (ev['status'] ?? 'done').toString();
@@ -1089,7 +1089,7 @@ class _EventCardState extends State<_EventCard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isRunning) ...[
-                ClaudeStatusDot(
+                PrismStatusDot(
                   color: accent,
                   pulsing: true,
                   size: 5.5,
@@ -1185,11 +1185,11 @@ class _EventCardState extends State<_EventCard> {
                               )
                             : AnimatedRotation(
                                 turns: widget.expanded ? 0.5 : 0.0,
-                                duration: ClaudeMotion.duration(
+                                duration: PrismMotion.duration(
                                   context,
-                                  ClaudeMotion.base,
+                                  PrismMotion.base,
                                 ),
-                                curve: ClaudeMotion.editorialOut,
+                                curve: PrismMotion.editorialOut,
                                 child: Icon(
                                   Icons.expand_more_rounded,
                                   size: 17,
@@ -1331,7 +1331,7 @@ class _EventCardState extends State<_EventCard> {
                   ),
                 ),
               ),
-                ClaudeCollapsible(
+                PrismCollapsible(
                   expanded: widget.expanded,
                   builder: (_) => _RichToolDetailDrawer(
                     ev: ev,
@@ -1529,7 +1529,7 @@ class _RichEventSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final t = (ev['tool'] ?? '').toString();
     final rawArgs = ev['args'];
     final a = rawArgs is Map
@@ -1538,7 +1538,7 @@ class _RichEventSummary extends StatelessWidget {
 
     Widget pill(String text, {Color? accent, bool mono = false}) {
       final col = accent ?? c.inkSoft;
-      return ClaudePill(
+      return PrismPill(
         text: text,
         fg: col,
         bg: (accent ?? c.clay).withValues(alpha: accent != null ? 0.11 : 0.0),
@@ -1737,7 +1737,7 @@ class _RichEventSummary extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
             decoration: ShapeDecoration(
               color: c.codeHeader,
-              shape: claudeSuperellipse(5, side: BorderSide(color: c.hairline)),
+              shape: prismSuperellipse(5, side: BorderSide(color: c.hairline)),
             ),
             child: Text(
               isBg ? 'BG \$' : r'$',
@@ -1760,7 +1760,7 @@ class _RichEventSummary extends StatelessWidget {
           ),
           if (sh.isNotEmpty && sh != 'auto') ...[
             const SizedBox(width: 6),
-            ClaudePill(text: sh, bg: c.paper3),
+            PrismPill(text: sh, bg: c.paper3),
           ],
         ],
       );
@@ -1781,11 +1781,11 @@ class _RichEventSummary extends StatelessWidget {
           pill(actLabel, accent: col),
           if (pid.isNotEmpty) ...[
             const SizedBox(width: 6),
-            ClaudePill(text: '#$pid', bg: c.paper3),
+            PrismPill(text: '#$pid', bg: c.paper3),
           ],
           if (tail != null && act == 'read') ...[
             const SizedBox(width: 6),
-            ClaudePill(text: '末尾 $tail 行', mono: false, bg: c.paper3),
+            PrismPill(text: '末尾 $tail 行', mono: false, bg: c.paper3),
           ],
         ],
       );
@@ -1849,7 +1849,7 @@ class _RichEventSummary extends StatelessWidget {
           ],
           if (glob.isNotEmpty) ...[
             const SizedBox(width: 6),
-            ClaudePill(text: glob, bg: c.paper3),
+            PrismPill(text: glob, bg: c.paper3),
           ],
         ],
       );
@@ -1910,7 +1910,7 @@ class _RichEventSummary extends StatelessWidget {
       final sub = (a['tool_name'] ?? '').toString();
       return Row(
         children: [
-          ClaudePill(text: srv, mono: false, bg: c.paper3),
+          PrismPill(text: srv, mono: false, bg: c.paper3),
           const SizedBox(width: 5),
           Icon(Icons.arrow_forward_rounded, size: 12, color: c.meta),
           const SizedBox(width: 5),
@@ -1935,7 +1935,7 @@ class _RichEventSummary extends StatelessWidget {
         final val = _semanticParamInlineValue(e.key, e.value);
         return Padding(
           padding: const EdgeInsets.only(right: 6),
-          child: ClaudePill(
+          child: PrismPill(
             text: '$label · $val',
             mono: false,
             bg: c.paper3,
@@ -1988,7 +1988,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final a = argsMap ?? const <String, dynamic>{};
     final isEdit = toolRaw.endsWith('edit_file') && a['edits'] is List;
     final isCreate = toolRaw.endsWith('create_file') && a['content'] != null;
@@ -2022,7 +2022,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           ? const BoxDecoration()
           : ShapeDecoration(
               color: c.recessed,
-              shape: claudeSuperellipse(
+              shape: prismSuperellipse(
                 16,
                 side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
               ),
@@ -2103,7 +2103,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                         ),
                         decoration: ShapeDecoration(
                           color: c.sageBg,
-                          shape: claudeSuperellipse(
+                          shape: prismSuperellipse(
                             14,
                             side: BorderSide(
                               color: c.sage.withValues(alpha: 0.28),
@@ -2134,11 +2134,11 @@ class _RichToolDetailDrawer extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            ClaudeButton(
+                            PrismButton(
                               label: '复制',
                               compact: true,
                               tooltip: '复制结果',
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               leading: const Icon(Icons.copy_rounded, size: 13.5),
                               onPressed: () => onCopy(outText, '已复制结果内容'),
                             ),
@@ -2166,7 +2166,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _pathBanner(
-    ClaudePalette c,
+    PrismPalette c,
     String path, {
     IconData icon = Icons.insert_drive_file_outlined,
     String copyLabel = '复制路径',
@@ -2178,7 +2178,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
+        shape: prismSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
       ),
       child: LayoutBuilder(
         builder: (ctx, pBox) => Wrap(
@@ -2211,7 +2211,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 ...pills,
-                ClaudeButton(
+                PrismButton(
                   label: copyLabel,
                   compact: true,
                   onPressed: () => onCopy(path, '已复制路径'),
@@ -2225,7 +2225,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _buildSemanticArgsTable(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> map, {
     required bool stackArgs,
     String headerTitle = '调用参数',
@@ -2245,7 +2245,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                 color: c.muted,
               ),
             ),
-            ClaudeButton(
+            PrismButton(
               label: '复制参数',
               compact: true,
               leading: const Icon(Icons.copy_rounded),
@@ -2313,7 +2313,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildListDirSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildListDirSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '.').toString();
     final depth = a['max_depth'];
     final maxEntries = a['max_entries'];
@@ -2325,15 +2325,15 @@ class _RichToolDetailDrawer extends StatelessWidget {
       copyLabel: '复制目录',
       pills: [
         if (depth != null)
-          ClaudePill(
+          PrismPill(
             text: '遍历深度 $depth 层',
             mono: false,
             fg: c.sage,
             bg: c.sageBg,
           ),
         if (maxEntries != null)
-          ClaudePill(text: '上限 $maxEntries 项', mono: false),
-        ClaudePill(
+          PrismPill(text: '上限 $maxEntries 项', mono: false),
+        PrismPill(
           text: hidden ? '包含隐藏项' : '忽略隐藏项',
           mono: false,
           fg: hidden ? c.clay : c.muted,
@@ -2344,7 +2344,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _buildStatOrUndoSection(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> a, {
     required bool isUndo,
   }) {
@@ -2354,7 +2354,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
       path,
       icon: isUndo ? Icons.undo_rounded : Icons.info_outline_rounded,
       pills: [
-        ClaudePill(
+        PrismPill(
           text: isUndo ? '回滚最近一次编辑' : '文件元数据探测',
           mono: false,
           fg: c.purple,
@@ -2364,7 +2364,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildApplyPatchSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildApplyPatchSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '').toString();
     final patch = (a['patch'] ?? '').toString();
     final dry = a['dry_run'] == true;
@@ -2375,14 +2375,14 @@ class _RichToolDetailDrawer extends StatelessWidget {
           c,
           path,
           pills: [
-            ClaudePill(
+            PrismPill(
               text: 'Unified Diff 补丁',
               mono: false,
               fg: c.purple,
               bg: c.purpleBg,
             ),
             if (dry)
-              ClaudePill(
+              PrismPill(
                 text: '仅预览',
                 mono: false,
                 fg: c.clay,
@@ -2405,7 +2405,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildReplaceTextSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildReplaceTextSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '.').toString();
     final glob = (a['glob'] ?? '').toString();
     final dry = a['dry_run'] == true;
@@ -2418,9 +2418,9 @@ class _RichToolDetailDrawer extends StatelessWidget {
           path,
           icon: Icons.find_replace_rounded,
           pills: [
-            if (glob.isNotEmpty) ClaudePill(text: glob),
-            if (regex) ClaudePill(text: '正则替换', mono: false),
-            ClaudePill(
+            if (glob.isNotEmpty) PrismPill(text: glob),
+            if (regex) PrismPill(text: '正则替换', mono: false),
+            PrismPill(
               text: dry ? '仅预览 (不落盘)' : '批量替换',
               mono: false,
               fg: dry ? c.purple : c.clay,
@@ -2440,7 +2440,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _buildSearchOrGlobSection(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> a, {
     required bool isGlob,
   }) {
@@ -2461,18 +2461,18 @@ class _RichToolDetailDrawer extends StatelessWidget {
           icon: isGlob ? Icons.travel_explore_rounded : Icons.search_rounded,
           copyLabel: '复制目录',
           pills: [
-            if (glob.isNotEmpty) ClaudePill(text: '过滤 $glob', mono: false),
+            if (glob.isNotEmpty) PrismPill(text: '过滤 $glob', mono: false),
             if (!isGlob && regex != null)
-              ClaudePill(
+              PrismPill(
                 text: regex == true ? '正则匹配' : '字面匹配',
                 mono: false,
               ),
             if (!isGlob && caseSens == false)
-              const ClaudePill(text: '忽略大小写', mono: false),
+              const PrismPill(text: '忽略大小写', mono: false),
             if (ctxLines is num && ctxLines > 0)
-              ClaudePill(text: '上下文 $ctxLines 行', mono: false),
+              PrismPill(text: '上下文 $ctxLines 行', mono: false),
             if (maxRes != null)
-              ClaudePill(text: '上限 $maxRes 条', mono: false),
+              PrismPill(text: '上限 $maxRes 条', mono: false),
           ],
         ),
         const SizedBox(height: 8),
@@ -2481,11 +2481,11 @@ class _RichToolDetailDrawer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8.5),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
+            shape: prismSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
           ),
           child: Row(
             children: [
-              ClaudePill(
+              PrismPill(
                 text: isGlob ? 'Glob 通配符' : '检索模式',
                 mono: false,
                 fg: c.clay,
@@ -2503,7 +2503,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                   ),
                 ),
               ),
-              ClaudeButton(
+              PrismButton(
                 label: '复制',
                 compact: true,
                 onPressed: () => onCopy(pat, '已复制匹配表达式'),
@@ -2515,7 +2515,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildFileOpSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildFileOpSection(PrismPalette c, Map<String, dynamic> a) {
     final act = (a['action'] ?? '').toString().toLowerCase();
     final src = (a['source'] ?? a['path'] ?? '').toString();
     final dst = (a['destination'] ?? '').toString();
@@ -2533,7 +2533,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           src,
           icon: Icons.drive_file_move_outline,
           pills: [
-            ClaudePill(
+            PrismPill(
               text: label,
               mono: false,
               fg: col,
@@ -2548,7 +2548,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
             dst,
             icon: Icons.subdirectory_arrow_right_rounded,
             pills: const [
-              ClaudePill(text: '目标位置', mono: false),
+              PrismPill(text: '目标位置', mono: false),
             ],
           ),
         ],
@@ -2556,7 +2556,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildManageProcessSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildManageProcessSection(PrismPalette c, Map<String, dynamic> a) {
     final act = (a['action'] ?? 'list').toString().toLowerCase();
     final pid = (a['process_id'] ?? '').toString();
     final tail = a['tail_lines'];
@@ -2572,31 +2572,31 @@ class _RichToolDetailDrawer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: ShapeDecoration(
         color: c.paper2,
-        shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
+        shape: prismSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
       ),
       child: Wrap(
         spacing: 8,
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          ClaudePill(
+          PrismPill(
             text: actLabel,
             mono: false,
             fg: col,
             bg: col.withValues(alpha: 0.12),
           ),
           if (pid.isNotEmpty)
-            ClaudePill(text: '进程 ID · $pid', bg: c.recessed),
+            PrismPill(text: '进程 ID · $pid', bg: c.recessed),
           if (tail != null)
-            ClaudePill(text: '尾部 $tail 行', mono: false, bg: c.recessed),
+            PrismPill(text: '尾部 $tail 行', mono: false, bg: c.recessed),
           if (input.isNotEmpty)
-            ClaudePill(text: '输入 ${input.length} 字符', mono: false),
+            PrismPill(text: '输入 ${input.length} 字符', mono: false),
         ],
       ),
     );
   }
 
-  Widget _buildReadFilesSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildReadFilesSection(PrismPalette c, Map<String, dynamic> a) {
     final paths = (a['paths'] as List).map((e) => e.toString()).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2607,7 +2607,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
             c,
             paths[i],
             pills: [
-              ClaudePill(text: '#${i + 1}/${paths.length}'),
+              PrismPill(text: '#${i + 1}/${paths.length}'),
             ],
           ),
         ],
@@ -2616,7 +2616,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _buildSubMcpSection(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> a, {
     required bool stackArgs,
   }) {
@@ -2634,14 +2634,14 @@ class _RichToolDetailDrawer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
+            shape: prismSuperellipse(14, side: BorderSide(color: c.hairline.withValues(alpha: 0.68))),
           ),
           child: Wrap(
             spacing: 8,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              ClaudePill(
+              PrismPill(
                 text: '子服务 · $srv',
                 mono: false,
                 fg: c.clay,
@@ -2649,9 +2649,9 @@ class _RichToolDetailDrawer extends StatelessWidget {
               ),
               if (subTool.isNotEmpty) ...[
                 Icon(Icons.arrow_forward_rounded, size: 13, color: c.meta),
-                ClaudePill(text: subTool, bg: c.recessed),
+                PrismPill(text: subTool, bg: c.recessed),
               ] else
-                const ClaudePill(text: '读取工具架构清单', mono: false),
+                const PrismPill(text: '读取工具架构清单', mono: false),
             ],
           ),
         ),
@@ -2668,7 +2668,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildReadFileSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildReadFileSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '').toString();
     final off = a['offset'];
     final lim = a['limit'];
@@ -2676,13 +2676,13 @@ class _RichToolDetailDrawer extends StatelessWidget {
       c,
       path,
       pills: [
-        if (off != null) ClaudePill(text: '起始行 $off', mono: false),
-        if (lim != null) ClaudePill(text: '读取 $lim 行', mono: false),
+        if (off != null) PrismPill(text: '起始行 $off', mono: false),
+        if (lim != null) PrismPill(text: '读取 $lim 行', mono: false),
       ],
     );
   }
 
-  Widget _buildEditFileSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildEditFileSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '').toString();
     final edits = (a['edits'] as List)
         .whereType<Map>()
@@ -2697,14 +2697,14 @@ class _RichToolDetailDrawer extends StatelessWidget {
           c,
           path,
           pills: [
-            ClaudePill(
+            PrismPill(
               text: '${edits.length} 处修改',
               fg: c.clay,
               bg: c.clay.withValues(alpha: 0.12),
               mono: false,
             ),
             if (dry)
-              ClaudePill(
+              PrismPill(
                 text: '仅预览 (未落盘)',
                 fg: c.purple,
                 bg: c.purpleBg,
@@ -2726,7 +2726,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildCreateFileSection(ClaudePalette c, Map<String, dynamic> a) {
+  Widget _buildCreateFileSection(PrismPalette c, Map<String, dynamic> a) {
     final path = (a['path'] ?? '').toString();
     final content = (a['content'] ?? '').toString();
     final lines = content.isEmpty ? 0 : content.split('\n').length;
@@ -2740,7 +2740,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
           c,
           path,
           pills: [
-            ClaudePill(text: '$lines 行 · ${content.length} 字符', mono: false),
+            PrismPill(text: '$lines 行 · ${content.length} 字符', mono: false),
           ],
         ),
         const SizedBox(height: 8),
@@ -2757,7 +2757,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
   }
 
   Widget _buildRunCommandSection(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> a, {
     bool isBackground = false,
   }) {
@@ -2770,7 +2770,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
       width: double.infinity,
       decoration: ShapeDecoration(
         color: c.codeSheet,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           16,
           side: BorderSide(color: c.codeBorder),
         ),
@@ -2798,21 +2798,21 @@ class _RichToolDetailDrawer extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       if (isBackground)
-                        ClaudePill(
+                        PrismPill(
                           text: '后台驻留进程',
                           mono: false,
                           fg: c.sage,
                           bg: c.sageBg,
                         ),
                       if (shell.isNotEmpty)
-                        ClaudePill(
+                        PrismPill(
                           text: shell,
                           fg: c.inkSoft,
                           bg: c.paper2,
                           border: c.hairline,
                         ),
                       if (timeout != null)
-                        ClaudePill(
+                        PrismPill(
                           text: '超时 ${timeout}s',
                           mono: false,
                           fg: c.muted,
@@ -2830,7 +2830,7 @@ class _RichToolDetailDrawer extends StatelessWidget {
                         ),
                     ],
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: '复制命令',
                     compact: true,
                     onPressed: () => onCopy(cmd, '已复制命令'),
@@ -2862,7 +2862,7 @@ class _InlineDiffBlock extends StatefulWidget {
   final int index;
   final String oldStr;
   final String newStr;
-  final ClaudePalette palette;
+  final PrismPalette palette;
 
   const _InlineDiffBlock({
     required this.index,
@@ -2962,7 +2962,7 @@ class _InlineDiffBlockState extends State<_InlineDiffBlock> {
       width: double.infinity,
       decoration: ShapeDecoration(
         color: c.codeSheet,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           16,
           side: BorderSide(color: c.codeBorder),
         ),
@@ -3082,7 +3082,7 @@ class _InlineDiffBlockState extends State<_InlineDiffBlock> {
 class _ArgValueBox extends StatelessWidget {
   final String paramKey;
   final dynamic value;
-  final ClaudePalette palette;
+  final PrismPalette palette;
 
   const _ArgValueBox({
     required this.paramKey,
@@ -3097,7 +3097,7 @@ class _ArgValueBox extends StatelessWidget {
       final txt = _semanticParamInlineValue(paramKey, b);
       return Align(
         alignment: Alignment.centerLeft,
-        child: ClaudePill(
+        child: PrismPill(
           text: b ? '✓ $txt' : '— $txt',
           mono: false,
           fg: b ? palette.sage : palette.muted,
@@ -3108,7 +3108,7 @@ class _ArgValueBox extends StatelessWidget {
     if (value is num) {
       return Align(
         alignment: Alignment.centerLeft,
-        child: ClaudePill(
+        child: PrismPill(
           text: _semanticParamInlineValue(paramKey, value),
           mono: false,
           bg: palette.paper2,
@@ -3120,7 +3120,7 @@ class _ArgValueBox extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: ShapeDecoration(
         color: palette.paper2,
-        shape: claudeSuperellipse(9, side: BorderSide(color: palette.hairline)),
+        shape: prismSuperellipse(9, side: BorderSide(color: palette.hairline)),
       ),
       child: SelectableText(
         value is String
@@ -3137,7 +3137,7 @@ class _ArgValueBox extends StatelessWidget {
 /// and an optional one-click soft-wrap toggle.
 class _StructuredCodeSheet extends StatefulWidget {
   final String text;
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final String headerLabel;
   final double? maxHeight;
   final bool fillHeight;
@@ -3169,7 +3169,7 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
     r'|\b(\d+(?:\.\d+)?)\b',
   );
 
-  TextSpan _buildSyntaxSpan(ClaudePalette c, String src) {
+  TextSpan _buildSyntaxSpan(PrismPalette c, String src) {
     final baseStyle = monoStyle(c, size: 11.8, height: 1.62, color: c.termFg);
     if (src.isEmpty || src.length > 48000) {
       return TextSpan(text: src, style: baseStyle);
@@ -3338,7 +3338,7 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
           : null,
       decoration: ShapeDecoration(
         color: c.codeSheet,
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           16,
           side: BorderSide(color: c.codeBorder),
         ),
@@ -3393,7 +3393,7 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
                   ),
                   if (widget.onCopy != null) ...[
                     const SizedBox(width: 6),
-                    ClaudeButton(
+                    PrismButton(
                       label: widget.copyLabel,
                       compact: true,
                       leading: const Icon(Icons.copy_rounded, size: 13),
@@ -3414,7 +3414,7 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
   }
 
   Widget _buildDiffLineBox(
-    ClaudePalette c,
+    PrismPalette c,
     String line, {
     required StrutStyle strut,
     required double? minHeight,

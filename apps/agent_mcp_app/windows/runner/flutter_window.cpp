@@ -217,7 +217,17 @@ void FlutterWindow::SetupWindowChannel() {
                 dark = *vd;
               }
             }
-            this->SetTrayState(sname, running, port, dark);
+            int accent_rgb = dark ? 0x818CF8 : 0x4F46E5;
+            auto itAccent = m->find(flutter::EncodableValue("accentRgb"));
+            if (itAccent != m->end()) {
+              if (const auto* va = std::get_if<int32_t>(&itAccent->second)) {
+                accent_rgb = *va;
+              } else if (const auto* va64 =
+                             std::get_if<int64_t>(&itAccent->second)) {
+                accent_rgb = static_cast<int>(*va64);
+              }
+            }
+            this->SetTrayState(sname, running, port, dark, accent_rgb);
           }
           result->Success();
           return;

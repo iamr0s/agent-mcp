@@ -37,7 +37,7 @@ void main() {
 
   test('PBKDF2 password hash matches Python hashlib.pbkdf2_hmac 100k vector', () {
     const salt = '0123456789abcdef';
-    const pwd = 'claude-warm-paper';
+    const pwd = 'prism-starlight-indigo';
     final stored = hashPassword(pwd, salt);
     expect(stored.startsWith('$salt\$'), isTrue);
     expect(verifyPassword(pwd, stored), isTrue);

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:agent_mcp_app/main.dart';
 import 'package:agent_mcp_app/services/console_backend_interface.dart';
-import 'package:agent_mcp_app/theme/claude_theme.dart';
+import 'package:agent_mcp_app/theme/prism_theme.dart';
 import 'package:agent_mcp_app/views/profile_endpoints_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -117,11 +117,22 @@ class _FakeConsoleBackend extends ConsoleBackend {
   @override
   Future<void> togglePinWindow() async {}
 
-  @override
-  Future<void> hideWindowToTray() async {}
+  int hiddenToTrayCount = 0;
+  bool? lastSyncedIsDark;
+  int? lastSyncedAccentRgb;
 
   @override
-  Future<void> syncNativeWindowTheme(bool isDark) async {}
+  Future<void> hideWindowToTray() async {
+    hiddenToTrayCount++;
+  }
+
+  @override
+  Future<void> syncNativeWindowTheme(bool isDark, {int? accentRgb}) async {
+    lastSyncedIsDark = isDark;
+    if (accentRgb != null) {
+      lastSyncedAccentRgb = accentRgb;
+    }
+  }
 
   @override
   Future<bool> setWindowEffect(bool enabled) async {
@@ -349,30 +360,30 @@ void main() {
       StatefulBuilder(
         builder: (ctx, setState) {
           return MaterialApp(
-            theme: buildClaudeTheme(ClaudePalette.light),
+            theme: buildPrismTheme(PrismPalette.light),
             home: Scaffold(
               body: Center(
-                child: ClaudeGlassBar(
+                child: PrismGlassBar(
                   borderRadius: 16,
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ClaudeStatusDot(
+                      PrismStatusDot(
                         key: const ValueKey('status-dot'),
                         color: Colors.green,
                         pulsing: pulsing,
                         size: 8.0,
                       ),
-                      ClaudeButton(
+                      PrismButton(
                         label: '启动服务',
-                        variant: ClaudeBtnVariant.clay,
+                        variant: PrismBtnVariant.clay,
                         onPressed: () => setState(() {
                           expanded = !expanded;
                           pulsing = !pulsing;
                         }),
                       ),
-                      ClaudeSegmented<String>(
+                      PrismSegmented<String>(
                         value: tab,
                         items: const [
                           ('ALL', '全部'),
@@ -381,11 +392,11 @@ void main() {
                         ],
                         onChanged: (v) => setState(() => tab = v),
                       ),
-                      ClaudeSwitch(
+                      PrismSwitch(
                         value: toggled,
                         onChanged: (v) => setState(() => toggled = v),
                       ),
-                      ClaudeCollapsible(
+                      PrismCollapsible(
                         expanded: expanded,
                         builder: (_) => const Text('展开详情面板'),
                       ),
@@ -424,13 +435,13 @@ void main() {
       StatefulBuilder(
         builder: (ctx, setState) {
           return MaterialApp(
-            theme: buildClaudeTheme(ClaudePalette.light),
+            theme: buildPrismTheme(PrismPalette.light),
             home: Scaffold(
               body: Align(
                 alignment: Alignment.topRight,
                 child: SizedBox(
                   height: 46,
-                  child: ClaudeWindowCaptionActions(
+                  child: PrismWindowCaptionActions(
                     isPinned: pinned,
                     isMaximized: maximized,
                     onTogglePin: () => setState(() => pinned = !pinned),
@@ -448,7 +459,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(ClaudeCaptionIcon), findsNWidgets(3));
+    expect(find.byType(PrismCaptionIcon), findsNWidgets(3));
     await tester.tap(find.byTooltip('窗口置顶'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(pinned, isTrue);
@@ -505,7 +516,7 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 450));
       expect(tester.takeException(), isNull);
-      if (vp.width < 820) {
+      if (vp.width < 700) {
         await tester.tap(find.text('基础与外观'));
         await tester.pump(const Duration(milliseconds: 300));
       }
@@ -839,7 +850,7 @@ void main() {
   });
 
   testWidgets(
-      'v2.2 P0-6: Shared ClaudePulseClock multiplexes pulsing status dots and auto-sleeps when window hidden',
+      'v2.2 P0-6: Shared PrismPulseClock multiplexes pulsing status dots and auto-sleeps when window hidden',
       (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -852,20 +863,20 @@ void main() {
     await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
     await tester.pump(const Duration(milliseconds: 450));
 
-    expect(ClaudePulseClock.instance.activeSubscriberCount, greaterThanOrEqualTo(1));
-    expect(ClaudePulseClock.instance.isTickerRunning, isTrue);
+    expect(PrismPulseClock.instance.activeSubscriberCount, greaterThanOrEqualTo(1));
+    expect(PrismPulseClock.instance.isTickerRunning, isTrue);
 
     // Hide window to system tray -> shared 120Hz ticker stops immediately (0% idle GPU)
     backend._win.value = backend._win.value.copyWith(isVisible: false);
     await tester.pump();
-    expect(ClaudePulseClock.instance.isPaused, isTrue);
-    expect(ClaudePulseClock.instance.isTickerRunning, isFalse);
+    expect(PrismPulseClock.instance.isPaused, isTrue);
+    expect(PrismPulseClock.instance.isTickerRunning, isFalse);
 
     // Restore window -> shared ticker resumes smoothly
     backend._win.value = backend._win.value.copyWith(isVisible: true);
     await tester.pump();
-    expect(ClaudePulseClock.instance.isPaused, isFalse);
-    expect(ClaudePulseClock.instance.isTickerRunning, isTrue);
+    expect(PrismPulseClock.instance.isPaused, isFalse);
+    expect(PrismPulseClock.instance.isTickerRunning, isTrue);
   });
 
   testWidgets(
@@ -1046,7 +1057,7 @@ void main() {
       StatefulBuilder(
         builder: (ctx, setState) {
           return MaterialApp(
-            theme: buildClaudeTheme(ClaudePalette.dark),
+            theme: buildPrismTheme(PrismPalette.dark),
             home: Scaffold(
               body: Stack(
                 children: [
@@ -1054,26 +1065,26 @@ void main() {
                     alignment: Alignment.topLeft,
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: ClaudeListGroup(
+                      child: PrismListGroup(
                         headerLabel: '控件测试组',
                         children: [
-                          ClaudeSettingsRow(
+                          PrismSettingsRow(
                             title: '分体复制按钮',
                             subtitle: '左段直击复制，右段打开多通道菜单',
-                            trailing: ClaudeSplitButton(
+                            trailing: PrismSplitButton(
                               label: '复制主链接',
                               leading: const Icon(Icons.copy_rounded),
                               onPrimaryPressed: () =>
                                   setState(() => primaryCount++),
                               menuActions: [
-                                ClaudeMenuAction(
+                                PrismMenuAction(
                                   label: 'Tailscale 直连',
                                   badge: '100.x',
                                   onTap: () => setState(
                                     () => selectedMenuAction = 'ts',
                                   ),
                                 ),
-                                ClaudeMenuAction(
+                                PrismMenuAction(
                                   label: '局域网地址',
                                   badge: 'LAN',
                                   onTap: () => setState(
@@ -1091,16 +1102,16 @@ void main() {
                     alignment: Alignment.bottomRight,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: ClaudeDropMenu<String>(
+                      child: PrismDropMenu<String>(
                         value: selectedTool,
                         searchable: true,
                         items: [
-                          const ClaudeDropMenuItem(
+                          const PrismDropMenuItem(
                             value: 'ALL',
                             label: '全部工具',
                           ),
                           for (var i = 1; i <= 10; i++)
-                            ClaudeDropMenuItem(
+                            PrismDropMenuItem(
                               value: 'tool_$i',
                               label: 'mcp_tool_$i',
                             ),
@@ -1162,8 +1173,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.2.1'), findsOneWidget);
-    await tester.tap(find.text('v3.2.1'));
+    expect(find.text('v3.3.0'), findsOneWidget);
+    await tester.tap(find.text('v3.3.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1263,7 +1274,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.2.1'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.3.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1551,6 +1562,79 @@ void main() {
         equals(setupRailBefore),
       );
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.3.0 Prism Design System: 2D Light/Dark x 6-Accent Theme Engine (Default Icon Indigo), Tray Quick Action, and Zero Duplicate Back Buttons',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      PrismPalette.configureAccent(PrismAccentId.indigo);
+    });
+
+    // 1. Desktop (760x820 — previously caught in <820 drill-down) uses 2-pane Setup with ZERO back buttons
+    tester.view.physicalSize = const Size(760, 820);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Default theme #1 matches App Icon Starlight Indigo (#4F46E5 -> 0x4F46E5)
+    expect(PrismPalette.activeAccentSpec.id, equals(PrismAccentId.indigo));
+    expect(PrismPalette.activeLight.clay, equals(const Color(0xFF4F46E5)));
+    expect(PrismPalette.activeDark.clay, equals(const Color(0xFF818CF8)));
+    expect(backend.lastSyncedAccentRgb, equals(0x4F46E5));
+
+    // Desktop caption bar includes explicit Hide-to-Tray quick button
+    final trayQuickBtn = find.byKey(const ValueKey('caption-hide-to-tray-btn'));
+    expect(trayQuickBtn, findsOneWidget);
+    await tester.tap(trayQuickBtn);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(backend.hiddenToTrayCount, equals(1));
+
+    // Switch to Setup page at 760px desktop width (icon-rail sidebar) -> zero duplicate or stray back buttons!
+    await tester.tap(find.byTooltip('服务配置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byKey(const ValueKey('header-jade-back-pill')), findsNothing);
+    expect(find.byKey(const ValueKey('setup-mobile-back-btn')), findsNothing);
+    expect(find.text('外观明暗与主题色调'), findsOneWidget);
+
+    // 2. Switch Accent Theme in Setup ('温润青玉' jade) & Dark Mode -> persists to config & syncs tray RGB
+    await tester.ensureVisible(find.byKey(const ValueKey('accent-chip-jade')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const ValueKey('accent-chip-jade')));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(PrismPalette.activeAccentSpec.id, equals(PrismAccentId.jade));
+    expect(backend.config['accent_theme'], equals('jade'));
+    expect(backend.lastSyncedAccentRgb, equals(0x059669));
+
+    // Switch to Dark Mode ('暗色模式') -> active palette updates to Dark Jade (#34D399 -> 0x34D399)
+    await tester.ensureVisible(find.text('暗色模式'));
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.tap(find.text('暗色模式'));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(backend.config['theme_mode'], equals('dark'));
+    expect(backend.lastSyncedIsDark, isTrue);
+    expect(backend.lastSyncedAccentRgb, equals(0x34D399));
+
+    // 3. Narrow Mobile viewport (390x844) -> drill into Level-2 shows ONLY top header back pill, NEVER bottom duplicate!
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('基础与外观').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byKey(const ValueKey('header-jade-back-pill')), findsOneWidget);
+    expect(find.byKey(const ValueKey('setup-mobile-back-btn')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

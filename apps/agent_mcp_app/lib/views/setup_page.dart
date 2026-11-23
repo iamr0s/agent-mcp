@@ -6,7 +6,7 @@ import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 import 'android_privilege_card.dart';
 import 'exposure_page.dart';
 import 'profile_dialogs.dart';
@@ -70,7 +70,9 @@ class ServiceSetupPage extends StatefulWidget {
   final Map<String, dynamic> exposureSummary;
   final bool isRunning;
   final ThemeMode themeMode;
+  final PrismAccentId accentId;
   final ValueChanged<ThemeMode> onThemeChanged;
+  final ValueChanged<PrismAccentId>? onAccentChanged;
   final bool dynamicColor;
   final bool dynamicColorSupported;
   final ValueChanged<bool>? onDynamicColorChanged;
@@ -98,7 +100,9 @@ class ServiceSetupPage extends StatefulWidget {
     this.exposureSummary = const <String, dynamic>{},
     required this.isRunning,
     required this.themeMode,
+    this.accentId = PrismAccentId.indigo,
     required this.onThemeChanged,
+    this.onAccentChanged,
     this.dynamicColor = false,
     this.dynamicColorSupported = false,
     this.onDynamicColorChanged,
@@ -345,7 +349,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       _syncNavigationHandle();
       return true;
     }
-    final isNarrow = MediaQuery.sizeOf(context).width < 820;
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
     if (isNarrow && _mobileInDetail) {
       _popMobileDetail();
       return true;
@@ -361,14 +365,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       _activeInlineEdit = null;
     });
     _syncNavigationHandle();
-    if (!mounted || ClaudeMotion.reduceMotion(context)) {
+    if (!mounted || PrismMotion.reduceMotion(context)) {
       _mobileSubCtrl.value = 0.0;
     } else {
       unawaited(
         _mobileSubCtrl.animateBack(
           0.0,
           duration: const Duration(milliseconds: 240),
-          curve: ClaudeMotion.editorialOut,
+          curve: PrismMotion.editorialOut,
         ),
       );
     }
@@ -388,7 +392,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   void _syncNavigationHandle({bool? forceIsWide}) {
     final handle = widget.navigationHandle;
     if (handle == null || !mounted) return;
-    final isWide = forceIsWide ?? (MediaQuery.sizeOf(context).width >= 820);
+    final isWide = forceIsWide ?? (MediaQuery.sizeOf(context).width >= 700);
     handle._updateState(
       inMobileSubpage: !isWide && _mobileInDetail,
       hasInlineEditor: _activeInlineEdit != null,
@@ -423,14 +427,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       }
     });
     if (openMobileDetail) {
-      if (!mounted || ClaudeMotion.reduceMotion(context)) {
+      if (!mounted || PrismMotion.reduceMotion(context)) {
         _mobileSubCtrl.value = 1.0;
       } else {
         unawaited(
           _mobileSubCtrl.animateTo(
             1.0,
             duration: const Duration(milliseconds: 260),
-            curve: ClaudeMotion.editorialOut,
+            curve: PrismMotion.editorialOut,
           ),
         );
       }
@@ -671,7 +675,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final ipOpts = parseHostIpOptions(widget.config, _hostLanIpsList);
     final curBoundHosts = _effectiveHosts;
 
-    final edited = await showClaudeDialog<Map<String, dynamic>>(
+    final edited = await showPrismDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => ProfileEditDialog(
         existing: existing,
@@ -741,7 +745,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         ? resolvedUrls
         : <String>['http://$localHost:$port'];
 
-    await showClaudeDialog<void>(
+    await showPrismDialog<void>(
       context: context,
       builder: (ctx) => ProfileConnectDialog(
         backend: widget.backend,
@@ -759,7 +763,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     return '上次检查：${dt.year}-${pad(dt.month)}-${pad(dt.day)} ${pad(dt.hour)}:${pad(dt.minute)}';
   }
 
-  Widget _buildAboutAndUpdateSection(ClaudePalette c) {
+  Widget _buildAboutAndUpdateSection(PrismPalette c) {
     final prefs = widget.updatePrefs;
     final curVer = widget.backend.currentAppVersion;
     final latest = widget.latestUpdate;
@@ -777,7 +781,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
           padding: const EdgeInsets.all(22),
           decoration: ShapeDecoration(
             color: c.paper2,
-            shape: claudeSuperellipse(
+            shape: prismSuperellipse(
               22,
               side: BorderSide(color: c.hairline.withValues(alpha: 0.62)),
             ),
@@ -788,7 +792,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
               final badge = Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const ClaudeSparkIcon(size: 46),
+                  const PrismSparkIcon(size: 46),
                   Positioned(
                     right: -2,
                     bottom: -2,
@@ -831,12 +835,12 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             color: c.ink,
                           ),
                         ),
-                        ClaudePill(
+                        PrismPill(
                           text: 'v$curVer',
                           fg: c.clay,
                           bg: c.clay.withValues(alpha: 0.12),
                         ),
-                        ClaudePill(
+                        PrismPill(
                           text: hasNewer ? '发现 v${latest.version}' : '已是最新',
                           mono: false,
                           fg: hasNewer ? c.clay : c.sage,
@@ -864,23 +868,23 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: 'GitHub Releases',
                     compact: true,
-                    variant: ClaudeBtnVariant.neutral,
+                    variant: PrismBtnVariant.neutral,
                     leading: const Icon(Icons.open_in_new_rounded),
                     onPressed: () => widget.backend.openExternalUrl(
                       'https://github.com/iamr0s/agent-mcp/releases',
                     ),
                   ),
-                  ClaudeButton(
+                  PrismButton(
                     label: widget.checkingUpdate
                         ? '检查中...'
                         : (hasNewer ? '查看更新' : '立即检查更新'),
                     compact: true,
                     loading: widget.checkingUpdate,
                     variant:
-                        hasNewer ? ClaudeBtnVariant.clay : ClaudeBtnVariant.ink,
+                        hasNewer ? PrismBtnVariant.clay : PrismBtnVariant.ink,
                     leading: Icon(
                       hasNewer
                           ? Icons.download_for_offline_rounded
@@ -920,7 +924,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
           ),
         ),
         const SizedBox(height: 14),
-        ClaudeListGroup(
+        PrismListGroup(
           headerLabel: '更新策略与下载通道',
           children: [
             Padding(
@@ -928,17 +932,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
               child: LayoutBuilder(
                 builder: (ctx, box) {
                   final isNarrow = box.maxWidth < 430;
-                  final freqMenu = ClaudeDropMenu<int>(
+                  final freqMenu = PrismDropMenu<int>(
                     value: {6, 12, 24, 168}.contains(prefs.checkIntervalHours)
                         ? prefs.checkIntervalHours
                         : 12,
                     tooltip: '自动检测周期',
                     minMenuWidth: 126,
                     items: const [
-                      ClaudeDropMenuItem<int>(value: 6, label: '每 6 小时'),
-                      ClaudeDropMenuItem<int>(value: 12, label: '每 12 小时'),
-                      ClaudeDropMenuItem<int>(value: 24, label: '每天'),
-                      ClaudeDropMenuItem<int>(value: 168, label: '每周'),
+                      PrismDropMenuItem<int>(value: 6, label: '每 6 小时'),
+                      PrismDropMenuItem<int>(value: 12, label: '每 12 小时'),
+                      PrismDropMenuItem<int>(value: 24, label: '每天'),
+                      PrismDropMenuItem<int>(value: 168, label: '每周'),
                     ],
                     onChanged: (hours) async {
                       final next = prefs.copyWith(checkIntervalHours: hours);
@@ -946,7 +950,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       widget.onToast('已更新自动检测周期');
                     },
                   );
-                  final autoSwitch = ClaudeSwitch(
+                  final autoSwitch = PrismSwitch(
                     value: prefs.autoCheckEnabled,
                     onChanged: (v) async {
                       final next = prefs.copyWith(autoCheckEnabled: v);
@@ -1017,17 +1021,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
               ),
             ),
             if (prefs.skippedVersion.isNotEmpty)
-              ClaudeSettingsRow(
+              PrismSettingsRow(
                 leading: Icon(
                   Icons.notifications_off_outlined,
                   size: 16,
                   color: c.meta,
                 ),
                 title: '已跳过 v${prefs.skippedVersion} 的自动弹窗提醒',
-                trailing: ClaudeButton(
+                trailing: PrismButton(
                   label: '恢复提醒',
                   compact: true,
-                  variant: ClaudeBtnVariant.ghost,
+                  variant: PrismBtnVariant.ghost,
                   onPressed: () async {
                     await widget.onUpdatePrefsChanged
                         ?.call(prefs.copyWith(skippedVersion: ''));
@@ -1038,7 +1042,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   leading: Icon(Icons.bolt_rounded, size: 16, color: c.meta),
                   title: 'GitHub 下载加速镜像',
                   subtitle: '国内网络环境下用于加速安装包拉取',
@@ -1047,7 +1051,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ClaudePill(
+                      PrismPill(
                         text: hasMirror ? '自定义镜像' : '直连 GitHub',
                         mono: false,
                         fg: hasMirror ? c.clay : c.muted,
@@ -1066,7 +1070,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     ],
                   ),
                 ),
-                ClaudeCollapsible(
+                PrismCollapsible(
                   expanded: showMirror,
                   builder: (_) => Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -1083,10 +1087,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           ),
                         ),
                         const SizedBox(width: 8),
-                        ClaudeButton(
+                        PrismButton(
                           label: '应用',
                           compact: true,
-                          variant: ClaudeBtnVariant.clay,
+                          variant: PrismBtnVariant.clay,
                           onPressed: () async {
                             final trimmed = _mirrorCtrl.text.trim();
                             await widget.onUpdatePrefsChanged
@@ -1111,7 +1115,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     );
   }
 
-  Widget _buildFloatingUnsavedBar(ClaudePalette c) {
+  Widget _buildFloatingUnsavedBar(PrismPalette c) {
     final anyDirty = _basicDirty || _permDirty;
     if (!anyDirty) return const SizedBox.shrink();
 
@@ -1172,13 +1176,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    ClaudeButton(
+                    PrismButton(
                       label: '还原',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
+                      variant: PrismBtnVariant.ghost,
                       onPressed: saving ? null : _discardUnsavedChanges,
                     ),
-                    ClaudeButton(
+                    PrismButton(
                       label: saving ? '保存中...' : '保存修改',
                       compact: true,
                       loading: _savingBasic || _savingPerm,
@@ -1187,11 +1191,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           : () => _saveAllDirty(restart: false),
                     ),
                     if (_basicDirty)
-                      ClaudeButton(
+                      PrismButton(
                         label: _restartingBasic ? '重启中...' : '保存并重启',
                         compact: true,
                         loading: _restartingBasic,
-                        variant: ClaudeBtnVariant.clay,
+                        variant: PrismBtnVariant.clay,
                         leading: const Icon(Icons.restart_alt_rounded),
                         onPressed: saving
                             ? null
@@ -1209,7 +1213,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final profs = _profiles;
     final ti = widget.tunnelInfo;
     final inst = (ti['install'] as Map?) != null
@@ -1228,7 +1232,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final showAbout = _setupSection == 'about' || _setupSection == 'all';
 
     final screenW = MediaQuery.sizeOf(context).width;
-    final isWideDesktop = screenW >= 820;
+    final isWideDesktop = screenW >= 700;
     _syncNavigationHandle(forceIsWide: isWideDesktop);
     final hasDirty = _basicDirty || _permDirty;
     final bottomPad = (screenW < 700 ? 124.0 : 42.0) +
@@ -1295,13 +1299,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (showBasic) ...[
-            ClaudeListGroup(
+            PrismListGroup(
               headerLabel: '基础服务与全局密码',
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: 'MCP 服务名称',
                       subtitle: '向 AI 客户端宣告的节点标识',
                       onTap: () => _toggleInlineEdit('name'),
@@ -1337,7 +1341,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'name',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -1355,18 +1359,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               ),
                             ),
                             const SizedBox(width: 8),
-                            ClaudeButton(
+                            PrismButton(
                               label: '取消',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               onPressed: () => _toggleInlineEdit('name'),
                             ),
                             const SizedBox(width: 6),
-                            ClaudeButton(
+                            PrismButton(
                               label: _savingBasic ? '保存中...' : '保存',
                               compact: true,
                               loading: _savingBasic,
-                              variant: ClaudeBtnVariant.clay,
+                              variant: PrismBtnVariant.clay,
                               onPressed: () async {
                                 await _saveBasic(restart: false);
                                 if (mounted) {
@@ -1383,7 +1387,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: '工具名前缀',
                       subtitle: '多设备同时接入时防止工具重名',
                       onTap: () => _toggleInlineEdit('prefix'),
@@ -1391,7 +1395,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: ClaudePill(
+                            child: PrismPill(
                               text: _prefixCtrl.text.trim().isEmpty
                                   ? '未启用前缀'
                                   : '${_prefixCtrl.text.trim()}_*',
@@ -1416,7 +1420,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'prefix',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -1440,7 +1444,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                 ),
                               ),
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: '用服务名',
                               compact: true,
                               onPressed: () {
@@ -1451,17 +1455,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                 setState(() {});
                               },
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: '取消',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               onPressed: () => _toggleInlineEdit('prefix'),
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: _restartingBasic ? '重启中...' : '保存并重启',
                               compact: true,
                               loading: _restartingBasic,
-                              variant: ClaudeBtnVariant.clay,
+                              variant: PrismBtnVariant.clay,
                               onPressed: () async {
                                 await _saveBasic(restart: true);
                                 if (mounted) {
@@ -1478,7 +1482,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: '监听地址与端口',
                       subtitle: '本地 HTTP / SSE 协议绑定网卡',
                       onTap: () => _toggleInlineEdit('listen'),
@@ -1486,7 +1490,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: ClaudePill(
+                            child: PrismPill(
                               text: screenW < 440 && _bindAllInterfaces
                                   ? '0.0.0.0:$curPort'
                                   : listenSummary,
@@ -1506,7 +1510,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'listen',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -1514,7 +1518,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           padding: const EdgeInsets.all(12),
                           decoration: ShapeDecoration(
                             color: c.recessed,
-                            shape: claudeSuperellipse(
+                            shape: prismSuperellipse(
                               10,
                               side: BorderSide(color: c.hairline),
                             ),
@@ -1527,7 +1531,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                 runSpacing: 8,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  ClaudeSegmented<bool>(
+                                  PrismSegmented<bool>(
                                     value: _bindAllInterfaces,
                                     items: const [
                                       (true, '全开 0.0.0.0'),
@@ -1596,7 +1600,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                   ),
                                 ],
                               ),
-                              ClaudeCollapsible(
+                              PrismCollapsible(
                                 expanded: !_bindAllInterfaces,
                                 builder: (_) => Padding(
                                   padding: const EdgeInsets.only(top: 10),
@@ -1649,7 +1653,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                               ),
                                               if (_hostCtrls.length > 1) ...[
                                                 const SizedBox(width: 6),
-                                                ClaudeButton(
+                                                PrismButton(
                                                   label: '',
                                                   compact: true,
                                                   tooltip: '移除此监听地址',
@@ -1663,11 +1667,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                               if (i ==
                                                   _hostCtrls.length - 1) ...[
                                                 const SizedBox(width: 6),
-                                                ClaudeButton(
+                                                PrismButton(
                                                   label: '',
                                                   compact: true,
                                                   variant:
-                                                      ClaudeBtnVariant.clay,
+                                                      PrismBtnVariant.clay,
                                                   tooltip: '再添加一个监听地址',
                                                   leading: const Icon(
                                                     Icons.add_rounded,
@@ -1687,20 +1691,20 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  ClaudeButton(
+                                  PrismButton(
                                     label: '取消',
                                     compact: true,
-                                    variant: ClaudeBtnVariant.ghost,
+                                    variant: PrismBtnVariant.ghost,
                                     onPressed: () =>
                                         _toggleInlineEdit('listen'),
                                   ),
                                   const SizedBox(width: 6),
-                                  ClaudeButton(
+                                  PrismButton(
                                     label:
                                         _restartingBasic ? '重启中...' : '保存并重启',
                                     compact: true,
                                     loading: _restartingBasic,
-                                    variant: ClaudeBtnVariant.clay,
+                                    variant: PrismBtnVariant.clay,
                                     leading:
                                         const Icon(Icons.restart_alt_rounded),
                                     onPressed: () async {
@@ -1724,7 +1728,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: 'OAuth 2.1 本地密码',
                       subtitle: '远程网页授权与 /dashboard 登录保护',
                       onTap: () => _toggleInlineEdit('password'),
@@ -1732,7 +1736,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: ClaudePill(
+                            child: PrismPill(
                               text: widget.config['has_password'] == true
                                   ? '已设密码保护'
                                   : '未设置密码',
@@ -1758,7 +1762,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'password',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -1772,7 +1776,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                 minWidth: 220,
                                 maxWidth: 320,
                               ),
-                              child: ClaudePasswordField(
+                              child: PrismPasswordField(
                                 controller: _pwdCtrl,
                                 onChanged: (_) => setState(() {}),
                                 hintText: widget.config['has_password'] == true
@@ -1780,7 +1784,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                     : '设置 OAuth 2.1 与控制台密码',
                               ),
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: '随机生成',
                               compact: true,
                               leading: const Icon(Icons.casino_outlined),
@@ -1789,17 +1793,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                 setState(() {});
                               },
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: '取消',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               onPressed: () => _toggleInlineEdit('password'),
                             ),
-                            ClaudeButton(
+                            PrismButton(
                               label: _savingBasic ? '保存中...' : '保存密码',
                               compact: true,
                               loading: _savingBasic,
-                              variant: ClaudeBtnVariant.clay,
+                              variant: PrismBtnVariant.clay,
                               onPressed: _pwdCtrl.text.trim().isEmpty
                                   ? null
                                   : () async {
@@ -1817,35 +1821,69 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     ),
                   ],
                 ),
-                ClaudeSettingsRow(
-                  title: '界面主题',
-                  subtitle: '冷瓷浅色与曜石暗色双层高对比画布',
+              ],
+            ),
+            const SizedBox(height: 16),
+            PrismListGroup(
+              headerLabel: '外观明暗与主题色调',
+              subtitle: '先选浅色或暗色画布，再挑心仪的全局强调色（首项默认对齐应用图标星芒靛蓝）',
+              children: [
+                PrismSettingsRow(
+                  icon: c.isDark
+                      ? Icons.dark_mode_outlined
+                      : Icons.light_mode_outlined,
+                  iconColor: c.clay,
+                  title: '外观明暗',
+                  subtitle: '切换全局浅色、暗色或自动跟随操作系统昼夜外观',
                   allowTrailingWrap: true,
-                  stackBreakpoint: 470,
-                  trailing: ClaudeSegmented<ThemeMode>(
+                  stackBreakpoint: 500,
+                  trailing: PrismSegmented<ThemeMode>(
                     expand: screenW < 500,
                     value: widget.themeMode,
                     items: const [
                       (ThemeMode.system, '跟随系统'),
-                      (ThemeMode.light, '冷瓷浅色'),
-                      (ThemeMode.dark, '曜石暗色'),
+                      (ThemeMode.light, '浅色模式'),
+                      (ThemeMode.dark, '暗色模式'),
                     ],
                     onChanged: widget.onThemeChanged,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ClaudeListGroup(
-              headerLabel: '外观与自启策略',
-              children: [
+                PrismSettingsRow(
+                  icon: Icons.palette_outlined,
+                  iconColor: c.clay,
+                  title: '主题色调',
+                  subtitle: widget.dynamicColor
+                      ? '当前已启用 Android 壁纸莫奈取色；轻点任意色卡可切回预设主题色'
+                      : '同步驱动全局主按钮、导航透镜、开关焦点与 Windows 托盘菜单',
+                  bottomChild: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final spec in PrismAccentSpec.presets)
+                          _ThemeAccentSwatchChip(
+                            key: ValueKey('accent-chip-${spec.id.key}'),
+                            spec: spec,
+                            palette: c,
+                            selected: !widget.dynamicColor &&
+                                widget.accentId == spec.id,
+                            onTap: () {
+                              widget.onAccentChanged?.call(spec.id);
+                              widget.onToast('已切换主题色：${spec.label}');
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
                 if (isAndroidHost)
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     title: '动态配色 (Android Material You)',
                     subtitle: widget.dynamicColorSupported
                         ? '跟随系统壁纸动态提取主题强调色（支持 Android 12+ 莫奈取色）'
                         : '当前系统版本不支持莫奈壁纸取色（需 Android 12 及以上）',
-                    trailing: ClaudeSwitch(
+                    trailing: PrismSwitch(
                       value: widget.dynamicColor,
                       onChanged: (v) {
                         if (!widget.dynamicColorSupported && v) {
@@ -1854,16 +1892,16 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         }
                         widget.onDynamicColorChanged?.call(v);
                         widget.onToast(
-                          v ? '已开启动态壁纸配色' : '已恢复默认 Indigo 配色',
+                          v ? '已开启动态壁纸配色' : '已恢复预设主题色',
                         );
                       },
                     ),
                   ),
                 if (!widget.backend.hasCustomTitleBar)
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     title: '界面毛玻璃与柔光背板',
                     subtitle: '启用悬浮导航条与顶栏的实时虚化玻璃质感',
-                    trailing: ClaudeSwitch(
+                    trailing: PrismSwitch(
                       value: _windowEffect,
                       onChanged: (v) => _applyStartupToggle(
                         windowEffect: v,
@@ -1871,8 +1909,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       ),
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            PrismListGroup(
+              headerLabel: '系统托盘与自启策略',
+              children: [
                 if (isAndroidHost)
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     leading: Icon(
                       Icons.notifications_active_outlined,
                       size: 18,
@@ -1882,11 +1926,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     subtitle: '手机锁屏或切到后台时保持本机服务不断连，下拉通知栏即可随时停止或重启。',
                   )
                 else ...[
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     title: '开机自动启动应用',
                     subtitle:
                         '${_osAutoStartCaption()}；配合静默模式自动附带 --silent 参数',
-                    trailing: ClaudeSwitch(
+                    trailing: PrismSwitch(
                       value: _launchAtStartup,
                       onChanged: (v) => _applyStartupToggle(
                         launchAtStartup: v,
@@ -1896,11 +1940,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       ),
                     ),
                   ),
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     title: '静默启动至后台托盘（不弹出窗口）',
                     subtitle:
                         '启动时跳过主窗口绘制、零闪烁驻留系统托盘（支持命令行 --silent，点击托盘可唤醒）',
-                    trailing: ClaudeSwitch(
+                    trailing: PrismSwitch(
                       value: _silentStart,
                       onChanged: (v) => _applyStartupToggle(
                         silentStart: v,
@@ -1909,10 +1953,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     ),
                   ),
                 ],
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   title: '启动后自动开启 MCP 服务与隧道',
                   subtitle: '进程拉起后立即监听 HTTP 端口并自动连接已启用的公网隧道',
-                  trailing: ClaudeSwitch(
+                  trailing: PrismSwitch(
                     value: _autoStart,
                     onChanged: (v) => _applyStartupToggle(
                       autoStart: v,
@@ -1935,13 +1979,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
           ],
           if (showProfiles) ...[
             if (showBasic) const SizedBox(height: 18),
-            ClaudeListGroup(
+            PrismListGroup(
               headerLabel: '传输、鉴权与权限入口',
-              headerTrailing: ClaudeButton(
+              headerTrailing: PrismButton(
                 label: '添加入口',
                 compact: true,
                 leading: const Icon(Icons.add_rounded),
-                variant: ClaudeBtnVariant.clay,
+                variant: PrismBtnVariant.clay,
                 onPressed: () => _openProfileModal(),
               ),
               children: [
@@ -1965,13 +2009,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
           if (showSecurity) ...[
             if (showBasic || showProfiles || showExpose)
               const SizedBox(height: 18),
-            ClaudeListGroup(
+            PrismListGroup(
               headerLabel: '全局默认权限与日志',
               children: [
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   title: '允许写入与执行',
                   subtitle: '关闭后全局降级为安全只读模式，拦截写文件与终端指令',
-                  trailing: ClaudeSwitch(
+                  trailing: PrismSwitch(
                     value: _writable,
                     onChanged: (v) async {
                       setState(() => _writable = v);
@@ -1979,10 +2023,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     },
                   ),
                 ),
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   title: '允许读取敏感文件',
                   subtitle: '控制是否允许读取 .env、密钥等受保护路径',
-                  trailing: ClaudeSwitch(
+                  trailing: PrismSwitch(
                     value: _allowSecrets,
                     onChanged: (v) async {
                       setState(() => _allowSecrets = v);
@@ -1990,10 +2034,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     },
                   ),
                 ),
-                ClaudeSettingsRow(
+                PrismSettingsRow(
                   title: '客户端免弹窗声明（全工具静默注解）',
                   subtitle: '附加只读幂等声明，减少客户端每次工具调用确认弹窗',
-                  trailing: ClaudeSwitch(
+                  trailing: PrismSwitch(
                     value: _relaxedCmd,
                     onChanged: (v) async {
                       setState(() => _relaxedCmd = v);
@@ -2004,7 +2048,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: '默认目录白名单',
                       subtitle: curRoots.isEmpty
                           ? '未限定根目录（允许访问本机任意路径）'
@@ -2013,7 +2057,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClaudePill(
+                          PrismPill(
                             text: curRoots.isEmpty
                                 ? '全盘开放'
                                 : '已限定 ${curRoots.length} 个目录',
@@ -2035,7 +2079,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'roots',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -2056,18 +2100,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                ClaudeButton(
+                                PrismButton(
                                   label: '取消',
                                   compact: true,
-                                  variant: ClaudeBtnVariant.ghost,
+                                  variant: PrismBtnVariant.ghost,
                                   onPressed: () => _toggleInlineEdit('roots'),
                                 ),
                                 const SizedBox(width: 6),
-                                ClaudeButton(
+                                PrismButton(
                                   label: _savingPerm ? '保存中...' : '保存白名单',
                                   compact: true,
                                   loading: _savingPerm,
-                                  variant: ClaudeBtnVariant.clay,
+                                  variant: PrismBtnVariant.clay,
                                   onPressed: () async {
                                     await _savePerm();
                                     if (mounted) {
@@ -2088,7 +2132,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClaudeSettingsRow(
+                    PrismSettingsRow(
                       title: '运行日志等级',
                       subtitle: _logFileCtrl.text.trim().isEmpty
                           ? '实时环形缓冲（点击右侧图标可配置落盘文件）'
@@ -2096,27 +2140,27 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClaudeDropMenu<String>(
+                          PrismDropMenu<String>(
                             value: _logLevel,
                             leadingIcon: Icons.tune_rounded,
                             minMenuWidth: 168,
                             items: const [
-                              ClaudeDropMenuItem(
+                              PrismDropMenuItem(
                                 value: 'DEBUG',
                                 label: 'DEBUG · 调试',
                                 icon: Icons.bug_report_outlined,
                               ),
-                              ClaudeDropMenuItem(
+                              PrismDropMenuItem(
                                 value: 'INFO',
                                 label: 'INFO · 标准',
                                 icon: Icons.info_outline_rounded,
                               ),
-                              ClaudeDropMenuItem(
+                              PrismDropMenuItem(
                                 value: 'WARNING',
                                 label: 'WARN · 告警',
                                 icon: Icons.warning_amber_rounded,
                               ),
-                              ClaudeDropMenuItem(
+                              PrismDropMenuItem(
                                 value: 'ERROR',
                                 label: 'ERROR · 仅异常',
                                 icon: Icons.error_outline_rounded,
@@ -2128,11 +2172,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             },
                           ),
                           const SizedBox(width: 6),
-                          ClaudeButton(
+                          PrismButton(
                             label: '',
                             compact: true,
                             tooltip: '配置落盘日志文件路径',
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             leading: Icon(
                               _activeInlineEdit == 'logfile'
                                   ? Icons.keyboard_arrow_up_rounded
@@ -2144,7 +2188,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         ],
                       ),
                     ),
-                    ClaudeCollapsible(
+                    PrismCollapsible(
                       expanded: _activeInlineEdit == 'logfile',
                       builder: (_) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -2162,18 +2206,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               ),
                             ),
                             const SizedBox(width: 8),
-                            ClaudeButton(
+                            PrismButton(
                               label: '取消',
                               compact: true,
-                              variant: ClaudeBtnVariant.ghost,
+                              variant: PrismBtnVariant.ghost,
                               onPressed: () => _toggleInlineEdit('logfile'),
                             ),
                             const SizedBox(width: 6),
-                            ClaudeButton(
+                            PrismButton(
                               label: _savingPerm ? '保存中...' : '保存',
                               compact: true,
                               loading: _savingPerm,
-                              variant: ClaudeBtnVariant.clay,
+                              variant: PrismBtnVariant.clay,
                               onPressed: () async {
                                 await _savePerm();
                                 if (mounted) {
@@ -2201,11 +2245,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       );
     }
 
-    // 1. Desktop Wide Screen (>= 820px): 2-Pane Master-Detail + Sliding Spring Rail + Shared-Y Switcher
+    // 1. Desktop Wide Screen (>= 700px): 2-Pane Master-Detail + Sliding Spring Rail + Shared-Y Switcher
     if (isWideDesktop) {
       const tileH = 38.0;
       const tileGap = 4.0;
       const dividerBlockH = 17.0; // 8 top + 1 divider + 8 bottom
+      final railWidth = screenW < 860 ? 182.0 : 214.0;
+      final paneGap = screenW < 860 ? 14.0 : 20.0;
       final catIdx =
           navCategories.indexWhere((item) => item.$1 == _setupSection);
       final double activePillTop = _setupSection == 'all'
@@ -2220,9 +2266,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 214,
+                  width: railWidth,
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.only(right: 14, bottom: bottomPad),
+                    padding: EdgeInsets.only(right: 12, bottom: bottomPad),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -2259,21 +2305,21 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         Stack(
                           children: [
                             AnimatedPositioned(
-                              duration: ClaudeMotion.duration(
+                              duration: PrismMotion.duration(
                                 context,
                                 const Duration(milliseconds: 220),
                               ),
-                              curve: ClaudeMotion.snappySpring,
+                              curve: PrismMotion.snappySpring,
                               top: activePillTop,
                               left: 0,
                               right: 0,
                               height: tileH,
                               child: IgnorePointer(
                                 child: CustomPaint(
-                                  foregroundPainter: ClaudeSpecularRimPainter(
+                                  foregroundPainter: PrismSpecularRimPainter(
                                     radius: 999,
                                     isDark: c.isDark,
-                                    accentTint: c.sage,
+                                    accentTint: c.navTint,
                                     intensity: 0.90,
                                   ),
                                   child: DecoratedBox(
@@ -2281,20 +2327,15 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                       gradient: LinearGradient(
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
-                                        colors: c.isDark
-                                            ? [
-                                                const Color(0xFF1C332B),
-                                                const Color(0xFF12221D),
-                                              ]
-                                            : [
-                                                const Color(0xFFFFFFFF),
-                                                const Color(0xFFF1FAF6),
-                                              ],
+                                        colors: [
+                                          c.navCapsuleTop,
+                                          c.navCapsuleBottom,
+                                        ],
                                       ),
                                       shape: StadiumBorder(
                                         side: BorderSide(
-                                          color: c.sage.withValues(
-                                            alpha: c.isDark ? 0.36 : 0.24,
+                                          color: c.navTint.withValues(
+                                            alpha: c.isDark ? 0.36 : 0.22,
                                           ),
                                         ),
                                       ),
@@ -2347,13 +2388,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   ),
                 ),
                 Container(width: 1, color: c.hairline),
-                const SizedBox(width: 20),
+                SizedBox(width: paneGap),
                 Expanded(
                   child: SingleChildScrollView(
                     controller: _scrollCtrl,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.only(right: 2, bottom: bottomPad),
-                    child: ClaudeSharedAxisSwitcher(
+                    child: PrismSharedAxisSwitcher(
                       axis: Axis.vertical,
                       reverse: _sectionNavReverse,
                       child: buildCategoryDetailContent(),
@@ -2388,17 +2429,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const ClaudeEditorialPageHeader(
+            const PrismEditorialPageHeader(
               eyebrow: 'SYSTEM PREFERENCES',
               title: '服务配置',
               subtitle: '轻点下方分组进入对应设置项',
             ),
             const SizedBox(height: 14),
-            ClaudeListGroup(
+            PrismListGroup(
               dividerIndent: 64,
               children: [
                 for (var i = 0; i < navCategories.length; i++)
-                  ClaudeSettingsRow(
+                  PrismSettingsRow(
                     onTap: () => _selectSetupSection(
                       navCategories[i].$1,
                       openMobileDetail: true,
@@ -2410,7 +2451,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         color: c.clay.withValues(
                           alpha: c.isDark ? 0.16 : 0.10,
                         ),
-                        shape: claudeSuperellipse(13),
+                        shape: prismSuperellipse(13),
                       ),
                       child: Icon(
                         navCategories[i].$2,
@@ -2424,7 +2465,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (navCategories[i].$6 != null) ...[
-                          ClaudePill(
+                          PrismPill(
                             text: navCategories[i].$6!,
                             fg: navCategories[i].$5 ? c.clay : c.muted,
                             bg: navCategories[i].$5
@@ -2458,6 +2499,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     }
 
     Widget buildMobileLevel2Detail() {
+      // Shell top header already renders `header-jade-back-pill` whenever
+      // `navigationHandle` is attached — avoid rendering a duplicate back pill below!
+      final showStandaloneBack = widget.navigationHandle == null;
       return SingleChildScrollView(
         key: ValueKey('setup-mobile-detail-$_setupSection'),
         controller: _mobileInDetail ? _scrollCtrl : null,
@@ -2472,76 +2516,69 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
           children: [
             Row(
               children: [
-                CustomPaint(
-                  foregroundPainter: ClaudeSpecularRimPainter(
-                    radius: 999,
-                    isDark: c.isDark,
-                    accentTint: c.sage,
-                    intensity: 0.85,
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      key: const ValueKey('setup-mobile-back-btn'),
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: _popMobileDetail,
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: c.isDark
-                                ? [
-                                    const Color(0xD81C362E),
-                                    const Color(0xE611211C),
-                                  ]
-                                : [
-                                    const Color(0xF6FFFFFF),
-                                    const Color(0xECF0FAF5),
-                                  ],
-                          ),
-                          shape: const StadiumBorder(),
-                          shadows: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: c.isDark ? 0.28 : 0.05,
-                              ),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                if (showStandaloneBack) ...[
+                  CustomPaint(
+                    foregroundPainter: PrismSpecularRimPainter(
+                      radius: 999,
+                      isDark: c.isDark,
+                      accentTint: c.navTint,
+                      intensity: 0.85,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        key: const ValueKey('setup-mobile-back-btn'),
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: _popMobileDetail,
+                        child: DecoratedBox(
+                          decoration: ShapeDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [c.navCapsuleTop, c.navCapsuleBottom],
                             ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(9, 5.5, 12, 5.5),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                size: 12.5,
-                                color: c.sage,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                '返回服务配置',
-                                style: sansStyle(
-                                  c,
-                                  size: 12.2,
-                                  weight: FontWeight.w600,
-                                  color: c.isDark
-                                      ? const Color(0xFFECFDF5)
-                                      : const Color(0xFF064E3B),
-                                  height: 1.15,
+                            shape: const StadiumBorder(),
+                            shadows: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: c.isDark ? 0.28 : 0.05,
                                 ),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
                             ],
+                          ),
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(9, 5.5, 12, 5.5),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  size: 12.5,
+                                  color: c.navActiveIcon,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  '返回服务配置',
+                                  style: sansStyle(
+                                    c,
+                                    size: 12.2,
+                                    weight: FontWeight.w600,
+                                    color: c.navActiveText,
+                                    height: 1.15,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(
                   child: Text(
                     currentCatTitle,
@@ -2549,7 +2586,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                     overflow: TextOverflow.ellipsis,
                     style: serifTitleStyle(
                       c,
-                      size: 18.5,
+                      size: 19.5,
                       weight: FontWeight.w700,
                     ),
                   ),
@@ -2644,7 +2681,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             _mobileSubCtrl.animateTo(
                               1.0,
                               duration: const Duration(milliseconds: 220),
-                              curve: ClaudeMotion.snappySpring,
+                              curve: PrismMotion.snappySpring,
                             ),
                           );
                         }
@@ -2656,7 +2693,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           _mobileSubCtrl.animateTo(
                             1.0,
                             duration: const Duration(milliseconds: 220),
-                            curve: ClaudeMotion.snappySpring,
+                            curve: PrismMotion.snappySpring,
                           ),
                         );
                       },
@@ -2708,21 +2745,21 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             width: 30,
                             height: 48,
                             decoration: ShapeDecoration(
-                              color: c.sage.withValues(alpha: 0.92),
+                              color: c.navTint.withValues(alpha: 0.92),
                               shape: const StadiumBorder(),
                               shadows: [
                                 BoxShadow(
-                                  color: c.sage.withValues(alpha: 0.36),
+                                  color: c.navTint.withValues(alpha: 0.36),
                                   blurRadius: 14,
                                   offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
                             alignment: Alignment.center,
-                            child: const Icon(
+                            child: Icon(
                               Icons.chevron_left_rounded,
                               size: 20,
-                              color: Colors.white,
+                              color: c.onClay,
                             ),
                           ),
                         ),
@@ -2739,7 +2776,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   }
 
   Widget _buildProfileRow(
-    ClaudePalette c,
+    PrismPalette c,
     List<Map<String, dynamic>> profs,
     int idx,
     Map<String, dynamic> tMap,
@@ -2802,8 +2839,8 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final isLiveActive = widget.isRunning && enabled && tunReady;
 
     return AnimatedOpacity(
-      duration: ClaudeMotion.duration(context, ClaudeMotion.base),
-      curve: ClaudeMotion.editorialOut,
+      duration: PrismMotion.duration(context, PrismMotion.base),
+      curve: PrismMotion.editorialOut,
       opacity: enabled ? 1.0 : 0.56,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2821,7 +2858,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    ClaudeStatusDot(
+                    PrismStatusDot(
                       color: isLiveActive ? c.sage : c.meta,
                       pulsing: isLiveActive,
                       size: 7,
@@ -2835,19 +2872,19 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         color: c.ink,
                       ),
                     ),
-                    ClaudePill(
+                    PrismPill(
                       text: (p['transport'] ?? 'dual').toString().toUpperCase(),
                       fg: c.sage,
                       bg: c.sageBg,
                     ),
-                    ClaudePill(
+                    PrismPill(
                       text: authLabels[authMode] ?? authMode,
                       mono: false,
                       fg: c.clay,
                       bg: c.clay.withValues(alpha: 0.12),
                     ),
                     if (hasTun)
-                      ClaudePill(
+                      PrismPill(
                         leading: const Icon(Icons.cloud_outlined),
                         text: tunRunning
                             ? (tMode == 'quick'
@@ -2865,7 +2902,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (hasTun)
-                      ClaudeButton(
+                      PrismButton(
                         label: _togglingTunnels.contains(pid)
                             ? (tunRunning ? '停止中...' : '开启中...')
                             : (tunRunning ? '停止隧道' : '开启隧道'),
@@ -2916,25 +2953,25 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           );
                         },
                       ),
-                    ClaudeButton(
+                    PrismButton(
                       label: '连接与检测',
                       compact: true,
                       leading: const Icon(Icons.link_rounded),
                       onPressed: tunReady ? () => _openConnectModal(p) : null,
                     ),
-                    ClaudeButton(
+                    PrismButton(
                       label: '编辑',
                       compact: true,
-                      variant: ClaudeBtnVariant.ghost,
+                      variant: PrismBtnVariant.ghost,
                       onPressed: () => _openProfileModal(idx),
                     ),
                     if (profs.length > 1)
-                      ClaudeButton(
+                      PrismButton(
                         label: '删除',
                         compact: true,
-                        variant: ClaudeBtnVariant.ghost,
+                        variant: PrismBtnVariant.ghost,
                         onPressed: () async {
-                          final ok = await showClaudeConfirmDialog(
+                          final ok = await showPrismConfirmDialog(
                             context,
                             title: '删除入口',
                             message: '确定删除入口「${p['name']}」吗？',
@@ -2948,7 +2985,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           }
                         },
                       ),
-                    ClaudeSwitch(
+                    PrismSwitch(
                       value: enabled,
                       onChanged: (v) async {
                         final next = List<Map<String, dynamic>>.from(profs);
@@ -2970,7 +3007,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 color: tunReady ? c.clay : c.meta,
               ),
             ),
-            ClaudeCollapsible(
+            PrismCollapsible(
               expanded: (tState['error'] ?? '').toString().isNotEmpty,
               builder: (_) => Padding(
                 padding: const EdgeInsets.only(top: 5),
@@ -3018,7 +3055,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   }
 
   Widget _buildCloudflaredGroup(
-    ClaudePalette c,
+    PrismPalette c,
     Map<String, dynamic> ti,
     Map<String, dynamic> inst,
     Map<String, dynamic> tMap,
@@ -3032,9 +3069,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final activeCnt =
         tMap.values.where((x) => x is Map && x['running'] == true).length;
 
-    return ClaudeListGroup(
+    return PrismListGroup(
       headerLabel: 'Cloudflared 隧道组件',
-      headerTrailing: ClaudePill(
+      headerTrailing: PrismPill(
         leading: Icon(
           installed ? Icons.check_circle_outline_rounded : Icons.cloud_off,
         ),
@@ -3066,8 +3103,8 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   child: TweenAnimationBuilder<double>(
                     tween: Tween<double>(begin: 0, end: pct / 100.0),
                     duration:
-                        ClaudeMotion.duration(context, ClaudeMotion.base),
-                    curve: ClaudeMotion.editorialOut,
+                        PrismMotion.duration(context, PrismMotion.base),
+                    curve: PrismMotion.editorialOut,
                     builder: (ctx, val, _) => LinearProgressIndicator(
                       value: val,
                       minHeight: 6,
@@ -3082,18 +3119,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   runSpacing: 8,
                   children: [
                     if (pausedDl)
-                      ClaudeButton(
+                      PrismButton(
                         label: '继续下载',
                         compact: true,
                         leading: const Icon(Icons.play_arrow_rounded),
-                        variant: ClaudeBtnVariant.clay,
+                        variant: PrismBtnVariant.clay,
                         onPressed: () async {
                           await widget.backend.installCloudflared(resume: true);
                           await widget.onRefreshStatus();
                         },
                       )
                     else
-                      ClaudeButton(
+                      PrismButton(
                         label: '暂停',
                         compact: true,
                         leading: const Icon(Icons.pause_rounded),
@@ -3102,7 +3139,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           await widget.onRefreshStatus();
                         },
                       ),
-                    ClaudeButton(
+                    PrismButton(
                       label: '取消',
                       compact: true,
                       leading: const Icon(Icons.close_rounded),
@@ -3140,7 +3177,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        ClaudeButton(
+                        PrismButton(
                           label: '更新到最新版',
                           compact: true,
                           leading: const Icon(Icons.refresh_rounded),
@@ -3151,7 +3188,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                             await widget.onRefreshStatus();
                           },
                         ),
-                        ClaudeButton(
+                        PrismButton(
                           label: '导入替换',
                           compact: true,
                           leading: const Icon(Icons.upload_file_outlined),
@@ -3167,10 +3204,10 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                           },
                         ),
                         if (ti['local_managed'] == true)
-                          ClaudeButton(
+                          PrismButton(
                             label: '移除本地副本',
                             compact: true,
-                            variant: ClaudeBtnVariant.ghost,
+                            variant: PrismBtnVariant.ghost,
                             onPressed: () async {
                               final r =
                                   await widget.backend.uninstallCloudflared();
@@ -3194,17 +3231,17 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    ClaudeButton(
+                    PrismButton(
                       label: '一键下载 cloudflared',
                       compact: true,
                       leading: const Icon(Icons.download_rounded),
-                      variant: ClaudeBtnVariant.clay,
+                      variant: PrismBtnVariant.clay,
                       onPressed: () async {
                         await widget.backend.installCloudflared();
                         await widget.onRefreshStatus();
                       },
                     ),
-                    ClaudeButton(
+                    PrismButton(
                       label: '选择文件导入',
                       compact: true,
                       leading: const Icon(Icons.upload_file_outlined),
@@ -3220,7 +3257,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       },
                     ),
                     if (dlUrl.isNotEmpty)
-                      ClaudeButton(
+                      PrismButton(
                         label: '复制官方直链',
                         compact: true,
                         leading: const Icon(Icons.copy_rounded),
@@ -3232,7 +3269,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   ],
                 ),
               ],
-              ClaudeCollapsible(
+              PrismCollapsible(
                 expanded: (inst['error'] ?? '').toString().isNotEmpty,
                 builder: (_) => Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -3249,7 +3286,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     );
   }
 
-  Widget _buildStorageGroup(ClaudePalette c) {
+  Widget _buildStorageGroup(PrismPalette c) {
     final st = widget.storageStats;
     const labels = [
       ('config', '配置文件 (config/)'),
@@ -3258,9 +3295,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       ('logs', '日志文件 (logs/)'),
     ];
 
-    return ClaudeListGroup(
+    return PrismListGroup(
       headerLabel: '存储与维护',
-      headerTrailing: ClaudeButton(
+      headerTrailing: PrismButton(
         label: _refreshingStorage ? '刷新中...' : '刷新占用',
         compact: true,
         loading: _refreshingStorage,
@@ -3302,7 +3339,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       ),
                       decoration: ShapeDecoration(
                         color: c.recessed,
-                        shape: claudeSuperellipse(
+                        shape: prismSuperellipse(
                           10,
                           side: BorderSide(color: c.hairline),
                         ),
@@ -3352,7 +3389,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
             spacing: 8,
             runSpacing: 8,
             children: [
-              ClaudeButton(
+              PrismButton(
                 label: _cleaningTarget == 'cache' ? '清理中...' : '清理缓存',
                 compact: true,
                 loading: _cleaningTarget == 'cache',
@@ -3374,7 +3411,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         }
                       },
               ),
-              ClaudeButton(
+              PrismButton(
                 label: _cleaningTarget == 'logs' ? '清理中...' : '清理日志',
                 compact: true,
                 loading: _cleaningTarget == 'logs',
@@ -3396,7 +3433,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         }
                       },
               ),
-              ClaudeButton(
+              PrismButton(
                 label:
                     _cleaningTarget == 'oauth' ? '清空中...' : '清空 OAuth 会话',
                 compact: true,
@@ -3405,7 +3442,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 onPressed: _cleaningTarget != null
                     ? null
                     : () async {
-                        final ok = await showClaudeConfirmDialog(
+                        final ok = await showPrismConfirmDialog(
                           context,
                           title: '清空 OAuth 会话',
                           message:
@@ -3469,7 +3506,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final bg = widget.active
         ? (widget.useExternalPill
             ? Colors.transparent
@@ -3501,7 +3538,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
               Icon(
                 widget.icon,
                 size: 16.5,
-                color: widget.active ? c.sage : fg,
+                color: widget.active ? c.navActiveIcon : fg,
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -3530,7 +3567,7 @@ class _SetupNavTileState extends State<_SetupNavTile> {
                         : (c.isDark
                             ? Colors.white.withValues(alpha: 0.06)
                             : Colors.black.withValues(alpha: 0.045)),
-                    shape: claudeSuperellipse(999),
+                    shape: prismSuperellipse(999),
                   ),
                   child: Text(
                     widget.badgeText!,
@@ -3552,6 +3589,180 @@ class _SetupNavTileState extends State<_SetupNavTile> {
                   ),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeAccentSwatchChip extends StatefulWidget {
+  final PrismAccentSpec spec;
+  final PrismPalette palette;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ThemeAccentSwatchChip({
+    super.key,
+    required this.spec,
+    required this.palette,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  State<_ThemeAccentSwatchChip> createState() => _ThemeAccentSwatchChipState();
+}
+
+class _ThemeAccentSwatchChipState extends State<_ThemeAccentSwatchChip> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.palette;
+    final spec = widget.spec;
+    final active = widget.selected;
+    final accent = c.isDark ? spec.darkPrimary : spec.lightPrimary;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : 1.0,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.snappySpring,
+          child: CustomPaint(
+            foregroundPainter: active
+                ? PrismSpecularRimPainter(
+                    radius: 999,
+                    isDark: c.isDark,
+                    accentTint: accent,
+                    intensity: 0.92,
+                  )
+                : null,
+            child: AnimatedContainer(
+              duration: PrismMotion.duration(context, PrismMotion.fast),
+              curve: PrismMotion.editorialOut,
+              padding: const EdgeInsets.fromLTRB(8, 6.5, 11.5, 6.5),
+              decoration: ShapeDecoration(
+                gradient: active
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: c.isDark
+                            ? [spec.darkNavTop, spec.darkNavBottom]
+                            : [Colors.white, spec.lightNavBottom],
+                      )
+                    : null,
+                color: active
+                    ? null
+                    : (_hovered
+                        ? c.paper3.withValues(alpha: 0.85)
+                        : c.recessed),
+                shape: StadiumBorder(
+                  side: BorderSide(
+                    color: active
+                        ? accent.withValues(alpha: c.isDark ? 0.55 : 0.42)
+                        : (_hovered
+                            ? c.ringHover
+                            : c.hairline.withValues(alpha: 0.72)),
+                    width: active ? 1.25 : 1.0,
+                  ),
+                ),
+                shadows: active
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(
+                            alpha: c.isDark ? 0.24 : 0.14,
+                          ),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2.5),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [spec.swatchStart, spec.swatchEnd],
+                      ),
+                      border: Border.all(
+                        color: Colors.white.withValues(
+                          alpha: c.isDark ? 0.32 : 0.85,
+                        ),
+                        width: 1.2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: active
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 10.5,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    spec.label,
+                    style: sansStyle(
+                      c,
+                      size: 12.2,
+                      weight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: active
+                          ? (c.isDark ? spec.darkNavText : spec.lightNavText)
+                          : (_hovered ? c.ink : c.inkSoft),
+                    ),
+                  ),
+                  if (spec.badge.isNotEmpty) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5.5,
+                        vertical: 1.2,
+                      ),
+                      decoration: ShapeDecoration(
+                        color: accent.withValues(
+                          alpha: c.isDark ? 0.20 : 0.11,
+                        ),
+                        shape: const StadiumBorder(),
+                      ),
+                      child: Text(
+                        spec.badge,
+                        style: sansStyle(
+                          c,
+                          size: 10.0,
+                          weight: FontWeight.w600,
+                          color: accent,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

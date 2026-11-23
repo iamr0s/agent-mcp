@@ -6,13 +6,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'claude_motion.dart';
+import 'prism_motion.dart';
 
-export 'claude_motion.dart';
+export 'prism_motion.dart';
 
 /// Unified Modern Geometric UI Sans + Tabular Monospace Typography
-const String kFontSerif = 'AnthropicSans';
-const String kFontSans = 'AnthropicSans';
+const String kFontSerif = 'PrismSans';
+const String kFontSans = 'PrismSans';
 const String kFontMono = 'JetBrainsMono';
 
 const List<String> kSerifFallback = [
@@ -45,7 +45,7 @@ const List<String> kMonoFallback = [
 ];
 
 /// Continuous-curvature Superellipse shape helper.
-RoundedSuperellipseBorder claudeSuperellipse(
+RoundedSuperellipseBorder prismSuperellipse(
   double radius, {
   BorderSide side = BorderSide.none,
 }) {
@@ -55,8 +55,180 @@ RoundedSuperellipseBorder claudeSuperellipse(
   );
 }
 
+/// Curated 2nd-Dimension Theme Accent Presets (`v3.3.0`).
+/// Preset #1 (`indigo`) matches the official Agent MCP Starlight Indigo app icon (`#4F46E5` -> `#312E81`).
+enum PrismAccentId {
+  indigo,
+  jade,
+  cobalt,
+  terracotta,
+  violet,
+  obsidian;
+
+  String get key => name;
+
+  static PrismAccentId fromKey(String? raw) {
+    final clean = (raw ?? '').trim().toLowerCase();
+    for (final v in PrismAccentId.values) {
+      if (v.name == clean) return v;
+    }
+    return PrismAccentId.indigo;
+  }
+}
+
+class PrismAccentSpec {
+  final PrismAccentId id;
+  final String label;
+  final String badge;
+  final Color swatchStart;
+  final Color swatchEnd;
+  final Color lightPrimary;
+  final Color lightHover;
+  final Color lightSoftBg;
+  final Color lightNavBottom;
+  final Color lightNavText;
+  final Color darkPrimary;
+  final Color darkHover;
+  final Color darkSoftBg;
+  final Color darkNavTop;
+  final Color darkNavBottom;
+  final Color darkNavText;
+
+  const PrismAccentSpec({
+    required this.id,
+    required this.label,
+    this.badge = '',
+    required this.swatchStart,
+    required this.swatchEnd,
+    required this.lightPrimary,
+    required this.lightHover,
+    required this.lightSoftBg,
+    required this.lightNavBottom,
+    required this.lightNavText,
+    required this.darkPrimary,
+    required this.darkHover,
+    required this.darkSoftBg,
+    required this.darkNavTop,
+    required this.darkNavBottom,
+    required this.darkNavText,
+  });
+
+  static const List<PrismAccentSpec> presets = [
+    PrismAccentSpec(
+      id: PrismAccentId.indigo,
+      label: '星芒靛蓝',
+      badge: '图标同色',
+      swatchStart: Color(0xFF4F46E5),
+      swatchEnd: Color(0xFF312E81),
+      lightPrimary: Color(0xFF4F46E5),
+      lightHover: Color(0xFF4338CA),
+      lightSoftBg: Color(0x164F46E5),
+      lightNavBottom: Color(0xFFEEF2FF),
+      lightNavText: Color(0xFF1E1B4B),
+      darkPrimary: Color(0xFF818CF8),
+      darkHover: Color(0xFFA5B4FC),
+      darkSoftBg: Color(0x246366F1),
+      darkNavTop: Color(0xFF202242),
+      darkNavBottom: Color(0xFF15172E),
+      darkNavText: Color(0xFFEEF2FF),
+    ),
+    PrismAccentSpec(
+      id: PrismAccentId.jade,
+      label: '温润青玉',
+      swatchStart: Color(0xFF10B981),
+      swatchEnd: Color(0xFF047857),
+      lightPrimary: Color(0xFF059669),
+      lightHover: Color(0xFF047857),
+      lightSoftBg: Color(0x1610B981),
+      lightNavBottom: Color(0xFFECFDF5),
+      lightNavText: Color(0xFF064E3B),
+      darkPrimary: Color(0xFF34D399),
+      darkHover: Color(0xFF6EE7B7),
+      darkSoftBg: Color(0x2234D399),
+      darkNavTop: Color(0xFF1C352D),
+      darkNavBottom: Color(0xFF12231E),
+      darkNavText: Color(0xFFECFDF5),
+    ),
+    PrismAccentSpec(
+      id: PrismAccentId.cobalt,
+      label: '深海钴蓝',
+      swatchStart: Color(0xFF0EA5E9),
+      swatchEnd: Color(0xFF0369A1),
+      lightPrimary: Color(0xFF0284C7),
+      lightHover: Color(0xFF0369A1),
+      lightSoftBg: Color(0x160284C7),
+      lightNavBottom: Color(0xFFEFF8FF),
+      lightNavText: Color(0xFF0C4A6E),
+      darkPrimary: Color(0xFF38BDF8),
+      darkHover: Color(0xFF7DD3FC),
+      darkSoftBg: Color(0x2238BDF8),
+      darkNavTop: Color(0xFF162F42),
+      darkNavBottom: Color(0xFF0F202E),
+      darkNavText: Color(0xFFF0F9FF),
+    ),
+    PrismAccentSpec(
+      id: PrismAccentId.terracotta,
+      label: '陶土暖珀',
+      swatchStart: Color(0xFFD97757),
+      swatchEnd: Color(0xFF9A3412),
+      lightPrimary: Color(0xFFC96442),
+      lightHover: Color(0xFFB55332),
+      lightSoftBg: Color(0x18C96442),
+      lightNavBottom: Color(0xFFFDF2EC),
+      lightNavText: Color(0xFF5C2614),
+      darkPrimary: Color(0xFFE88B6B),
+      darkHover: Color(0xFFF2A68B),
+      darkSoftBg: Color(0x24E88B6B),
+      darkNavTop: Color(0xFF38221B),
+      darkNavBottom: Color(0xFF251612),
+      darkNavText: Color(0xFFFFF3EE),
+    ),
+    PrismAccentSpec(
+      id: PrismAccentId.violet,
+      label: '极光紫晶',
+      swatchStart: Color(0xFF8B5CF6),
+      swatchEnd: Color(0xFF5B21B6),
+      lightPrimary: Color(0xFF7C3AED),
+      lightHover: Color(0xFF6D28D9),
+      lightSoftBg: Color(0x167C3AED),
+      lightNavBottom: Color(0xFFF5F3FF),
+      lightNavText: Color(0xFF3B0764),
+      darkPrimary: Color(0xFFC084FC),
+      darkHover: Color(0xFFD8B4FE),
+      darkSoftBg: Color(0x24A855F7),
+      darkNavTop: Color(0xFF2D1D42),
+      darkNavBottom: Color(0xFF1D132B),
+      darkNavText: Color(0xFFFAF5FF),
+    ),
+    PrismAccentSpec(
+      id: PrismAccentId.obsidian,
+      label: '曜石极简',
+      swatchStart: Color(0xFF3F3F46),
+      swatchEnd: Color(0xFF09090B),
+      lightPrimary: Color(0xFF18181B),
+      lightHover: Color(0xFF27272A),
+      lightSoftBg: Color(0x1218181B),
+      lightNavBottom: Color(0xFFF3F3F6),
+      lightNavText: Color(0xFF09090B),
+      darkPrimary: Color(0xFFF4F4F6),
+      darkHover: Color(0xFFFFFFFF),
+      darkSoftBg: Color(0x1EF4F4F6),
+      darkNavTop: Color(0xFF25252E),
+      darkNavBottom: Color(0xFF18181F),
+      darkNavText: Color(0xFFFFFFFF),
+    ),
+  ];
+
+  static PrismAccentSpec of(PrismAccentId id) {
+    for (final spec in presets) {
+      if (spec.id == id) return spec;
+    }
+    return presets.first;
+  }
+}
+
 /// Linear / OrbStack High-Density Architectural Design Tokens.
-class ClaudePalette {
+class PrismPalette {
   final bool isDark;
 
   /// Primary workspace island canvas
@@ -116,7 +288,7 @@ class ClaudePalette {
   final Color termBg;
   final Color termFg;
 
-  const ClaudePalette({
+  const PrismPalette({
     required this.isDark,
     required this.paper,
     required this.paper2,
@@ -142,7 +314,7 @@ class ClaudePalette {
     required this.termFg,
   });
 
-  static const light = ClaudePalette(
+  static const light = PrismPalette(
     isDark: false,
     paper: Color(0xFFFAFAFB), // Pure gallery alabaster canvas
     paper2: Color(0xFFFFFFFF), // Pure gallery white elevated surface
@@ -154,21 +326,21 @@ class ClaudePalette {
     muted: Color(0xFF71717A),
     meta: Color(0xFFA1A1AA),
     hairline: Color(0xFFE6E6EA), // Crisp 1px architectural hairline
-    ringHover: Color(0xFFD4D4D8),
-    clay: Color(0xFF141416), // Decisive Deep Onyx primary focal accent
-    clayHover: Color(0xFF27272A),
-    focusRing: Color(0xFF18181B),
+    ringHover: Color(0x734F46E5),
+    clay: Color(0xFF4F46E5), // Default Starlight Indigo (matches App Icon)
+    clayHover: Color(0xFF4338CA),
+    focusRing: Color(0xFF4F46E5),
     sage: Color(0xFF059669),
     sageBg: Color(0x1610B981),
     danger: Color(0xFFDC2626),
     dangerBg: Color(0x14EF4444),
-    purple: Color(0xFF6366F1),
-    purpleBg: Color(0x146366F1),
+    purple: Color(0xFF4F46E5),
+    purpleBg: Color(0x164F46E5),
     termBg: Color(0xFFF8F8FA),
     termFg: Color(0xFF111113),
   );
 
-  static const dark = ClaudePalette(
+  static const dark = PrismPalette(
     isDark: true,
     paper: Color(0xFF0A0A0C), // Deep gallery obsidian canvas
     paper2: Color(0xFF121216), // Elevated onyx card & group surface
@@ -180,25 +352,33 @@ class ClaudePalette {
     muted: Color(0xFF8E8E98),
     meta: Color(0xFF63636E),
     hairline: Color(0xFF222228), // Crisp 1px dark architectural hairline
-    ringHover: Color(0xFF34343E),
-    clay: Color(0xFFF4F4F6), // Luminous Alabaster primary focal accent
-    clayHover: Color(0xFFFFFFFF),
-    focusRing: Color(0xFFE4E4E7),
+    ringHover: Color(0x7A818CF8),
+    clay: Color(0xFF818CF8), // Luminous Starlight Indigo (matches App Icon)
+    clayHover: Color(0xFFA5B4FC),
+    focusRing: Color(0xFF818CF8),
     sage: Color(0xFF34D399),
     sageBg: Color(0x2034D399),
     danger: Color(0xFFF87171),
     dangerBg: Color(0x20F87171),
     purple: Color(0xFFA5B4FC),
-    purpleBg: Color(0x206366F1),
+    purpleBg: Color(0x246366F1),
     termBg: Color(0xFF0D0D11),
     termFg: Color(0xFFECECEF),
   );
 
+  static PrismAccentId _accentId = PrismAccentId.indigo;
   static bool _dynamicEnabled = false;
   static Color? _dynamicLightAccent;
   static Color? _dynamicDarkAccent;
 
+  static PrismAccentId get activeAccentId => _accentId;
+  static PrismAccentSpec get activeAccentSpec =>
+      PrismAccentSpec.of(_accentId);
   static bool get isDynamicColorEnabled => _dynamicEnabled;
+
+  static void configureAccent(PrismAccentId accent) {
+    _accentId = accent;
+  }
 
   static void configureDynamicColor({
     required bool enabled,
@@ -210,11 +390,35 @@ class ClaudePalette {
     if (darkAccent != null) _dynamicDarkAccent = darkAccent;
   }
 
-  static ClaudePalette get activeLight {
-    if (!_dynamicEnabled || _dynamicLightAccent == null) return light;
-    final a = _dynamicLightAccent!;
-    final hover = Color.lerp(a, Colors.black, 0.14)!;
-    return ClaudePalette(
+  static PrismPalette forSpec(PrismAccentSpec spec, {required bool isDark}) {
+    if (isDark) {
+      return PrismPalette(
+        isDark: true,
+        paper: dark.paper,
+        paper2: dark.paper2,
+        paper3: dark.paper3,
+        sidebar: dark.sidebar,
+        recessed: dark.recessed,
+        ink: dark.ink,
+        inkSoft: dark.inkSoft,
+        muted: dark.muted,
+        meta: dark.meta,
+        hairline: dark.hairline,
+        ringHover: spec.darkPrimary.withValues(alpha: 0.48),
+        clay: spec.darkPrimary,
+        clayHover: spec.darkHover,
+        focusRing: spec.darkPrimary,
+        sage: dark.sage,
+        sageBg: dark.sageBg,
+        danger: dark.danger,
+        dangerBg: dark.dangerBg,
+        purple: spec.darkPrimary,
+        purpleBg: spec.darkSoftBg,
+        termBg: dark.termBg,
+        termFg: dark.termFg,
+      );
+    }
+    return PrismPalette(
       isDark: false,
       paper: light.paper,
       paper2: light.paper2,
@@ -226,53 +430,124 @@ class ClaudePalette {
       muted: light.muted,
       meta: light.meta,
       hairline: light.hairline,
-      ringHover: a.withValues(alpha: 0.45),
-      clay: a,
-      clayHover: hover,
-      focusRing: a,
+      ringHover: spec.lightPrimary.withValues(alpha: 0.44),
+      clay: spec.lightPrimary,
+      clayHover: spec.lightHover,
+      focusRing: spec.lightPrimary,
       sage: light.sage,
       sageBg: light.sageBg,
       danger: light.danger,
       dangerBg: light.dangerBg,
-      purple: a,
-      purpleBg: a.withValues(alpha: 0.12),
+      purple: spec.lightPrimary,
+      purpleBg: spec.lightSoftBg,
       termBg: light.termBg,
       termFg: light.termFg,
     );
   }
 
-  static ClaudePalette get activeDark {
-    if (!_dynamicEnabled || _dynamicDarkAccent == null) return dark;
-    final a = _dynamicDarkAccent!;
-    final hover = Color.lerp(a, Colors.white, 0.14)!;
-    return ClaudePalette(
-      isDark: true,
-      paper: dark.paper,
-      paper2: dark.paper2,
-      paper3: dark.paper3,
-      sidebar: dark.sidebar,
-      recessed: dark.recessed,
-      ink: dark.ink,
-      inkSoft: dark.inkSoft,
-      muted: dark.muted,
-      meta: dark.meta,
-      hairline: dark.hairline,
-      ringHover: a.withValues(alpha: 0.48),
-      clay: a,
-      clayHover: hover,
-      focusRing: a,
-      sage: dark.sage,
-      sageBg: dark.sageBg,
-      danger: dark.danger,
-      dangerBg: dark.dangerBg,
-      purple: a,
-      purpleBg: a.withValues(alpha: 0.18),
-      termBg: dark.termBg,
-      termFg: dark.termFg,
-    );
+  static PrismPalette get activeLight {
+    if (_dynamicEnabled && _dynamicLightAccent != null) {
+      final a = _dynamicLightAccent!;
+      final hover = Color.lerp(a, Colors.black, 0.14)!;
+      return PrismPalette(
+        isDark: false,
+        paper: light.paper,
+        paper2: light.paper2,
+        paper3: light.paper3,
+        sidebar: light.sidebar,
+        recessed: light.recessed,
+        ink: light.ink,
+        inkSoft: light.inkSoft,
+        muted: light.muted,
+        meta: light.meta,
+        hairline: light.hairline,
+        ringHover: a.withValues(alpha: 0.45),
+        clay: a,
+        clayHover: hover,
+        focusRing: a,
+        sage: light.sage,
+        sageBg: light.sageBg,
+        danger: light.danger,
+        dangerBg: light.dangerBg,
+        purple: a,
+        purpleBg: a.withValues(alpha: 0.12),
+        termBg: light.termBg,
+        termFg: light.termFg,
+      );
+    }
+    return forSpec(activeAccentSpec, isDark: false);
   }
 
-  static ClaudePalette of(BuildContext context) {
+  static PrismPalette get activeDark {
+    if (_dynamicEnabled && _dynamicDarkAccent != null) {
+      final a = _dynamicDarkAccent!;
+      final hover = Color.lerp(a, Colors.white, 0.14)!;
+      return PrismPalette(
+        isDark: true,
+        paper: dark.paper,
+        paper2: dark.paper2,
+        paper3: dark.paper3,
+        sidebar: dark.sidebar,
+        recessed: dark.recessed,
+        ink: dark.ink,
+        inkSoft: dark.inkSoft,
+        muted: dark.muted,
+        meta: dark.meta,
+        hairline: dark.hairline,
+        ringHover: a.withValues(alpha: 0.48),
+        clay: a,
+        clayHover: hover,
+        focusRing: a,
+        sage: dark.sage,
+        sageBg: dark.sageBg,
+        danger: dark.danger,
+        dangerBg: dark.dangerBg,
+        purple: a,
+        purpleBg: a.withValues(alpha: 0.18),
+        termBg: dark.termBg,
+        termFg: dark.termFg,
+      );
+    }
+    return forSpec(activeAccentSpec, isDark: true);
+  }
+
+  /// Active navigation & optical lens accent tokens (syncs with selected Theme Accent).
+  Color get navTint => clay;
+
+  Color get navCapsuleTop {
+    if (_dynamicEnabled) {
+      return isDark
+          ? Color.lerp(const Color(0xFF181920), clay, 0.22)!
+          : const Color(0xFFFFFFFF);
+    }
+    final spec = activeAccentSpec;
+    return isDark ? spec.darkNavTop : const Color(0xFFFFFFFF);
+  }
+
+  Color get navCapsuleBottom {
+    if (_dynamicEnabled) {
+      return isDark
+          ? Color.lerp(const Color(0xFF101116), clay, 0.14)!
+          : Color.lerp(const Color(0xFFFFFFFF), clay, 0.08)!;
+    }
+    final spec = activeAccentSpec;
+    return isDark ? spec.darkNavBottom : spec.lightNavBottom;
+  }
+
+  Color get navActiveIcon => clay;
+
+  Color get navActiveText {
+    if (_dynamicEnabled) return ink;
+    final spec = activeAccentSpec;
+    return isDark ? spec.darkNavText : spec.lightNavText;
+  }
+
+  int get accentRgb24 =>
+      ((clay.r * 255.0).round().clamp(0, 255) << 16) |
+      ((clay.g * 255.0).round().clamp(0, 255) << 8) |
+      (clay.b * 255.0).round().clamp(0, 255);
+
+  static PrismPalette of(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? activeDark
         : activeLight;
@@ -393,7 +668,7 @@ class ClaudePalette {
 /// Modern Geometric Display Sans headline style (replaces legacy literary serif
 /// across the entire console for crisp Linear / OrbStack developer aesthetic).
 TextStyle serifTitleStyle(
-  ClaudePalette c, {
+  PrismPalette c, {
   double size = 20,
   FontWeight weight = FontWeight.w600,
   Color? color,
@@ -415,7 +690,7 @@ TextStyle serifTitleStyle(
 }
 
 TextStyle sansStyle(
-  ClaudePalette c, {
+  PrismPalette c, {
   double size = 13.0,
   FontWeight weight = FontWeight.w400,
   Color? color,
@@ -436,7 +711,7 @@ TextStyle sansStyle(
 }
 
 TextStyle monoStyle(
-  ClaudePalette c, {
+  PrismPalette c, {
   double size = 12.0,
   Color? color,
   FontWeight weight = FontWeight.w400,
@@ -454,8 +729,8 @@ TextStyle monoStyle(
   );
 }
 
-ThemeData buildClaudeTheme(
-  ClaudePalette c, {
+ThemeData buildPrismTheme(
+  PrismPalette c, {
   bool transparentScaffold = false,
 }) {
   final scheme = ColorScheme(
@@ -507,7 +782,7 @@ ThemeData buildClaudeTheme(
     dialogTheme: DialogThemeData(
       backgroundColor: c.paper2,
       elevation: 0,
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -516,7 +791,7 @@ ThemeData buildClaudeTheme(
       color: c.paper2,
       elevation: 8,
       surfaceTintColor: Colors.transparent,
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         20,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.75)),
       ),
@@ -557,7 +832,7 @@ ThemeData buildClaudeTheme(
         if (states.contains(WidgetState.focused)) {
           return OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: c.sage, width: 1.4),
+            borderSide: BorderSide(color: c.focusRing, width: 1.4),
           );
         }
         if (states.contains(WidgetState.hovered)) {
@@ -588,13 +863,13 @@ ThemeData buildClaudeTheme(
 
 /// Continuous-superellipse 1px directional Specular Rim Painter (Linear ProKit / Liquid Glass).
 /// Simulates a physical top key-light catching the upper bevel while fading gracefully downward.
-class ClaudeSpecularRimPainter extends CustomPainter {
+class PrismSpecularRimPainter extends CustomPainter {
   final double radius;
   final bool isDark;
   final Color? accentTint;
   final double intensity;
 
-  const ClaudeSpecularRimPainter({
+  const PrismSpecularRimPainter({
     required this.radius,
     required this.isDark,
     this.accentTint,
@@ -619,7 +894,7 @@ class ClaudeSpecularRimPainter extends CustomPainter {
       final botColor =
           Color.fromRGBO(255, 255, 255, (0.03 * intensity).clamp(0.0, 1.0));
 
-      final path = claudeSuperellipse(radius).getOuterPath(rect.deflate(0.5));
+      final path = prismSuperellipse(radius).getOuterPath(rect.deflate(0.5));
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0
@@ -640,7 +915,7 @@ class ClaudeSpecularRimPainter extends CustomPainter {
             )!
           : const Color(0x140F172A);
       final outerPath =
-          claudeSuperellipse(radius).getOuterPath(rect.deflate(0.5));
+          prismSuperellipse(radius).getOuterPath(rect.deflate(0.5));
       canvas.drawPath(
         outerPath,
         Paint()
@@ -652,7 +927,7 @@ class ClaudeSpecularRimPainter extends CustomPainter {
       final innerRadius = (radius - 1.0).clamp(1.0, radius);
       final innerRect = rect.deflate(1.2);
       if (innerRect.width > 2 && innerRect.height > 2) {
-        final innerPath = claudeSuperellipse(innerRadius).getOuterPath(innerRect);
+        final innerPath = prismSuperellipse(innerRadius).getOuterPath(innerRect);
         final specPaint = Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.0
@@ -672,7 +947,7 @@ class ClaudeSpecularRimPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant ClaudeSpecularRimPainter oldDelegate) {
+  bool shouldRepaint(covariant PrismSpecularRimPainter oldDelegate) {
     return oldDelegate.radius != radius ||
         oldDelegate.isDark != isDark ||
         oldDelegate.accentTint != accentTint ||
@@ -681,7 +956,7 @@ class ClaudeSpecularRimPainter extends CustomPainter {
 }
 
 /// Frosted Glass Chrome Surface — reserved for mobile/web floating bars & popovers.
-class ClaudeGlassBar extends StatelessWidget {
+class PrismGlassBar extends StatelessWidget {
   final Widget child;
   final double blurSigma;
   final Color? tintColor;
@@ -690,7 +965,7 @@ class ClaudeGlassBar extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final List<BoxShadow>? boxShadow;
 
-  const ClaudeGlassBar({
+  const PrismGlassBar({
     super.key,
     required this.child,
     this.blurSigma = 18.0,
@@ -703,14 +978,14 @@ class ClaudeGlassBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final effectiveTint = tintColor ?? c.glassBarTint;
     final effectiveSigma = kIsWeb ? math.min(blurSigma, 8.0) : blurSigma;
 
     if (borderRadius != null && borderRadius! > 0) {
       return DecoratedBox(
         decoration: ShapeDecoration(
-          shape: claudeSuperellipse(borderRadius!),
+          shape: prismSuperellipse(borderRadius!),
           shadows: boxShadow,
         ),
         child: ClipRSuperellipse(
@@ -723,7 +998,7 @@ class ClaudeGlassBar extends StatelessWidget {
             child: DecoratedBox(
               decoration: ShapeDecoration(
                 color: effectiveTint,
-                shape: claudeSuperellipse(
+                shape: prismSuperellipse(
                   borderRadius!,
                   side: BorderSide(color: c.hairline),
                 ),
@@ -758,7 +1033,7 @@ class ClaudeGlassBar extends StatelessWidget {
 }
 
 /// Editorial Gravity Page Header (Tracked Monospace Eyebrow + Tight Display Title).
-class ClaudeEditorialPageHeader extends StatelessWidget {
+class PrismEditorialPageHeader extends StatelessWidget {
   final String eyebrow;
   final String title;
   final Widget? titleBadge;
@@ -766,7 +1041,7 @@ class ClaudeEditorialPageHeader extends StatelessWidget {
   final Widget? leadingDot;
   final Widget? trailing;
 
-  const ClaudeEditorialPageHeader({
+  const PrismEditorialPageHeader({
     super.key,
     required this.eyebrow,
     required this.title,
@@ -778,7 +1053,7 @@ class ClaudeEditorialPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return LayoutBuilder(
       builder: (ctx, box) {
         final narrow = box.maxWidth < 540;
@@ -874,7 +1149,7 @@ class ClaudeEditorialPageHeader extends StatelessWidget {
 /// Linear / OrbStack De-Boxed Hairline Group Container.
 /// Replaces heavy nested cards with a crisp 12px-radius container and 1px
 /// inset row dividers ("structure felt, not seen").
-class ClaudeListGroup extends StatelessWidget {
+class PrismListGroup extends StatelessWidget {
   final String? title;
   final String? headerLabel;
   final String? subtitle;
@@ -884,7 +1159,7 @@ class ClaudeListGroup extends StatelessWidget {
   final double dividerIndent;
   final EdgeInsetsGeometry? margin;
 
-  const ClaudeListGroup({
+  const PrismListGroup({
     super.key,
     this.title,
     this.headerLabel,
@@ -898,13 +1173,13 @@ class ClaudeListGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final effTitle = title ?? headerLabel;
     final hasHeader =
         (effTitle != null && effTitle.isNotEmpty) || headerTrailing != null;
 
     Widget box = CustomPaint(
-      foregroundPainter: ClaudeSpecularRimPainter(
+      foregroundPainter: PrismSpecularRimPainter(
         radius: radius,
         isDark: c.isDark,
         intensity: c.isDark ? 0.72 : 0.90,
@@ -912,7 +1187,7 @@ class ClaudeListGroup extends StatelessWidget {
       child: DecoratedBox(
         decoration: ShapeDecoration(
           color: c.paper2,
-          shape: claudeSuperellipse(
+          shape: prismSuperellipse(
             radius,
             side: BorderSide(
               color: c.isDark
@@ -999,8 +1274,8 @@ class ClaudeListGroup extends StatelessWidget {
   }
 }
 
-/// Standardized macOS / Clash Verge Rev Settings Row inside a [ClaudeListGroup].
-class ClaudeSettingsRow extends StatelessWidget {
+/// Standardized macOS / Clash Verge Rev Settings Row inside a [PrismListGroup].
+class PrismSettingsRow extends StatelessWidget {
   final IconData? icon;
   final Color? iconColor;
   final Widget? leading;
@@ -1012,7 +1287,7 @@ class ClaudeSettingsRow extends StatelessWidget {
   final double stackBreakpoint;
   final bool allowTrailingWrap;
 
-  const ClaudeSettingsRow({
+  const PrismSettingsRow({
     super.key,
     this.icon,
     this.iconColor,
@@ -1028,13 +1303,13 @@ class ClaudeSettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return LayoutBuilder(
       builder: (ctx, box) {
         final stack = allowTrailingWrap &&
             box.maxWidth < stackBreakpoint &&
             trailing != null &&
-            trailing is! ClaudeSwitch &&
+            trailing is! PrismSwitch &&
             trailing is! Icon;
         final compactRow = box.maxWidth < 400;
         final labelBlock = Row(
@@ -1051,7 +1326,7 @@ class ClaudeSettingsRow extends StatelessWidget {
                   color: iconColor != null
                       ? iconColor!.withValues(alpha: c.isDark ? 0.16 : 0.10)
                       : c.recessed,
-                  shape: claudeSuperellipse(
+                  shape: prismSuperellipse(
                     13.0,
                     side: BorderSide(
                       color: iconColor != null
@@ -1165,7 +1440,7 @@ class ClaudeSettingsRow extends StatelessWidget {
 }
 
 /// Responsive 2-Column / Stacked Form Row shared across modal forms.
-class ClaudeFormRow extends StatelessWidget {
+class PrismFormRow extends StatelessWidget {
   final String label;
   final String? subtitle;
   final Widget child;
@@ -1173,7 +1448,7 @@ class ClaudeFormRow extends StatelessWidget {
   final double stackBreakpoint;
   final CrossAxisAlignment horizontalAlignment;
 
-  const ClaudeFormRow({
+  const PrismFormRow({
     super.key,
     required this.label,
     this.subtitle,
@@ -1185,7 +1460,7 @@ class ClaudeFormRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final compact = constraints.maxWidth < stackBreakpoint;
@@ -1252,11 +1527,11 @@ class ClaudeFormRow extends StatelessWidget {
 }
 
 /// Unified Agent MCP Brand Icon (matches Windows taskbar/tray, macOS dock & Android launcher).
-class ClaudeSparkIcon extends StatelessWidget {
+class PrismSparkIcon extends StatelessWidget {
   final double size;
   final Color? color;
 
-  const ClaudeSparkIcon({super.key, this.size = 18, this.color});
+  const PrismSparkIcon({super.key, this.size = 18, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1266,7 +1541,7 @@ class ClaudeSparkIcon extends StatelessWidget {
         painter: _SparkPainter(color!),
       );
     }
-    final fallbackColor = ClaudePalette.of(context).clay;
+    final fallbackColor = PrismPalette.of(context).clay;
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.24),
       child: Image.asset(
@@ -1314,24 +1589,24 @@ class _SparkPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
-enum ClaudeBtnVariant { neutral, clay, ink, danger, ghost }
+enum PrismBtnVariant { neutral, clay, ink, danger, ghost }
 
-class ClaudeButton extends StatefulWidget {
+class PrismButton extends StatefulWidget {
   final String label;
   final Widget? leading;
   final VoidCallback? onPressed;
-  final ClaudeBtnVariant variant;
+  final PrismBtnVariant variant;
   final bool compact;
   final bool expand;
   final bool loading;
   final String? tooltip;
 
-  const ClaudeButton({
+  const PrismButton({
     super.key,
     required this.label,
     this.leading,
     this.onPressed,
-    this.variant = ClaudeBtnVariant.neutral,
+    this.variant = PrismBtnVariant.neutral,
     this.compact = false,
     this.expand = false,
     this.loading = false,
@@ -1339,37 +1614,37 @@ class ClaudeButton extends StatefulWidget {
   });
 
   @override
-  State<ClaudeButton> createState() => _ClaudeButtonState();
+  State<PrismButton> createState() => _PrismButtonState();
 }
 
-class _ClaudeButtonState extends State<ClaudeButton> {
+class _PrismButtonState extends State<PrismButton> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final disabled = widget.onPressed == null || widget.loading;
 
     Color bg;
     Color fg;
     Color border;
     switch (widget.variant) {
-      case ClaudeBtnVariant.clay:
+      case PrismBtnVariant.clay:
         bg = _hovered && !disabled ? c.clayHover : c.clay;
         fg = c.onClay;
         border = bg;
-      case ClaudeBtnVariant.ink:
+      case PrismBtnVariant.ink:
         bg = _hovered && !disabled
             ? (c.isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B))
             : c.ink;
         fg = c.paper2;
         border = bg;
-      case ClaudeBtnVariant.danger:
+      case PrismBtnVariant.danger:
         bg = _hovered && !disabled ? c.danger.withValues(alpha: 0.88) : c.danger;
         fg = Colors.white;
         border = bg;
-      case ClaudeBtnVariant.ghost:
+      case PrismBtnVariant.ghost:
         bg = _hovered && !disabled
             ? c.paper3.withValues(alpha: 0.85)
             : c.paper3.withValues(alpha: 0.0);
@@ -1377,7 +1652,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
         border = _hovered && !disabled
             ? c.hairline
             : c.hairline.withValues(alpha: 0.0);
-      case ClaudeBtnVariant.neutral:
+      case PrismBtnVariant.neutral:
         bg = _hovered && !disabled ? c.paper3 : c.paper2;
         fg = _hovered && !disabled ? c.ink : c.inkSoft;
         border = _hovered && !disabled ? c.ringHover : c.hairline;
@@ -1392,11 +1667,11 @@ class _ClaudeButtonState extends State<ClaudeButton> {
 
     final Widget? leadingSlot = (widget.leading != null || widget.loading)
         ? AnimatedSwitcher(
-            duration: ClaudeMotion.duration(
+            duration: PrismMotion.duration(
               context,
               const Duration(milliseconds: 160),
             ),
-            switchInCurve: ClaudeMotion.editorialOut,
+            switchInCurve: PrismMotion.editorialOut,
             switchOutCurve: Curves.easeOut,
             transitionBuilder: (child, anim) => FadeTransition(
               opacity: anim,
@@ -1430,24 +1705,24 @@ class _ClaudeButtonState extends State<ClaudeButton> {
 
     Widget content = AnimatedScale(
       scale: (_pressed && !disabled) ? 0.97 : 1.0,
-      duration: ClaudeMotion.duration(
+      duration: PrismMotion.duration(
         context,
         _pressed
             ? const Duration(milliseconds: 75)
             : const Duration(milliseconds: 180),
       ),
-      curve: _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
+      curve: _pressed ? PrismMotion.standard : PrismMotion.snappySpring,
       child: CustomPaint(
-        foregroundPainter: widget.variant == ClaudeBtnVariant.ghost
+        foregroundPainter: widget.variant == PrismBtnVariant.ghost
             ? null
-            : ClaudeSpecularRimPainter(
+            : PrismSpecularRimPainter(
                 radius: 999,
                 isDark: c.isDark,
-                intensity: widget.variant == ClaudeBtnVariant.neutral ? 0.65 : 0.42,
+                intensity: widget.variant == PrismBtnVariant.neutral ? 0.65 : 0.42,
               ),
         child: AnimatedContainer(
-          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-          curve: ClaudeMotion.editorialOut,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.editorialOut,
           height: widget.compact ? 31 : 37,
           width: iconOnly ? (widget.compact ? 31 : 37) : null,
           padding: iconOnly
@@ -1519,14 +1794,14 @@ class _ClaudeButtonState extends State<ClaudeButton> {
 }
 
 /// Crisp Surface Container Card with clean 12px default superellipse radius & 1px hairline.
-class ClaudeCard extends StatefulWidget {
+class PrismCard extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
   final bool hoverable;
   final double radius;
 
-  const ClaudeCard({
+  const PrismCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
@@ -1536,34 +1811,34 @@ class ClaudeCard extends StatefulWidget {
   });
 
   @override
-  State<ClaudeCard> createState() => _ClaudeCardState();
+  State<PrismCard> createState() => _PrismCardState();
 }
 
-class _ClaudeCardState extends State<ClaudeCard> {
+class _PrismCardState extends State<PrismCard> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final interactive = widget.onTap != null || widget.hoverable;
 
     Widget card = CustomPaint(
-      foregroundPainter: ClaudeSpecularRimPainter(
+      foregroundPainter: PrismSpecularRimPainter(
         radius: widget.radius,
         isDark: c.isDark,
         intensity: c.isDark ? 0.65 : 0.85,
       ),
       child: AnimatedContainer(
-        duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-        curve: ClaudeMotion.editorialOut,
+        duration: PrismMotion.duration(context, PrismMotion.fast),
+        curve: PrismMotion.editorialOut,
         width: double.infinity,
         padding: widget.padding,
         decoration: ShapeDecoration(
           color: (_hovered && interactive)
               ? Color.lerp(c.paper2, c.paper3, 0.45)
               : c.paper2,
-          shape: claudeSuperellipse(
+          shape: prismSuperellipse(
             widget.radius,
             side: BorderSide(
               color: (_hovered && interactive)
@@ -1581,8 +1856,8 @@ class _ClaudeCardState extends State<ClaudeCard> {
     if (widget.onTap != null) {
       card = AnimatedScale(
         scale: _pressed ? 0.992 : 1.0,
-        duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-        curve: ClaudeMotion.snappySpring,
+        duration: PrismMotion.duration(context, PrismMotion.fast),
+        curve: PrismMotion.snappySpring,
         child: card,
       );
     }
@@ -1615,13 +1890,13 @@ class _ClaudeCardState extends State<ClaudeCard> {
 }
 
 /// Spring Sliding-Pill Segmented Control (Apple HIG / Fluent 2 equal-width & intrinsic modes, zero half-char clipping).
-class ClaudeSegmented<T> extends StatefulWidget {
+class PrismSegmented<T> extends StatefulWidget {
   final List<(T, String)> items;
   final T value;
   final ValueChanged<T> onChanged;
   final bool expand;
 
-  const ClaudeSegmented({
+  const PrismSegmented({
     super.key,
     required this.items,
     required this.value,
@@ -1630,10 +1905,10 @@ class ClaudeSegmented<T> extends StatefulWidget {
   });
 
   @override
-  State<ClaudeSegmented<T>> createState() => _ClaudeSegmentedState<T>();
+  State<PrismSegmented<T>> createState() => _PrismSegmentedState<T>();
 }
 
-class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
+class _PrismSegmentedState<T> extends State<PrismSegmented<T>> {
   final GlobalKey _rowKey = GlobalKey();
   late List<GlobalKey> _itemKeys =
       List.generate(widget.items.length, (_) => GlobalKey());
@@ -1650,7 +1925,7 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
   }
 
   @override
-  void didUpdateWidget(covariant ClaudeSegmented<T> oldWidget) {
+  void didUpdateWidget(covariant PrismSegmented<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.items.length != _itemKeys.length) {
       _itemKeys = List.generate(widget.items.length, (_) => GlobalKey());
@@ -1688,38 +1963,29 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
     }
   }
 
-  Widget _buildSlidingPill(ClaudePalette c, Duration pillDur,
+  Widget _buildSlidingPill(PrismPalette c, Duration pillDur,
       {required double left, required double width}) {
     return AnimatedPositioned(
       duration: pillDur,
-      curve: ClaudeMotion.snappySpring,
+      curve: PrismMotion.snappySpring,
       left: left,
       top: 0,
       bottom: 0,
       width: width,
       child: CustomPaint(
-        foregroundPainter: ClaudeSpecularRimPainter(
+        foregroundPainter: PrismSpecularRimPainter(
           radius: 999,
           isDark: c.isDark,
-          accentTint: c.sage,
+          accentTint: c.navTint,
           intensity: 0.90,
         ),
         child: DecoratedBox(
           decoration: ShapeDecoration(
-            gradient: c.isDark
-                ? const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xE81C332B),
-                      Color(0xF012221D),
-                    ],
-                  )
-                : const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFFFFFFFF), Color(0xFFF1FAF6)],
-                  ),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [c.navCapsuleTop, c.navCapsuleBottom],
+            ),
             shape: const StadiumBorder(),
             shadows: [
               BoxShadow(
@@ -1736,9 +2002,9 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final pillDur = _animatePill
-        ? ClaudeMotion.duration(context, const Duration(milliseconds: 220))
+        ? PrismMotion.duration(context, const Duration(milliseconds: 220))
         : Duration.zero;
     final activeIdx =
         widget.items.indexWhere((e) => e.$1 == widget.value).clamp(
@@ -1762,7 +2028,7 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
           final count = widget.items.isEmpty ? 1 : widget.items.length;
           final slotW = innerW / count;
           final eqPillLeft = activeIdx * slotW;
-          final eqDur = ClaudeMotion.duration(
+          final eqDur = PrismMotion.duration(
             context,
             const Duration(milliseconds: 220),
           );
@@ -1860,7 +2126,7 @@ class _SegmentTapItem extends StatefulWidget {
   final bool active;
   final bool fallbackHighlight;
   final bool compactPad;
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final VoidCallback onTap;
 
   const _SegmentTapItem({
@@ -1923,7 +2189,7 @@ class _SegmentTapItemState extends State<_SegmentTapItem> {
   }
 }
 
-class ClaudePill extends StatelessWidget {
+class PrismPill extends StatelessWidget {
   final String text;
   final Widget? leading;
   final Color? fg;
@@ -1931,7 +2197,7 @@ class ClaudePill extends StatelessWidget {
   final Color? border;
   final bool mono;
 
-  const ClaudePill({
+  const PrismPill({
     super.key,
     required this.text,
     this.leading,
@@ -1943,7 +2209,7 @@ class ClaudePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final effFg = fg ?? c.inkSoft;
     return DecoratedBox(
       decoration: ShapeDecoration(
@@ -1994,17 +2260,17 @@ class ClaudePill extends StatelessWidget {
 }
 
 /// Elastic Thumb-Stretch Toggle Switch.
-class ClaudeSwitch extends StatefulWidget {
+class PrismSwitch extends StatefulWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
-  const ClaudeSwitch({super.key, required this.value, this.onChanged});
+  const PrismSwitch({super.key, required this.value, this.onChanged});
 
   @override
-  State<ClaudeSwitch> createState() => _ClaudeSwitchState();
+  State<PrismSwitch> createState() => _PrismSwitchState();
 }
 
-class _ClaudeSwitchState extends State<ClaudeSwitch>
+class _PrismSwitchState extends State<PrismSwitch>
     with TickerProviderStateMixin {
   late final AnimationController _posCtrl = AnimationController(
     vsync: this,
@@ -2018,10 +2284,10 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
   bool _hovered = false;
 
   @override
-  void didUpdateWidget(covariant ClaudeSwitch oldWidget) {
+  void didUpdateWidget(covariant PrismSwitch oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
-      final d = ClaudeMotion.duration(
+      final d = PrismMotion.duration(
         context,
         const Duration(milliseconds: 230),
       );
@@ -2045,7 +2311,7 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final disabled = widget.onChanged == null;
 
     return RepaintBoundary(
@@ -2069,12 +2335,12 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
           child: AnimatedBuilder(
             animation: Listenable.merge([_posCtrl, _pressCtrl]),
             builder: (ctx, _) {
-              final springPos = ClaudeMotion.snappySpring
+              final springPos = PrismMotion.snappySpring
                   .transform(_posCtrl.value)
                   .clamp(-0.06, 1.06);
               final linearPos = _posCtrl.value.clamp(0.0, 1.0);
               final pressT =
-                  ClaudeMotion.editorialOut.transform(_pressCtrl.value);
+                  PrismMotion.editorialOut.transform(_pressCtrl.value);
 
               const trackW = 38.0;
               const trackH = 22.0;
@@ -2140,12 +2406,12 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
 }
 
 /// Tactile Superellipse Checkbox Row with spring bounce.
-class ClaudeCheckToggle extends StatefulWidget {
+class PrismCheckToggle extends StatefulWidget {
   final bool value;
   final String label;
   final ValueChanged<bool> onChanged;
 
-  const ClaudeCheckToggle({
+  const PrismCheckToggle({
     super.key,
     required this.value,
     required this.label,
@@ -2153,16 +2419,16 @@ class ClaudeCheckToggle extends StatefulWidget {
   });
 
   @override
-  State<ClaudeCheckToggle> createState() => _ClaudeCheckToggleState();
+  State<PrismCheckToggle> createState() => _PrismCheckToggleState();
 }
 
-class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
+class _PrismCheckToggleState extends State<PrismCheckToggle> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -2185,16 +2451,16 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
             children: [
               AnimatedScale(
                 scale: _pressed ? 0.88 : 1.0,
-                duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-                curve: ClaudeMotion.snappySpring,
+                duration: PrismMotion.duration(context, PrismMotion.fast),
+                curve: PrismMotion.snappySpring,
                 child: AnimatedContainer(
-                  duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-                  curve: ClaudeMotion.editorialOut,
+                  duration: PrismMotion.duration(context, PrismMotion.fast),
+                  curve: PrismMotion.editorialOut,
                   width: 17,
                   height: 17,
                   decoration: ShapeDecoration(
                     color: widget.value ? c.clay : c.recessed,
-                    shape: claudeSuperellipse(
+                    shape: prismSuperellipse(
                       5.5,
                       side: BorderSide(
                         color: widget.value
@@ -2205,8 +2471,8 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
                     ),
                   ),
                   child: AnimatedSwitcher(
-                    duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-                    switchInCurve: ClaudeMotion.snappySpring,
+                    duration: PrismMotion.duration(context, PrismMotion.fast),
+                    switchInCurve: PrismMotion.snappySpring,
                     transitionBuilder: (child, anim) => ScaleTransition(
                       scale: anim,
                       child: child,
@@ -2241,13 +2507,13 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
   }
 }
 
-class ClaudePasswordField extends StatefulWidget {
+class PrismPasswordField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onChanged;
 
-  const ClaudePasswordField({
+  const PrismPasswordField({
     super.key,
     required this.controller,
     this.hintText = '',
@@ -2256,15 +2522,15 @@ class ClaudePasswordField extends StatefulWidget {
   });
 
   @override
-  State<ClaudePasswordField> createState() => _ClaudePasswordFieldState();
+  State<PrismPasswordField> createState() => _PrismPasswordFieldState();
 }
 
-class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
+class _PrismPasswordFieldState extends State<PrismPasswordField> {
   bool _obscure = true;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return TextField(
       controller: widget.controller,
       obscureText: _obscure,
@@ -2279,7 +2545,7 @@ class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
           iconSize: 15.5,
           tooltip: _obscure ? '显示密钥' : '隐藏密钥',
           onPressed: () => setState(() => _obscure = !_obscure),
-          icon: ClaudeFadeBox(
+          icon: PrismFadeBox(
             alignment: Alignment.center,
             child: Icon(
               _obscure
@@ -2296,7 +2562,7 @@ class _ClaudePasswordFieldState extends State<ClaudePasswordField> {
 }
 
 /// Opens a modal dialog with cool obsidian scrim blur + critically-damped spring physics.
-Future<T?> showClaudeDialog<T>({
+Future<T?> showPrismDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
@@ -2306,13 +2572,13 @@ Future<T?> showClaudeDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: const Color(0x59080B12),
-    transitionDuration: ClaudeMotion.duration(context, ClaudeMotion.modal),
+    transitionDuration: PrismMotion.duration(context, PrismMotion.modal),
     pageBuilder: (ctx, _, __) => SafeArea(child: Builder(builder: builder)),
     transitionBuilder: (ctx, anim, _, child) {
       final isReversing = anim.status == AnimationStatus.reverse;
       final curved = isReversing
           ? Curves.easeInCubic.transform(anim.value)
-          : ClaudeMotion.snappySpring.transform(anim.value);
+          : PrismMotion.snappySpring.transform(anim.value);
       final opacity = Curves.easeOut.transform(anim.value).clamp(0.0, 1.0);
       final scale = 0.96 + 0.04 * curved;
       final dy = (1.0 - curved) * 6.0;
@@ -2335,7 +2601,7 @@ Future<T?> showClaudeDialog<T>({
   );
 }
 
-Future<bool> showClaudeConfirmDialog(
+Future<bool> showPrismConfirmDialog(
   BuildContext context, {
   required String title,
   required String message,
@@ -2343,10 +2609,10 @@ Future<bool> showClaudeConfirmDialog(
   String cancelText = '取消',
   bool destructive = false,
 }) async {
-  final res = await showClaudeDialog<bool>(
+  final res = await showPrismDialog<bool>(
     context: context,
     builder: (ctx) {
-      final c = ClaudePalette.of(ctx);
+      final c = PrismPalette.of(ctx);
       final compact = MediaQuery.sizeOf(ctx).width < 520;
       return Dialog(
         backgroundColor: c.paper2,
@@ -2355,7 +2621,7 @@ Future<bool> showClaudeConfirmDialog(
           horizontal: compact ? 16 : 32,
           vertical: 20,
         ),
-        shape: claudeSuperellipse(
+        shape: prismSuperellipse(
           28,
           side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
         ),
@@ -2381,7 +2647,7 @@ Future<bool> showClaudeConfirmDialog(
                         color: destructive
                             ? c.dangerBg
                             : c.clay.withValues(alpha: 0.12),
-                        shape: claudeSuperellipse(13),
+                        shape: prismSuperellipse(13),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
@@ -2409,17 +2675,17 @@ Future<bool> showClaudeConfirmDialog(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    ClaudeButton(
+                    PrismButton(
                       label: cancelText,
                       compact: true,
                       onPressed: () => Navigator.of(ctx).pop(false),
                     ),
-                    ClaudeButton(
+                    PrismButton(
                       label: confirmText,
                       compact: true,
                       variant: destructive
-                          ? ClaudeBtnVariant.danger
-                          : ClaudeBtnVariant.clay,
+                          ? PrismBtnVariant.danger
+                          : PrismBtnVariant.clay,
                       onPressed: () => Navigator.of(ctx).pop(true),
                     ),
                   ],
@@ -2435,13 +2701,13 @@ Future<bool> showClaudeConfirmDialog(
 }
 
 /// Pixel-aligned 10x10 Windows 11 Caption Glyphs.
-enum ClaudeCaptionGlyph { minimize, maximize, restore, close }
+enum PrismCaptionGlyph { minimize, maximize, restore, close }
 
-class ClaudeCaptionIcon extends StatelessWidget {
-  final ClaudeCaptionGlyph glyph;
+class PrismCaptionIcon extends StatelessWidget {
+  final PrismCaptionGlyph glyph;
   final Color color;
 
-  const ClaudeCaptionIcon({
+  const PrismCaptionIcon({
     super.key,
     required this.glyph,
     required this.color,
@@ -2451,16 +2717,16 @@ class ClaudeCaptionIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: const Size.square(10.0),
-      painter: _ClaudeCaptionGlyphPainter(glyph: glyph, color: color),
+      painter: _PrismCaptionGlyphPainter(glyph: glyph, color: color),
     );
   }
 }
 
-class _ClaudeCaptionGlyphPainter extends CustomPainter {
-  final ClaudeCaptionGlyph glyph;
+class _PrismCaptionGlyphPainter extends CustomPainter {
+  final PrismCaptionGlyph glyph;
   final Color color;
 
-  const _ClaudeCaptionGlyphPainter({
+  const _PrismCaptionGlyphPainter({
     required this.glyph,
     required this.color,
   });
@@ -2477,14 +2743,14 @@ class _ClaudeCaptionGlyphPainter extends CustomPainter {
     final box = (Offset.zero & size).deflate(0.5);
 
     switch (glyph) {
-      case ClaudeCaptionGlyph.minimize:
+      case PrismCaptionGlyph.minimize:
         final y = (size.height / 2).floorToDouble() + 0.5;
         canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
 
-      case ClaudeCaptionGlyph.maximize:
+      case PrismCaptionGlyph.maximize:
         canvas.drawRRect(RRect.fromRectAndRadius(box, corner), paint);
 
-      case ClaudeCaptionGlyph.restore:
+      case PrismCaptionGlyph.restore:
         const offset = 2.0;
         final front = Rect.fromLTRB(
           box.left,
@@ -2499,7 +2765,7 @@ class _ClaudeCaptionGlyphPainter extends CustomPainter {
         canvas.drawRRect(RRect.fromRectAndRadius(back, corner), paint);
         canvas.restore();
 
-      case ClaudeCaptionGlyph.close:
+      case PrismCaptionGlyph.close:
         paint.strokeCap = StrokeCap.round;
         canvas.drawLine(box.topLeft, box.bottomRight, paint);
         canvas.drawLine(box.topRight, box.bottomLeft, paint);
@@ -2507,20 +2773,21 @@ class _ClaudeCaptionGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ClaudeCaptionGlyphPainter oldDelegate) =>
+  bool shouldRepaint(covariant _PrismCaptionGlyphPainter oldDelegate) =>
       oldDelegate.glyph != glyph || oldDelegate.color != color;
 }
 
-/// Windows 11 frameless caption controls: Pin + Minimize + Maximize/Restore + Hide-to-Tray.
-class ClaudeWindowCaptionActions extends StatelessWidget {
+/// Windows 11 frameless caption controls: Hide-to-Tray + Pin + Minimize + Maximize/Restore + Close-to-Tray.
+class PrismWindowCaptionActions extends StatelessWidget {
   final bool isMaximized;
   final bool isPinned;
   final VoidCallback onTogglePin;
   final VoidCallback onMinimize;
   final VoidCallback onToggleMaximize;
   final VoidCallback onCloseToTray;
+  final VoidCallback? onHideToTray;
 
-  const ClaudeWindowCaptionActions({
+  const PrismWindowCaptionActions({
     super.key,
     required this.isMaximized,
     required this.isPinned,
@@ -2528,15 +2795,26 @@ class ClaudeWindowCaptionActions extends StatelessWidget {
     required this.onMinimize,
     required this.onToggleMaximize,
     required this.onCloseToTray,
+    this.onHideToTray,
   });
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Center(
+          child: Tooltip(
+            message: '收起到系统托盘（后台运行）',
+            child: _TrayQuickButton(
+              palette: c,
+              onTap: onHideToTray ?? onCloseToTray,
+            ),
+          ),
+        ),
+        const SizedBox(width: 2),
         Center(
           child: Tooltip(
             message: isPinned ? '取消窗口置顶' : '窗口置顶',
@@ -2550,21 +2828,21 @@ class ClaudeWindowCaptionActions extends StatelessWidget {
         const SizedBox(width: 2),
         _WinCaptionBtn(
           tooltip: '最小化',
-          glyph: ClaudeCaptionGlyph.minimize,
+          glyph: PrismCaptionGlyph.minimize,
           palette: c,
           onTap: onMinimize,
         ),
         _WinCaptionBtn(
           tooltip: isMaximized ? '向下还原' : '最大化',
           glyph: isMaximized
-              ? ClaudeCaptionGlyph.restore
-              : ClaudeCaptionGlyph.maximize,
+              ? PrismCaptionGlyph.restore
+              : PrismCaptionGlyph.maximize,
           palette: c,
           onTap: onToggleMaximize,
         ),
         _WinCaptionBtn(
           tooltip: '隐藏到系统托盘（MCP 服务继续运行）',
-          glyph: ClaudeCaptionGlyph.close,
+          glyph: PrismCaptionGlyph.close,
           isClose: true,
           palette: c,
           onTap: onCloseToTray,
@@ -2574,9 +2852,74 @@ class ClaudeWindowCaptionActions extends StatelessWidget {
   }
 }
 
+class _TrayQuickButton extends StatefulWidget {
+  final PrismPalette palette;
+  final VoidCallback onTap;
+
+  const _TrayQuickButton({
+    required this.palette,
+    required this.onTap,
+  });
+
+  @override
+  State<_TrayQuickButton> createState() => _TrayQuickButtonState();
+}
+
+class _TrayQuickButtonState extends State<_TrayQuickButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.palette;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.90 : 1.0,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.snappySpring,
+          child: AnimatedContainer(
+            key: const ValueKey('caption-hide-to-tray-btn'),
+            duration: PrismMotion.duration(context, PrismMotion.fast),
+            width: 28,
+            height: 26,
+            decoration: ShapeDecoration(
+              color: _hovered
+                  ? (c.isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05))
+                  : Colors.transparent,
+              shape: const StadiumBorder(),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.system_update_alt_rounded,
+              size: 13.5,
+              color: _hovered ? c.clay : c.muted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PinButton extends StatefulWidget {
   final bool isPinned;
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final VoidCallback onTap;
 
   const _PinButton({
@@ -2614,14 +2957,14 @@ class _PinButtonState extends State<_PinButton> {
         onTapCancel: () => setState(() => _pressed = false),
         child: AnimatedScale(
           scale: _pressed ? 0.90 : 1.0,
-          duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-          curve: ClaudeMotion.snappySpring,
+          duration: PrismMotion.duration(context, PrismMotion.fast),
+          curve: PrismMotion.snappySpring,
           child: AnimatedContainer(
-            duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
+            duration: PrismMotion.duration(context, PrismMotion.fast),
             width: 28,
             height: 28,
             decoration: ShapeDecoration(
-              shape: claudeSuperellipse(7.5),
+              shape: prismSuperellipse(7.5),
               color: active
                   ? c.clay.withValues(alpha: 0.14)
                   : (_hovered ? c.paper3 : c.paper3.withValues(alpha: 0.0)),
@@ -2629,8 +2972,8 @@ class _PinButtonState extends State<_PinButton> {
             alignment: Alignment.center,
             child: AnimatedRotation(
               turns: active ? 0.0 : 0.125,
-              duration: ClaudeMotion.duration(context, ClaudeMotion.base),
-              curve: ClaudeMotion.snappySpring,
+              duration: PrismMotion.duration(context, PrismMotion.base),
+              curve: PrismMotion.snappySpring,
               child: Icon(
                 active ? Icons.push_pin_rounded : Icons.push_pin_outlined,
                 size: 14,
@@ -2646,9 +2989,9 @@ class _PinButtonState extends State<_PinButton> {
 
 class _WinCaptionBtn extends StatefulWidget {
   final String tooltip;
-  final ClaudeCaptionGlyph glyph;
+  final PrismCaptionGlyph glyph;
   final bool isClose;
-  final ClaudePalette palette;
+  final PrismPalette palette;
   final VoidCallback onTap;
 
   const _WinCaptionBtn({
@@ -2712,17 +3055,17 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
           },
           onTapCancel: () => setState(() => _pressed = false),
           child: AnimatedContainer(
-            duration: ClaudeMotion.duration(
+            duration: PrismMotion.duration(
               context,
               const Duration(milliseconds: 110),
             ),
             width: 42,
             color: bg,
             alignment: Alignment.center,
-            child: ClaudeFadeBox(
+            child: PrismFadeBox(
               alignment: Alignment.center,
               duration: const Duration(milliseconds: 120),
-              child: ClaudeCaptionIcon(
+              child: PrismCaptionIcon(
                 key: ValueKey(widget.glyph),
                 glyph: widget.glyph,
                 color: fg,
@@ -2740,7 +3083,7 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
 // (shadcn/ui + Raycast + Linear 4-edge auto-flip & keyboard navigation)
 // ============================================================================
 
-class ClaudeDropMenuItem<T> {
+class PrismDropMenuItem<T> {
   final T value;
   final String label;
   final String? subtitle;
@@ -2751,7 +3094,7 @@ class ClaudeDropMenuItem<T> {
   final bool dividerBefore;
   final String? groupLabel;
 
-  const ClaudeDropMenuItem({
+  const PrismDropMenuItem({
     required this.value,
     required this.label,
     this.subtitle,
@@ -2767,9 +3110,9 @@ class ClaudeDropMenuItem<T> {
 /// High-craft Linear / shadcn Select & DropMenu with 4-edge viewport auto-flip,
 /// keyboard navigation (Esc / Up / Down / Enter), optional inline search,
 /// section dividers, and pure Cool Porcelain / Deep Obsidian surface.
-class ClaudeDropMenu<T> extends StatefulWidget {
+class PrismDropMenu<T> extends StatefulWidget {
   final T value;
-  final List<ClaudeDropMenuItem<T>> items;
+  final List<PrismDropMenuItem<T>> items;
   final ValueChanged<T> onChanged;
   final IconData? leadingIcon;
   final String? prefixLabel;
@@ -2780,7 +3123,7 @@ class ClaudeDropMenu<T> extends StatefulWidget {
   final bool? searchable;
   final bool expandTrigger;
 
-  const ClaudeDropMenu({
+  const PrismDropMenu({
     super.key,
     required this.value,
     required this.items,
@@ -2796,14 +3139,14 @@ class ClaudeDropMenu<T> extends StatefulWidget {
   });
 
   @override
-  State<ClaudeDropMenu<T>> createState() => _ClaudeDropMenuState<T>();
+  State<PrismDropMenu<T>> createState() => _PrismDropMenuState<T>();
 }
 
-class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
+class _PrismDropMenuState<T> extends State<PrismDropMenu<T>>
     with SingleTickerProviderStateMixin {
   final LayerLink _layerLink = LayerLink();
   final OverlayPortalController _portalCtrl = OverlayPortalController();
-  final FocusNode _menuFocus = FocusNode(debugLabel: 'ClaudeDropMenuFocus');
+  final FocusNode _menuFocus = FocusNode(debugLabel: 'PrismDropMenuFocus');
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -2830,7 +3173,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
     super.dispose();
   }
 
-  List<ClaudeDropMenuItem<T>> get _filteredItems {
+  List<PrismDropMenuItem<T>> get _filteredItems {
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return widget.items;
     return widget.items.where((it) {
@@ -2918,7 +3261,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final selectedItem = widget.items
             .where((x) => x.value == widget.value)
             .firstOrNull ??
@@ -2939,7 +3282,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
 
     final menuCurved = CurvedAnimation(
       parent: _animCtrl,
-      curve: ClaudeMotion.editorialOut,
+      curve: PrismMotion.editorialOut,
       reverseCurve: Curves.easeInCubic,
     );
 
@@ -2958,13 +3301,13 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
         onTap: _toggleMenu,
         child: AnimatedScale(
           scale: _pressed ? 0.975 : 1.0,
-          duration: ClaudeMotion.duration(
+          duration: PrismMotion.duration(
             context,
             const Duration(milliseconds: 90),
           ),
           child: AnimatedContainer(
-            duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-            curve: ClaudeMotion.editorialOut,
+            duration: PrismMotion.duration(context, PrismMotion.fast),
+            curve: PrismMotion.editorialOut,
             height: 31,
             padding: const EdgeInsets.symmetric(horizontal: 11),
             decoration: ShapeDecoration(
@@ -3009,11 +3352,11 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
                 const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _open ? 0.5 : 0.0,
-                  duration: ClaudeMotion.duration(
+                  duration: PrismMotion.duration(
                     context,
                     const Duration(milliseconds: 160),
                   ),
-                  curve: ClaudeMotion.editorialOut,
+                  curve: PrismMotion.editorialOut,
                   child: Icon(
                     Icons.keyboard_arrow_down_rounded,
                     size: 14.5,
@@ -3036,7 +3379,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
       child: OverlayPortal(
         controller: _portalCtrl,
         overlayChildBuilder: (overlayCtx) {
-          final oc = ClaudePalette.of(overlayCtx);
+          final oc = PrismPalette.of(overlayCtx);
           final screenW = MediaQuery.sizeOf(overlayCtx).width;
           final effMaxW = math.min(widget.maxMenuWidth, screenW - 24);
           final effMinW = math.min(widget.minMenuWidth, effMaxW);
@@ -3087,7 +3430,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
                           child: DecoratedBox(
                             decoration: ShapeDecoration(
                               color: oc.paper2,
-                              shape: claudeSuperellipse(
+                              shape: prismSuperellipse(
                                 20,
                                 side: BorderSide(
                                   color: oc.hairline.withValues(alpha: 0.72),
@@ -3205,7 +3548,7 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
                                                     ),
                                                   ),
                                                 ),
-                                              _ClaudeDropMenuTile<T>(
+                                              _PrismDropMenuTile<T>(
                                                 item: filtered[i],
                                                 selected: filtered[i].value ==
                                                     widget.value,
@@ -3246,14 +3589,14 @@ class _ClaudeDropMenuState<T> extends State<ClaudeDropMenu<T>>
   }
 }
 
-class _ClaudeDropMenuTile<T> extends StatefulWidget {
-  final ClaudeDropMenuItem<T> item;
+class _PrismDropMenuTile<T> extends StatefulWidget {
+  final PrismDropMenuItem<T> item;
   final bool selected;
   final bool kbHighlighted;
   final VoidCallback onHover;
   final VoidCallback onTap;
 
-  const _ClaudeDropMenuTile({
+  const _PrismDropMenuTile({
     required this.item,
     required this.selected,
     this.kbHighlighted = false,
@@ -3262,16 +3605,16 @@ class _ClaudeDropMenuTile<T> extends StatefulWidget {
   });
 
   @override
-  State<_ClaudeDropMenuTile<T>> createState() => _ClaudeDropMenuTileState<T>();
+  State<_PrismDropMenuTile<T>> createState() => _PrismDropMenuTileState<T>();
 }
 
-class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
+class _PrismDropMenuTileState<T> extends State<_PrismDropMenuTile<T>> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final sel = widget.selected;
     final activeHover = _hovered || widget.kbHighlighted;
     final isDanger = widget.item.destructive;
@@ -3318,7 +3661,7 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(12),
+            shape: prismSuperellipse(12),
           ),
           child: Row(
             children: [
@@ -3358,7 +3701,7 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
               if (widget.item.badge != null &&
                   widget.item.badge!.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                ClaudePill(
+                PrismPill(
                   text: widget.item.badge!,
                   bg: sel ? c.clay.withValues(alpha: 0.14) : c.recessed,
                   fg: sel ? c.clay : c.muted,
@@ -3389,8 +3732,8 @@ class _ClaudeDropMenuTileState<T> extends State<_ClaudeDropMenuTile<T>> {
   }
 }
 
-/// Action entry for [ClaudeActionMenuButton] (`⋯` row context menus) and [ClaudeSplitButton].
-class ClaudeMenuAction {
+/// Action entry for [PrismActionMenuButton] (`⋯` row context menus) and [PrismSplitButton].
+class PrismMenuAction {
   final String label;
   final String? subtitle;
   final String? badge;
@@ -3404,7 +3747,7 @@ class ClaudeMenuAction {
   VoidCallback get onSelected => _onSelected ?? _onTap ?? _noop;
   static void _noop() {}
 
-  const ClaudeMenuAction({
+  const PrismMenuAction({
     required this.label,
     this.subtitle,
     this.badge,
@@ -3419,8 +3762,8 @@ class ClaudeMenuAction {
 }
 
 /// Compact `⋯` (or custom trigger) Popover Action Menu with 4-edge auto-flip & Esc support.
-class ClaudeActionMenuButton extends StatefulWidget {
-  final List<ClaudeMenuAction> actions;
+class PrismActionMenuButton extends StatefulWidget {
+  final List<PrismMenuAction> actions;
   final IconData icon;
   final Widget? leading;
   final String? label;
@@ -3429,7 +3772,7 @@ class ClaudeActionMenuButton extends StatefulWidget {
   final double maxMenuWidth;
   final Widget? customTrigger;
 
-  const ClaudeActionMenuButton({
+  const PrismActionMenuButton({
     super.key,
     required this.actions,
     this.icon = Icons.more_horiz_rounded,
@@ -3442,14 +3785,14 @@ class ClaudeActionMenuButton extends StatefulWidget {
   });
 
   @override
-  State<ClaudeActionMenuButton> createState() => _ClaudeActionMenuButtonState();
+  State<PrismActionMenuButton> createState() => _PrismActionMenuButtonState();
 }
 
-class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
+class _PrismActionMenuButtonState extends State<PrismActionMenuButton>
     with SingleTickerProviderStateMixin {
   final LayerLink _layerLink = LayerLink();
   final OverlayPortalController _portalCtrl = OverlayPortalController();
-  final FocusNode _focus = FocusNode(debugLabel: 'ClaudeActionMenuFocus');
+  final FocusNode _focus = FocusNode(debugLabel: 'PrismActionMenuFocus');
   late final AnimationController _animCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 170),
@@ -3505,17 +3848,17 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
     }
   }
 
-  Future<void> _runAction(ClaudeMenuAction action) async {
+  Future<void> _runAction(PrismMenuAction action) async {
     await _closeMenu();
     action.onSelected();
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final curved = CurvedAnimation(
       parent: _animCtrl,
-      curve: ClaudeMotion.editorialOut,
+      curve: PrismMotion.editorialOut,
       reverseCurve: Curves.easeInCubic,
     );
 
@@ -3596,7 +3939,7 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
       child: OverlayPortal(
         controller: _portalCtrl,
         overlayChildBuilder: (overlayCtx) {
-          final oc = ClaudePalette.of(overlayCtx);
+          final oc = PrismPalette.of(overlayCtx);
           final screenW = MediaQuery.sizeOf(overlayCtx).width;
           final effMaxW = math.min(widget.maxMenuWidth, screenW - 24);
           final effMinW = math.min(widget.minMenuWidth, effMaxW);
@@ -3649,7 +3992,7 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
                           child: DecoratedBox(
                             decoration: ShapeDecoration(
                               color: oc.paper2,
-                              shape: claudeSuperellipse(
+                              shape: prismSuperellipse(
                                 20,
                                 side: BorderSide(
                                   color: oc.hairline.withValues(alpha: 0.72),
@@ -3710,7 +4053,7 @@ class _ClaudeActionMenuButtonState extends State<ClaudeActionMenuButton>
 }
 
 class _ActionMenuTile extends StatefulWidget {
-  final ClaudeMenuAction action;
+  final PrismMenuAction action;
   final VoidCallback onTap;
 
   const _ActionMenuTile({required this.action, required this.onTap});
@@ -3725,7 +4068,7 @@ class _ActionMenuTileState extends State<_ActionMenuTile> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final a = widget.action;
     final Color bg;
     if (a.destructive) {
@@ -3761,7 +4104,7 @@ class _ActionMenuTileState extends State<_ActionMenuTile> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7.5),
           decoration: ShapeDecoration(
             color: bg,
-            shape: claudeSuperellipse(12),
+            shape: prismSuperellipse(12),
           ),
           child: Row(
             children: [
@@ -3783,7 +4126,7 @@ class _ActionMenuTileState extends State<_ActionMenuTile> {
                     Row(
                       children: [
                         if (a.badge != null && a.badge!.isNotEmpty) ...[
-                          ClaudePill(
+                          PrismPill(
                             text: a.badge!,
                             mono: false,
                             fg: a.highlight ? c.clay : c.inkSoft,
@@ -3833,25 +4176,25 @@ class _ActionMenuTileState extends State<_ActionMenuTile> {
 /// shadcn/ui Split Button (`[ Primary Action | ▾ ]`).
 /// Clicking the left body executes [onPrimaryPressed]; clicking the right chevron
 /// opens the 4-edge auto-flipping Popover of [menuActions].
-class ClaudeSplitButton extends StatelessWidget {
+class PrismSplitButton extends StatelessWidget {
   final String label;
   final IconData? icon;
   final Widget? leading;
   final VoidCallback? onPrimaryPressed;
-  final List<ClaudeMenuAction> menuActions;
-  final ClaudeBtnVariant variant;
+  final List<PrismMenuAction> menuActions;
+  final PrismBtnVariant variant;
   final double minMenuWidth;
   final double maxMenuWidth;
   final String menuTooltip;
 
-  const ClaudeSplitButton({
+  const PrismSplitButton({
     super.key,
     required this.label,
     this.icon,
     this.leading,
     required this.onPrimaryPressed,
     required this.menuActions,
-    this.variant = ClaudeBtnVariant.neutral,
+    this.variant = PrismBtnVariant.neutral,
     this.minMenuWidth = 248,
     this.maxMenuWidth = 360,
     this.menuTooltip = '更多选项',
@@ -3859,9 +4202,9 @@ class ClaudeSplitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     if (menuActions.length <= 1) {
-      return ClaudeButton(
+      return PrismButton(
         label: label,
         compact: true,
         variant: variant,
@@ -3870,7 +4213,7 @@ class ClaudeSplitButton extends StatelessWidget {
       );
     }
 
-    final isClay = variant == ClaudeBtnVariant.clay;
+    final isClay = variant == PrismBtnVariant.clay;
     final bg = isClay ? c.clay : c.paper2;
     final fg = isClay ? c.onClay : c.inkSoft;
     final border = isClay ? c.clay : c.hairline;
@@ -3927,7 +4270,7 @@ class ClaudeSplitButton extends StatelessWidget {
                 ),
               ),
               Container(width: 1, height: 30, color: sepColor),
-              ClaudeActionMenuButton(
+              PrismActionMenuButton(
                 actions: menuActions,
                 tooltip: menuTooltip,
                 minMenuWidth: minMenuWidth,
@@ -3955,7 +4298,7 @@ class ClaudeSplitButton extends StatelessWidget {
 }
 
 /// Precision single-line hairline list row with smooth hover-reveal secondary actions.
-class ClaudeHoverRevealRow extends StatefulWidget {
+class PrismHoverRevealRow extends StatefulWidget {
   final Widget leading;
   final Widget? secondaryActions;
   final Widget? primaryAction;
@@ -3964,7 +4307,7 @@ class ClaudeHoverRevealRow extends StatefulWidget {
   final bool showDivider;
   final bool highlighted;
 
-  const ClaudeHoverRevealRow({
+  const PrismHoverRevealRow({
     super.key,
     required this.leading,
     this.secondaryActions,
@@ -3976,15 +4319,15 @@ class ClaudeHoverRevealRow extends StatefulWidget {
   });
 
   @override
-  State<ClaudeHoverRevealRow> createState() => _ClaudeHoverRevealRowState();
+  State<PrismHoverRevealRow> createState() => _PrismHoverRevealRowState();
 }
 
-class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
+class _PrismHoverRevealRowState extends State<PrismHoverRevealRow> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final alwaysShowSecondary = MediaQuery.sizeOf(context).width < 760;
     final reveal = _hovered || alwaysShowSecondary;
 
@@ -4016,7 +4359,7 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
             hoverColor: Colors.transparent,
             splashColor: c.clay.withValues(alpha: 0.08),
             child: AnimatedContainer(
-              duration: ClaudeMotion.duration(
+              duration: PrismMotion.duration(
                 context,
                 const Duration(milliseconds: 120),
               ),
@@ -4030,7 +4373,7 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
                   if (widget.secondaryActions != null) ...[
                     const SizedBox(width: 8),
                     AnimatedOpacity(
-                      duration: ClaudeMotion.duration(
+                      duration: PrismMotion.duration(
                         context,
                         const Duration(milliseconds: 130),
                       ),
@@ -4056,21 +4399,21 @@ class _ClaudeHoverRevealRowState extends State<ClaudeHoverRevealRow> {
 }
 
 /// Horizontal scroll container with edge-fade affordance & desktop chevron controls.
-class ClaudeScrollHintRow extends StatefulWidget {
+class PrismScrollHintRow extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
-  const ClaudeScrollHintRow({
+  const PrismScrollHintRow({
     super.key,
     required this.child,
     this.padding,
   });
 
   @override
-  State<ClaudeScrollHintRow> createState() => _ClaudeScrollHintRowState();
+  State<PrismScrollHintRow> createState() => _PrismScrollHintRowState();
 }
 
-class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
+class _PrismScrollHintRowState extends State<PrismScrollHintRow> {
   final ScrollController _ctrl = ScrollController();
   bool _canLeft = false;
   bool _canRight = false;
@@ -4115,7 +4458,7 @@ class _ClaudeScrollHintRowState extends State<ClaudeScrollHintRow> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: (_) {
         _syncHints();

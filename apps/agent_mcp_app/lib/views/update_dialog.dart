@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/console_backend.dart';
-import '../theme/claude_theme.dart';
+import '../theme/prism_theme.dart';
 
 enum UpdateDialogOutcome {
   later,
@@ -131,7 +131,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final c = ClaudePalette.of(context);
+    final c = PrismPalette.of(context);
     final asset = _matchedAsset;
     final notes = widget.latest.notes.trim().isEmpty
         ? '包含界面优化、稳定性改进与问题修复，详见 GitHub Release 说明。'
@@ -144,7 +144,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
     return Dialog(
       backgroundColor: c.paper,
       elevation: 0,
-      shape: claudeSuperellipse(
+      shape: prismSuperellipse(
         28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
@@ -172,7 +172,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                         ),
                       ],
                     ),
-                    child: const ClaudeSparkIcon(size: 42),
+                    child: const PrismSparkIcon(size: 42),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -186,7 +186,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                               style: serifTitleStyle(c, size: 19),
                             ),
                             const SizedBox(width: 8),
-                            ClaudePill(
+                            PrismPill(
                               text: widget.latest.tag,
                               fg: c.clay,
                               bg: c.clay.withValues(alpha: 0.12),
@@ -233,7 +233,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   ),
                   decoration: ShapeDecoration(
                     color: c.recessed,
-                    shape: claudeSuperellipse(
+                    shape: prismSuperellipse(
                       16,
                       side: BorderSide(
                         color: c.hairline.withValues(alpha: 0.65),
@@ -281,7 +281,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   padding: const EdgeInsets.all(14),
                   decoration: ShapeDecoration(
                     color: c.paper2,
-                    shape: claudeSuperellipse(
+                    shape: prismSuperellipse(
                       16,
                       side: BorderSide(
                         color: c.hairline.withValues(alpha: 0.65),
@@ -342,7 +342,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                   ),
                   decoration: ShapeDecoration(
                     color: c.dangerBg,
-                    shape: claudeSuperellipse(
+                    shape: prismSuperellipse(
                       14,
                       side: BorderSide(color: c.danger.withValues(alpha: 0.3)),
                     ),
@@ -362,10 +362,10 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ClaudeButton(
+                  PrismButton(
                     label: '不再提醒本次更新',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
+                    variant: PrismBtnVariant.ghost,
                     onPressed: _downloading
                         ? null
                         : () => Navigator.of(context)
@@ -375,7 +375,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ClaudeButton(
+                      PrismButton(
                         label: '稍后更新',
                         compact: true,
                         onPressed: _downloading
@@ -383,7 +383,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                             : () => Navigator.of(context)
                                 .pop(UpdateDialogOutcome.later),
                       ),
-                      ClaudeButton(
+                      PrismButton(
                         label: '前往下载',
                         compact: true,
                         leading: const Icon(Icons.open_in_new_rounded),
@@ -398,10 +398,10 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                                 }
                               },
                       ),
-                      ClaudeButton(
+                      PrismButton(
                         label: _downloading ? '下载中...' : '一键升级',
                         compact: true,
-                        variant: ClaudeBtnVariant.clay,
+                        variant: PrismBtnVariant.clay,
                         loading: _downloading,
                         leading: const Icon(Icons.download_for_offline_rounded),
                         onPressed: _downloading ? null : _handleOneClickUpgrade,

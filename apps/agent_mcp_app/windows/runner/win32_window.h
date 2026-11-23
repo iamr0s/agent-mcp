@@ -59,7 +59,8 @@ class Win32Window {
   void SetTrayState(const std::wstring& server_name,
                     bool is_running,
                     int port,
-                    bool is_dark);
+                    bool is_dark,
+                    int accent_rgb = 0x4F46E5);
 
  protected:
   virtual LRESULT MessageHandler(HWND window,
@@ -113,6 +114,7 @@ class Win32Window {
   bool tray_tracking_mouse_ = false;
   bool tray_service_running_ = true;
   int tray_port_ = 8000;
+  int tray_accent_rgb_ = 0x4F46E5;
   std::wstring tray_server_name_ = L"Agent MCP";
 
   UINT taskbar_created_msg_ = 0;
