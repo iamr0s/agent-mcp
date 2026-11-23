@@ -695,11 +695,11 @@ class LocalOAuthProvider {
     final page = '''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#EDF0F7;--card:#F8FAFC;--elev:#FFFFFF;--border:#DDE3EE;--ink:#0F172A;--muted:#64748B;--clay:#4F46E5;--clay-h:#4338CA;--clay-bg:rgba(79,70,229,.10);--dot:rgba(15,23,42,.055)}
-@media (prefers-color-scheme: dark){:root{--bg:#080A0F;--card:#0E1117;--elev:#141821;--border:#1F2533;--ink:#F8FAFC;--muted:#8B95A8;--clay:#6366F1;--clay-h:#818CF8;--clay-bg:rgba(99,102,241,.16);--dot:rgba(248,250,252,.045)}}
+:root{--bg:#EAEFF7;--card:#FFFFFF;--elev:#F3F6FB;--border:#DDE4F0;--ink:#0F172A;--muted:#64748B;--clay:#4F46E5;--clay-h:#4338CA;--clay-bg:rgba(79,70,229,.10);--dot:rgba(15,23,42,.055);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(15,23,42,.12),0 2px 6px rgba(15,23,42,.04)}
+@media (prefers-color-scheme: dark){:root{--bg:#07090E;--card:#131823;--elev:#0D1119;--border:#1F2636;--ink:#F8FAFC;--muted:#8B95A8;--clay:#6366F1;--clay-h:#818CF8;--clay-bg:rgba(99,102,241,.17);--dot:rgba(248,250,252,.045);--sh:inset 0 1px 0 rgba(255,255,255,.15),0 22px 48px -10px rgba(0,0,0,.66),0 2px 8px rgba(0,0,0,.40)}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
-.card{width:100%;max-width:396px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;box-shadow:0 16px 40px -12px rgba(15,23,42,.12);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
+.card{width:100%;max-width:396px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px 24px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
 .head-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .ico{width:34px;height:34px;border-radius:9px;background:var(--clay-bg);color:var(--clay);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .client-pill{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--elev);border:1px solid var(--border);font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink)}

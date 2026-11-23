@@ -967,10 +967,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         ? '基础配置与权限策略有未保存的更改'
         : (_basicDirty ? '基础服务配置有未保存的更改' : '权限与日志策略有未保存的更改');
 
+    final screenW = MediaQuery.sizeOf(context).width;
     return Positioned(
       left: 12,
       right: 12,
-      bottom: 14 + widget.extraBottomPadding,
+      bottom: (screenW < 700 ? 84 : 14) + widget.extraBottomPadding,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
@@ -1149,7 +1150,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: 'MCP 服务名称',
-                      subtitle: screenW >= 500 ? '向 AI 客户端宣告的节点标识' : null,
+                      subtitle: '向 AI 客户端宣告的节点标识',
                       onTap: () => _toggleInlineEdit('name'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1231,7 +1232,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: '工具名前缀',
-                      subtitle: screenW >= 500 ? '多设备同时接入同一客户端时防止工具重名' : null,
+                      subtitle: '多设备同时接入时防止工具重名',
                       onTap: () => _toggleInlineEdit('prefix'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1326,8 +1327,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: '监听地址与端口',
-                      subtitle:
-                          screenW >= 500 ? '本地 HTTP Streamable / SSE 协议绑定网卡' : null,
+                      subtitle: '本地 HTTP / SSE 协议绑定网卡',
                       onTap: () => _toggleInlineEdit('listen'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1573,8 +1573,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   children: [
                     ClaudeSettingsRow(
                       title: 'OAuth 2.1 本地密码',
-                      subtitle:
-                          screenW >= 500 ? '用于远程网页授权与 /dashboard 登录保护' : null,
+                      subtitle: '远程网页授权与 /dashboard 登录保护',
                       onTap: () => _toggleInlineEdit('password'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1667,7 +1666,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                 ),
                 ClaudeSettingsRow(
                   title: '界面主题',
-                  subtitle: screenW >= 500 ? '冷瓷浅色与曜石暗色双层高对比画布' : null,
+                  subtitle: '冷瓷浅色与曜石暗色双层高对比画布',
                   allowTrailingWrap: true,
                   stackBreakpoint: 470,
                   trailing: ClaudeSegmented<ThemeMode>(

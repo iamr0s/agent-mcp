@@ -138,16 +138,16 @@ class ClaudePalette {
 
   static const light = ClaudePalette(
     isDark: false,
-    paper: Color(0xFFF8FAFC), // Crisp porcelain island canvas
-    paper2: Color(0xFFFFFFFF), // Pure elevated group / popover surface
-    paper3: Color(0xFFEEF2F8), // Soft cool slate hover fill
-    sidebar: Color(0xFFEDF0F7), // Recessed Linear architectural outer rail
-    recessed: Color(0xFFF2F5FA), // Subtle input well
+    paper: Color(0xFFF3F6FB), // Cool porcelain canvas for crisp white card elevation
+    paper2: Color(0xFFFFFFFF), // Pure porcelain elevated card / lens surface
+    paper3: Color(0xFFE9EEF7), // Soft cool slate hover fill
+    sidebar: Color(0xFFEAEFF7), // Recessed Linear architectural outer rail
+    recessed: Color(0xFFEEF2F9), // Subtle inset input / pill well
     ink: Color(0xFF0F172A), // Deep slate ink
     inkSoft: Color(0xFF334155),
     muted: Color(0xFF64748B),
     meta: Color(0xFF94A3B8),
-    hairline: Color(0xFFE2E8F0), // Soft 1px structural hairline
+    hairline: Color(0xFFDDE4F0), // Refined 1px structural hairline
     ringHover: Color(0xFFCBD5E1),
     clay: Color(0xFF4F46E5), // Surgical Indigo
     clayHover: Color(0xFF4338CA),
@@ -158,23 +158,23 @@ class ClaudePalette {
     dangerBg: Color(0x14EF4444),
     purple: Color(0xFF6366F1),
     purpleBg: Color(0x146366F1),
-    termBg: Color(0xFFF3F6FB),
+    termBg: Color(0xFFF6F8FC),
     termFg: Color(0xFF0F172A),
   );
 
   static const dark = ClaudePalette(
     isDark: true,
-    paper: Color(0xFF0E1117), // Linear / OrbStack deep workspace canvas
-    paper2: Color(0xFF141821), // Clean elevated group / popover surface
-    paper3: Color(0xFF1C2230), // Interactive slate hover fill
-    sidebar: Color(0xFF080A0F), // Dimmed outer architectural rail
-    recessed: Color(0xFF0B0E14), // Subtle recessed input / code well
+    paper: Color(0xFF0B0E15), // Deep Obsidian workspace canvas
+    paper2: Color(0xFF131823), // Elevated obsidian group / lens surface
+    paper3: Color(0xFF1B2232), // Interactive slate hover fill
+    sidebar: Color(0xFF07090E), // Deep space outer architectural rail
+    recessed: Color(0xFF0D1119), // Subtle recessed input / code well
     ink: Color(0xFFF8FAFC),
     inkSoft: Color(0xFFCBD5E1),
     muted: Color(0xFF8B95A8),
     meta: Color(0xFF647084),
-    hairline: Color(0xFF1F2533), // Subtle 1px obsidian hairline
-    ringHover: Color(0xFF333D54),
+    hairline: Color(0xFF1F2636), // Subtle 1px obsidian hairline
+    ringHover: Color(0xFF333E56),
     clay: Color(0xFF6366F1), // Luminous Indigo
     clayHover: Color(0xFF818CF8),
     focusRing: Color(0xFF818CF8),
@@ -184,7 +184,7 @@ class ClaudePalette {
     dangerBg: Color(0x20F87171),
     purple: Color(0xFFA5B4FC),
     purpleBg: Color(0x206366F1),
-    termBg: Color(0xFF10141D),
+    termBg: Color(0xFF0E131C),
     termFg: Color(0xFFE2E8F0),
   );
 
@@ -306,21 +306,32 @@ class ClaudePalette {
       ? const Color(0x1AF8FAFC)
       : const Color(0x99FFFFFF);
 
-  /// Whisper-subtle elevation shadow (cool slate, never muddy brown).
+  /// Whisper-subtle dual elevation shadow (cool slate, never muddy brown).
   List<BoxShadow> get whisperShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x38000000),
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            spreadRadius: -2,
+            color: Color(0x52000000),
+            offset: Offset(0, 4),
+            blurRadius: 14,
+            spreadRadius: -3,
+          ),
+          BoxShadow(
+            color: Color(0x2E000000),
+            offset: Offset(0, 1),
+            blurRadius: 3,
           ),
         ]
       : const [
           BoxShadow(
-            color: Color(0x080F172A),
+            color: Color(0x0C0F172A),
+            offset: Offset(0, 4),
+            blurRadius: 12,
+            spreadRadius: -3,
+          ),
+          BoxShadow(
+            color: Color(0x070F172A),
             offset: Offset(0, 1),
-            blurRadius: 3,
+            blurRadius: 2.5,
           ),
         ];
 
@@ -564,6 +575,100 @@ ThemeData buildClaudeTheme(
   );
 }
 
+/// Continuous-superellipse 1px directional Specular Rim Painter (Linear ProKit / Liquid Glass).
+/// Simulates a physical top key-light catching the upper bevel while fading gracefully downward.
+class ClaudeSpecularRimPainter extends CustomPainter {
+  final double radius;
+  final bool isDark;
+  final Color? accentTint;
+  final double intensity;
+
+  const ClaudeSpecularRimPainter({
+    required this.radius,
+    required this.isDark,
+    this.accentTint,
+    this.intensity = 1.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = Offset.zero & size;
+
+    if (isDark) {
+      final topColor = accentTint != null
+          ? Color.lerp(
+              const Color(0x36FFFFFF),
+              accentTint!.withValues(alpha: 0.42),
+              0.42,
+            )!
+          : Color.fromRGBO(255, 255, 255, (0.18 * intensity).clamp(0.0, 1.0));
+      final midColor =
+          Color.fromRGBO(255, 255, 255, (0.07 * intensity).clamp(0.0, 1.0));
+      final botColor =
+          Color.fromRGBO(255, 255, 255, (0.03 * intensity).clamp(0.0, 1.0));
+
+      final path = claudeSuperellipse(radius).getOuterPath(rect.deflate(0.5));
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..shader = ui.Gradient.linear(
+          rect.topCenter,
+          rect.bottomCenter,
+          [topColor, midColor, botColor],
+          const [0.0, 0.42, 1.0],
+        );
+      canvas.drawPath(path, paint);
+    } else {
+      // Crisp outer structural contour + inner 1px pure-white top specular catchlight
+      final outerColor = accentTint != null
+          ? Color.lerp(
+              const Color(0x160F172A),
+              accentTint!.withValues(alpha: 0.28),
+              0.5,
+            )!
+          : const Color(0x140F172A);
+      final outerPath =
+          claudeSuperellipse(radius).getOuterPath(rect.deflate(0.5));
+      canvas.drawPath(
+        outerPath,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = outerColor,
+      );
+
+      final innerRadius = (radius - 1.0).clamp(1.0, radius);
+      final innerRect = rect.deflate(1.2);
+      if (innerRect.width > 2 && innerRect.height > 2) {
+        final innerPath = claudeSuperellipse(innerRadius).getOuterPath(innerRect);
+        final specPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..shader = ui.Gradient.linear(
+            innerRect.topCenter,
+            innerRect.bottomCenter,
+            [
+              Color.fromRGBO(255, 255, 255, (0.95 * intensity).clamp(0.0, 1.0)),
+              Color.fromRGBO(255, 255, 255, (0.35 * intensity).clamp(0.0, 1.0)),
+              const Color(0x00FFFFFF),
+            ],
+            const [0.0, 0.38, 1.0],
+          );
+        canvas.drawPath(innerPath, specPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ClaudeSpecularRimPainter oldDelegate) {
+    return oldDelegate.radius != radius ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.accentTint != accentTint ||
+        oldDelegate.intensity != intensity;
+  }
+}
+
 /// Frosted Glass Chrome Surface — reserved for mobile/web floating bars & popovers.
 class ClaudeGlassBar extends StatelessWidget {
   final Widget child;
@@ -673,30 +778,41 @@ class ClaudeListGroup extends StatelessWidget {
     final hasHeader =
         (effTitle != null && effTitle.isNotEmpty) || headerTrailing != null;
 
-    Widget box = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: c.paper2,
-        shape: claudeSuperellipse(
-          radius,
-          side: BorderSide(color: c.hairline),
-        ),
-        shadows: c.whisperShadow,
+    Widget box = CustomPaint(
+      foregroundPainter: ClaudeSpecularRimPainter(
+        radius: radius,
+        isDark: c.isDark,
+        intensity: c.isDark ? 0.65 : 0.85,
       ),
-      child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(radius),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              if (i > 0)
-                Padding(
-                  padding: EdgeInsets.only(left: dividerIndent),
-                  child: Divider(height: 1, thickness: 1, color: c.hairline),
-                ),
-              children[i],
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: c.paper2,
+          shape: claudeSuperellipse(
+            radius,
+            side: BorderSide(
+              color: c.isDark
+                  ? c.hairline.withValues(alpha: 0.65)
+                  : c.hairline.withValues(alpha: 0.85),
+            ),
+          ),
+          shadows: c.whisperShadow,
+        ),
+        child: ClipRSuperellipse(
+          borderRadius: BorderRadius.circular(radius),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: EdgeInsets.only(left: dividerIndent),
+                    child: Divider(height: 1, thickness: 1, color: c.hairline),
+                  ),
+                children[i],
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -826,11 +942,13 @@ class ClaudeSettingsRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle!,
+                      maxLines: box.maxWidth < 460 ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
                       style: sansStyle(
                         c,
-                        size: 11.8,
+                        size: 11.6,
                         color: c.muted,
-                        height: 1.4,
+                        height: 1.38,
                       ),
                     ),
                   ],
@@ -1275,24 +1393,32 @@ class _ClaudeCardState extends State<ClaudeCard> {
     final c = ClaudePalette.of(context);
     final interactive = widget.onTap != null || widget.hoverable;
 
-    Widget card = AnimatedContainer(
-      duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
-      curve: ClaudeMotion.editorialOut,
-      width: double.infinity,
-      padding: widget.padding,
-      decoration: ShapeDecoration(
-        color: (_hovered && interactive)
-            ? Color.lerp(c.paper2, c.paper3, 0.45)
-            : c.paper2,
-        shape: claudeSuperellipse(
-          widget.radius,
-          side: BorderSide(
-            color: (_hovered && interactive) ? c.ringHover : c.hairline,
-          ),
-        ),
-        shadows: (_hovered && interactive) ? c.cardHoverShadow : c.whisperShadow,
+    Widget card = CustomPaint(
+      foregroundPainter: ClaudeSpecularRimPainter(
+        radius: widget.radius,
+        isDark: c.isDark,
+        intensity: c.isDark ? 0.65 : 0.85,
       ),
-      child: widget.child,
+      child: AnimatedContainer(
+        duration: ClaudeMotion.duration(context, ClaudeMotion.fast),
+        curve: ClaudeMotion.editorialOut,
+        width: double.infinity,
+        padding: widget.padding,
+        decoration: ShapeDecoration(
+          color: (_hovered && interactive)
+              ? Color.lerp(c.paper2, c.paper3, 0.45)
+              : c.paper2,
+          shape: claudeSuperellipse(
+            widget.radius,
+            side: BorderSide(
+              color: (_hovered && interactive) ? c.ringHover : c.hairline,
+            ),
+          ),
+          shadows:
+              (_hovered && interactive) ? c.cardHoverShadow : c.whisperShadow,
+        ),
+        child: widget.child,
+      ),
     );
 
     if (widget.onTap != null) {
@@ -1414,24 +1540,38 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
       top: 0,
       bottom: 0,
       width: width,
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          color: c.isDark ? c.paper3 : c.paper2,
-          shape: claudeSuperellipse(
-            7.0,
-            side: BorderSide(
-              color: c.isDark
-                  ? c.ringHover
-                  : c.hairline.withValues(alpha: 0.85),
-            ),
+      child: CustomPaint(
+        foregroundPainter: ClaudeSpecularRimPainter(
+          radius: 8.0,
+          isDark: c.isDark,
+          accentTint: c.isDark ? c.clay : null,
+          intensity: 0.9,
+        ),
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            gradient: c.isDark
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      c.clay.withValues(alpha: 0.22),
+                      c.paper3,
+                    ],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFFFFFFF), Color(0xFFF9FBFF)],
+                  ),
+            shape: claudeSuperellipse(8.0),
+            shadows: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.07),
+                blurRadius: 6,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
           ),
-          shadows: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: c.isDark ? 0.25 : 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
         ),
       ),
     );

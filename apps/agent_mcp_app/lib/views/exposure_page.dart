@@ -266,7 +266,8 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         top: widget.topPadding,
-        bottom: 36 + widget.extraBottomPadding,
+        bottom: (MediaQuery.sizeOf(context).width < 700 ? 112 : 36) +
+            widget.extraBottomPadding,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' show PlatformDispatcher, lerpDouble;
+import 'dart:ui' show ImageFilter, PlatformDispatcher, lerpDouble;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -295,7 +296,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.8.0';
+  String _version = '2.9.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -480,7 +481,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.8.0').toString();
+      _version = (auth['version'] ?? '2.9.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1215,52 +1216,79 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             onTap: _openAboutAndUpdates,
                           ),
                         ],
-                        customTrigger: Container(
-                          height: 28,
-                          padding: EdgeInsets.symmetric(
-                            horizontal:
-                                (hasCustomBar && viewW < 430) ? 7 : 9,
+                        customTrigger: CustomPaint(
+                          foregroundPainter: ClaudeSpecularRimPainter(
+                            radius: 999,
+                            isDark: c.isDark,
+                            accentTint: _isRunning ? c.sage : null,
+                            intensity: 0.9,
                           ),
-                          decoration: ShapeDecoration(
-                            color: _isRunning ? c.sageBg : c.paper2,
-                            shape: claudeSuperellipse(
-                              7.5,
-                              side: BorderSide(
-                                color: _isRunning
-                                    ? c.sage.withValues(alpha: 0.30)
-                                    : c.hairline,
-                              ),
+                          child: Container(
+                            height: 28,
+                            padding: EdgeInsets.symmetric(
+                              horizontal:
+                                  (hasCustomBar && viewW < 430) ? 8 : 10,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ClaudeStatusDot(
-                                color: _isRunning ? c.sage : c.meta,
-                                pulsing: _isRunning,
-                                size: 6.2,
-                              ),
-                              if (!hasCustomBar || viewW >= 430) ...[
-                                const SizedBox(width: 4),
-                                Text(
-                                  _isRunning
-                                      ? ':${_config['port'] ?? 8000}'
-                                      : '已停止',
-                                  style: monoStyle(
-                                    c,
-                                    size: 11.2,
-                                    weight: FontWeight.w600,
-                                    color: _isRunning ? c.sage : c.muted,
+                            decoration: ShapeDecoration(
+                              gradient: _isRunning
+                                  ? LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        c.isDark
+                                            ? const Color(0x2E10B981)
+                                            : const Color(0xEEFFFFFF),
+                                        c.sageBg,
+                                      ],
+                                    )
+                                  : LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [c.paper2, c.recessed],
+                                    ),
+                              shape: const StadiumBorder(),
+                              shadows: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                    alpha: c.isDark ? 0.30 : 0.05,
                                   ),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 1.5),
                                 ),
                               ],
-                              const SizedBox(width: 2),
-                              Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 14,
-                                color: _isRunning ? c.sage : c.muted,
-                              ),
-                            ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ClaudeStatusDot(
+                                  color: _isRunning ? c.sage : c.meta,
+                                  pulsing: _isRunning,
+                                  size: 6.4,
+                                ),
+                                if (!hasCustomBar || viewW >= 430) ...[
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _isRunning
+                                        ? ':${_config['port'] ?? 8000}'
+                                        : '已停止',
+                                    style: monoStyle(
+                                      c,
+                                      size: 11.2,
+                                      weight: FontWeight.w600,
+                                      color: _isRunning
+                                          ? (c.isDark ? c.ink : c.ink)
+                                          : c.muted,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 2),
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  size: 14,
+                                  color: _isRunning ? c.sage : c.muted,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1383,13 +1411,43 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
 
     return SizedBox(
       height: 46 + topSafe,
-      child: ClaudeGlassBar(
-        blurSigma: 18,
-        tintColor: c.glassBarTint,
-        border: Border(
-          bottom: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: micaActive ? (kIsWeb ? 10 : 20) : 0,
+            sigmaY: micaActive ? (kIsWeb ? 10 : 20) : 0,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: micaActive
+                    ? [
+                        c.paper.withValues(alpha: c.isDark ? 0.92 : 0.94),
+                        c.paper.withValues(alpha: c.isDark ? 0.78 : 0.82),
+                      ]
+                    : [c.paper, c.paper],
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: c.isDark
+                      ? const Color(0x14FFFFFF)
+                      : c.hairline.withValues(alpha: 0.55),
+                  width: 0.8,
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: c.isDark ? 0.22 : 0.03),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: headerContent,
+          ),
         ),
-        child: headerContent,
       ),
     );
   }
@@ -2221,10 +2279,28 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               left: 0,
               right: 0,
               bottom: 0,
+              height: 96 + safeBottom,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: chromeDur,
+                  curve: ClaudeMotion.editorialOut,
+                  opacity: _chromeVisible ? 1.0 : 0.0,
+                  child: _ProgressiveScrollEdgeVeil(
+                    palette: c,
+                    enableBlur: micaActive,
+                  ),
+                ),
+              ),
+            ),
+          if (isMobile)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
               child: AnimatedSlide(
                 duration: chromeDur,
                 curve: ClaudeMotion.editorialOut,
-                offset: _chromeVisible ? Offset.zero : const Offset(0, 1.15),
+                offset: _chromeVisible ? Offset.zero : const Offset(0, 1.24),
                 child: AnimatedOpacity(
                   duration: chromeDur,
                   curve: ClaudeMotion.editorialOut,
@@ -2234,7 +2310,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     child: Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerSignal: _handlePointerSignal,
-                      child: _MobileArchitecturalBottomBar(
+                      child: _MobileProKitFloatingDock(
                         selectedIndex: _tabIndex,
                         enabledSubCount: enabledSubCount,
                         activeExposeCount: activeExposeCount,
@@ -2280,7 +2356,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             Positioned(
               right: isMobile ? 16 : 24,
               left: isMobile ? 16 : null,
-              bottom: isMobile ? 82 : 44,
+              bottom: isMobile ? (86 + safeBottom) : 44,
             child: Align(
               alignment: Alignment.bottomRight,
               child: AnimatedSwitcher(
@@ -2380,9 +2456,82 @@ class _ConsoleScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-/// Linear / Apple HIG edge-to-edge architectural bottom tab bar for narrow viewports.
-/// Replaces the legacy 999px stadium bubble and detached circular collapse button.
-class _MobileArchitecturalBottomBar extends StatelessWidget {
+/// iOS 26 / Linear ProKit Progressive Scroll-Edge Veil.
+/// Melts scrolling content smoothly into the canvas behind the floating glass dock
+/// instead of slicing cards with a harsh 1px horizontal line.
+class _ProgressiveScrollEdgeVeil extends StatelessWidget {
+  final ClaudePalette palette;
+  final bool enableBlur;
+
+  const _ProgressiveScrollEdgeVeil({
+    required this.palette,
+    required this.enableBlur,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette.paper;
+    final blurScale = kIsWeb ? 0.5 : 1.0;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (enableBlur) ...[
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 28,
+            bottom: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: 3.5 * blurScale,
+                  sigmaY: 3.5 * blurScale,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 56,
+            bottom: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: 8.5 * blurScale,
+                  sigmaY: 8.5 * blurScale,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ],
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.0, 0.36, 0.74, 1.0],
+              colors: [
+                p.withValues(alpha: 0.0),
+                p.withValues(alpha: palette.isDark ? 0.42 : 0.38),
+                p.withValues(alpha: palette.isDark ? 0.82 : 0.78),
+                p.withValues(alpha: palette.isDark ? 0.95 : 0.92),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Linear ProKit Liquid Glass + Apple Concentric Floating Dock (R_outer 24 -> R_inner 20).
+/// Combines a single uncluttered floating squircle shell, 1px directional specular top rim,
+/// dual ambient/contact shadow, and a spring-driven luminous active lens.
+class _MobileProKitFloatingDock extends StatelessWidget {
   final int selectedIndex;
   final int enabledSubCount;
   final int activeExposeCount;
@@ -2392,7 +2541,7 @@ class _MobileArchitecturalBottomBar extends StatelessWidget {
   final double safeRight;
   final ValueChanged<int> onSelect;
 
-  const _MobileArchitecturalBottomBar({
+  const _MobileProKitFloatingDock({
     required this.selectedIndex,
     required this.enabledSubCount,
     this.activeExposeCount = 0,
@@ -2402,6 +2551,10 @@ class _MobileArchitecturalBottomBar extends StatelessWidget {
     this.safeRight = 0,
     required this.onSelect,
   });
+
+  static const double _outerRadius = 24.0;
+  static const double _innerPad = 4.0;
+  static const double _innerRadius = _outerRadius - _innerPad; // 20.0 concentric!
 
   @override
   Widget build(BuildContext context) {
@@ -2425,80 +2578,190 @@ class _MobileArchitecturalBottomBar extends StatelessWidget {
 
     final slideDur = ClaudeMotion.duration(
       context,
-      const Duration(milliseconds: 240),
+      const Duration(milliseconds: 280),
     );
-    final barTint = micaActive
-        ? (c.isDark ? const Color(0xEB0B0E14) : const Color(0xF0EDF0F7))
-        : c.sidebar;
+    final blurSigma = micaActive ? (kIsWeb ? 12.0 : 24.0) : 0.0;
 
-    return ClaudeGlassBar(
-      blurSigma: micaActive ? 20 : 0,
-      tintColor: barTint,
-      border: Border(
-        top: BorderSide(color: c.hairline, width: 1.0),
-      ),
+    final shellShadows = c.isDark
+        ? const [
+            BoxShadow(
+              color: Color(0xAD000000),
+              blurRadius: 34,
+              spreadRadius: -4,
+              offset: Offset(0, 14),
+            ),
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ]
+        : const [
+            BoxShadow(
+              color: Color(0x220F172A),
+              blurRadius: 28,
+              spreadRadius: -6,
+              offset: Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Color(0x0F0F172A),
+              blurRadius: 8,
+              spreadRadius: -1,
+              offset: Offset(0, 3),
+            ),
+          ];
+
+    final shellGradient = micaActive
+        ? (c.isDark
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xCF1C2334), Color(0xE0101520)],
+              )
+            : const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xDBFFFFFF), Color(0xC4F1F5FC)],
+              ))
+        : LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [c.paper2, c.isDark ? c.paper : c.recessed],
+          );
+
+    return Padding(
       padding: EdgeInsets.fromLTRB(
-        8 + safeLeft,
-        5,
-        8 + safeRight,
-        (safeBottom > 0 ? safeBottom : 6),
+        16 + safeLeft,
+        0,
+        16 + safeRight,
+        safeBottom > 0 ? safeBottom + 6 : 12,
       ),
-      child: SizedBox(
-        height: 46,
-        child: LayoutBuilder(
-          builder: (ctx, box) {
-            final slotW = box.maxWidth / items.length;
-            const hPad = 3.0;
-            final pillW = (slotW - hPad * 2).clamp(36.0, slotW);
-            final pillLeft = selectedIndex * slotW + hPad;
-
-            return Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                AnimatedPositioned(
-                  duration: slideDur,
-                  curve: ClaudeMotion.snappySpring,
-                  left: pillLeft,
-                  top: 1,
-                  bottom: 1,
-                  width: pillW,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 432),
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              shape: claudeSuperellipse(_outerRadius),
+              shadows: shellShadows,
+            ),
+            child: ClipRSuperellipse(
+              borderRadius: BorderRadius.circular(_outerRadius),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                child: CustomPaint(
+                  foregroundPainter: ClaudeSpecularRimPainter(
+                    radius: _outerRadius,
+                    isDark: c.isDark,
+                    intensity: 1.0,
+                  ),
                   child: DecoratedBox(
-                    decoration: ShapeDecoration(
-                      color: c.isDark ? c.paper2 : Colors.white,
-                      shape: claudeSuperellipse(
-                        8.5,
-                        side: BorderSide(color: c.hairline),
-                      ),
-                      shadows: [
-                        BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: c.isDark ? 0.24 : 0.04),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
+                    decoration: BoxDecoration(gradient: shellGradient),
+                    child: Padding(
+                      padding: const EdgeInsets.all(_innerPad),
+                      child: SizedBox(
+                        height: 50,
+                        child: LayoutBuilder(
+                          builder: (ctx, box) {
+                            final slotW = box.maxWidth / items.length;
+                            final pillLeft = selectedIndex * slotW;
+
+                            return Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                AnimatedPositioned(
+                                  duration: slideDur,
+                                  curve: ClaudeMotion.snappySpring,
+                                  left: pillLeft,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: slotW,
+                                  child: CustomPaint(
+                                    foregroundPainter: ClaudeSpecularRimPainter(
+                                      radius: _innerRadius,
+                                      isDark: c.isDark,
+                                      accentTint: c.clay,
+                                      intensity: 1.0,
+                                    ),
+                                    child: DecoratedBox(
+                                      decoration: ShapeDecoration(
+                                        gradient: c.isDark
+                                            ? LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  c.clay.withValues(alpha: 0.28),
+                                                  const Color(0x6B20293E),
+                                                ],
+                                              )
+                                            : const LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  Color(0xFAFFFFFF),
+                                                  Color(0xF2F8FAFF),
+                                                ],
+                                              ),
+                                        shape: claudeSuperellipse(_innerRadius),
+                                        shadows: c.isDark
+                                            ? [
+                                                const BoxShadow(
+                                                  color: Color(0x61000000),
+                                                  blurRadius: 10,
+                                                  offset: Offset(0, 3),
+                                                ),
+                                                BoxShadow(
+                                                  color: c.clay.withValues(
+                                                    alpha: 0.16,
+                                                  ),
+                                                  blurRadius: 12,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : [
+                                                const BoxShadow(
+                                                  color: Color(0x160F172A),
+                                                  blurRadius: 8,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                                BoxShadow(
+                                                  color: c.clay.withValues(
+                                                    alpha: 0.08,
+                                                  ),
+                                                  blurRadius: 10,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    for (var i = 0; i < items.length; i++)
+                                      Expanded(
+                                        child: _MobileNavTabButton(
+                                          icon: selectedIndex == i
+                                              ? items[i].$2
+                                              : items[i].$1,
+                                          label: items[i].$3,
+                                          badge: items[i].$4,
+                                          active: selectedIndex == i,
+                                          onTap: () => onSelect(i),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                Row(
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      Expanded(
-                        child: _MobileNavTabButton(
-                          icon: selectedIndex == i
-                              ? items[i].$2
-                              : items[i].$1,
-                          label: items[i].$3,
-                          badge: items[i].$4,
-                          active: selectedIndex == i,
-                          onTap: () => onSelect(i),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -2611,79 +2874,111 @@ class _MobileNavTabButton extends StatefulWidget {
 
 class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
+    final activeColor = c.isDark ? const Color(0xFFEEF2FF) : c.clay;
+    final activeIconColor = c.isDark ? const Color(0xFFA5B4FC) : c.clay;
     final iconColor = widget.active
-        ? c.clay
+        ? activeIconColor
         : (_hovered ? c.inkSoft : c.muted);
     final labelColor = widget.active
-        ? c.clay
+        ? activeColor
         : (_hovered ? c.inkSoft : c.muted);
+    final scale = _pressed
+        ? 0.93
+        : (widget.active ? 1.035 : (_hovered ? 1.015 : 1.0));
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
         child: SizedBox.expand(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
+          child: AnimatedSlide(
+            duration: ClaudeMotion.duration(
+              context,
+              const Duration(milliseconds: 220),
+            ),
+            curve: ClaudeMotion.snappySpring,
+            offset: widget.active ? const Offset(0, -0.02) : Offset.zero,
+            child: AnimatedScale(
+              scale: scale,
+              duration: ClaudeMotion.duration(
+                context,
+                _pressed
+                    ? const Duration(milliseconds: 80)
+                    : const Duration(milliseconds: 220),
+              ),
+              curve:
+                  _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(widget.icon, size: 19.0, color: iconColor),
-                  if (widget.badge != null)
-                    Positioned(
-                      top: -5,
-                      right: -12,
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: c.clay,
-                          shape: const StadiumBorder(),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4.5,
-                            vertical: 0.5,
-                          ),
-                          child: Text(
-                            widget.badge!,
-                            style: monoStyle(
-                              c,
-                              size: 9.0,
-                              weight: FontWeight.w700,
-                              color: Colors.white,
-                              height: 1.15,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(widget.icon, size: 19.0, color: iconColor),
+                      if (widget.badge != null)
+                        Positioned(
+                          top: -5,
+                          right: -12,
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: c.clay,
+                              shape: const StadiumBorder(),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4.5,
+                                vertical: 0.5,
+                              ),
+                              child: Text(
+                                widget.badge!,
+                                style: monoStyle(
+                                  c,
+                                  size: 9.0,
+                                  weight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.15,
+                                ),
+                              ),
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 2.5),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.fade,
+                      style: sansStyle(
+                        c,
+                        size: 10.8,
+                        weight:
+                            widget.active ? FontWeight.w600 : FontWeight.w500,
+                        color: labelColor,
+                        height: 1.1,
                       ),
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 3),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.fade,
-                  style: sansStyle(
-                    c,
-                    size: 10.5,
-                    weight: widget.active ? FontWeight.w600 : FontWeight.w500,
-                    color: labelColor,
-                    height: 1.1,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

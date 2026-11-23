@@ -971,16 +971,16 @@ void main() {
       equals('https://gh-proxy.com/https://github.com/iamr0s/agent-mcp/releases/latest/download/version.json'),
     );
     final parsed = UpdateInfo.tryParseVersionJson({
-      'version': '2.9.0',
-      'tag': 'v2.9.0',
+      'version': '9.9.0',
+      'tag': 'v9.9.0',
       'build': 7,
       'published_at': '2026-11-22T12:00:00Z',
-      'release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v2.9.0',
+      'release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v9.9.0',
       'notes': '- 新增自动更新与智能安装器',
       'assets': {
         'windows_sfx': {
-          'name': 'AgentMCP-v2.9.0-windows-x64-sfx.exe',
-          'url': 'https://github.com/iamr0s/agent-mcp/releases/download/v2.9.0/AgentMCP-v2.9.0-windows-x64-sfx.exe',
+          'name': 'AgentMCP-v9.9.0-windows-x64-sfx.exe',
+          'url': 'https://github.com/iamr0s/agent-mcp/releases/download/v9.9.0/AgentMCP-v9.9.0-windows-x64-sfx.exe',
           'sha256': 'deadbeef',
           'size': 49000000,
         },
@@ -1013,16 +1013,16 @@ void main() {
 
     await tester.tap(find.text('不再提醒本次更新'));
     await tester.pump(const Duration(milliseconds: 350));
-    expect(backend.updatePrefs.skippedVersion, equals('2.9.0'));
+    expect(backend.updatePrefs.skippedVersion, equals('9.9.0'));
 
-    expect(find.text('新版本 v2.9.0'), findsOneWidget);
-    await tester.tap(find.text('新版本 v2.9.0'));
+    expect(find.text('新版本 v9.9.0'), findsOneWidget);
+    await tester.tap(find.text('新版本 v9.9.0'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.text('一键升级'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(backend.launchedInstallerPath, contains('AgentMCP-v2.9.0-windows-x64-sfx.exe'));
+    expect(backend.launchedInstallerPath, contains('AgentMCP-v9.9.0-windows-x64-sfx.exe'));
     expect(backend.launchedInstallerAfter, equals('gui'));
     expect(backend.launchedInstallerSilent, isFalse);
     expect(tester.takeException(), isNull);
@@ -1160,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v2.8.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v2.9.0 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v2.8.0'), findsOneWidget);
-    await tester.tap(find.text('v2.8.0'));
+    expect(find.text('v2.9.0'), findsOneWidget);
+    await tester.tap(find.text('v2.9.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1252,25 +1252,32 @@ void main() {
       findsOneWidget,
     );
 
+    // Verify ProKit Concentric Floating Dock is inset from edges & floating above bottom (not edge-to-edge brick)
+    final callFlowTabRect = tester.getRect(find.text('调用流').last);
+    expect(callFlowTabRect.left, greaterThan(16.0));
+    expect(callFlowTabRect.bottom, lessThan(770.0));
+
     // Navigate to ServiceSetupPage at 360px and verify Level-1 chevron does NOT wrap below title!
     await tester.tap(find.text('服务配置').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v2.8.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v2.9.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
-    // Enter 基础与外观 -> verify zero cheap pencil icons and single-line right-aligned values
+    // Enter 基础与外观 -> verify zero cheap pencil icons, crisp 1-line micro-subtitles, and single-line right-aligned values
     await tester.tap(find.text('基础与外观'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.text('多设备同时接入时防止工具重名'), findsOneWidget);
     final prefixTitleCenter = tester.getCenter(find.text('工具名前缀'));
     final prefixPillCenter = tester.getCenter(find.text('未启用前缀'));
-    expect((prefixTitleCenter.dy - prefixPillCenter.dy).abs(), lessThan(8.0));
+    expect(prefixPillCenter.dx, greaterThan(prefixTitleCenter.dx + 60));
+    expect((prefixTitleCenter.dy - prefixPillCenter.dy).abs(), lessThan(18.0));
 
     // Switch to Exposure tab and open Share dialog via file drop -> verify 4 equal-width segments & zero right-edge overflow at 360px!
     backend.emitDroppedFiles([r'D:\demo\folder_share']);
