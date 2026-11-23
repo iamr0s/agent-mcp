@@ -17,8 +17,13 @@ class _FakeConsoleBackend extends ConsoleBackend {
   bool? launchedInstallerSilent;
   String? openedExternalUrl;
 
+  bool androidPlatform = false;
+
   @override
-  bool get isWindowsPlatform => true;
+  bool get isAndroidPlatform => androidPlatform;
+
+  @override
+  bool get isWindowsPlatform => !androidPlatform;
 
   @override
   bool get supportsInAppUpgrade => true;
@@ -1173,8 +1178,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.4.0'), findsOneWidget);
-    await tester.tap(find.text('v3.4.0'));
+    expect(find.text('v3.4.1'), findsOneWidget);
+    await tester.tap(find.text('v3.4.1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1274,7 +1279,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.1'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1782,6 +1787,106 @@ void main() {
           ?.name,
       equals('AgentMCP-v3.4.0-linux-arm64-gui.tar.gz'),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.4.1 Mobile 1:1 Finger-Locked Swipe/Lens Physics & Full-Bleed Edge-to-Edge Stage (Zero 18px Cutoff / Zero Top-Left Notch)',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend()
+      ..customTitleBar = false
+      ..androidPlatform = true;
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // 1. Bottom Liquid Lens Dock: symmetric 4.0px endcap spacing + 0ms 1:1 finger-locked scrubbing
+    final dockFinder = find.byKey(const ValueKey('mobile-liquid-jade-dock'));
+    final lensFinder = find.byKey(const ValueKey('mobile-liquid-jade-lens'));
+    final dockRect0 = tester.getRect(dockFinder);
+    final lensRect0 = tester.getRect(lensFinder);
+    expect((lensRect0.left - dockRect0.left - 4.0).abs(), lessThan(0.6));
+
+    // Drag thumb from slot 0 across to x = 250 on dock -> lens center locks 1:1 on the VERY SAME frame!
+    final dockGesture = await tester.startGesture(
+      Offset(dockRect0.left + 44.0, dockRect0.center.dy),
+    );
+    await tester.pump();
+    await dockGesture.moveTo(Offset(250.0, dockRect0.center.dy));
+    await tester.pump(); // Zero extra spring frames needed!
+    final lensDuringDrag = tester.getRect(lensFinder);
+    expect((lensDuringDrag.center.dx - 250.0).abs(), lessThan(3.5));
+
+    // Move all the way to right endcap (slot 3) and release -> symmetric 4.0px right margin!
+    await dockGesture.moveTo(Offset(dockRect0.right - 20.0, dockRect0.center.dy));
+    await tester.pump();
+    await dockGesture.up();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    final dockRect3 = tester.getRect(dockFinder);
+    final lensRect3 = tester.getRect(lensFinder);
+    expect((dockRect3.right - lensRect3.right - 4.0).abs(), lessThan(0.6));
+
+    // 2. Drill into Level-2 ('接入入口 (1)') and verify full-bleed 0..390 stage (zero 18px cutoff walls & zero shrink notch)
+    await tester.tap(find.text('接入入口 (1)').first);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 45));
+    }
+    final l2SlotFinder = find.byKey(const ValueKey('setup-mobile-l2-slot'));
+    final l2RestRect = tester.getRect(l2SlotFinder);
+    expect(l2RestRect.left, equals(0.0));
+    expect(l2RestRect.right, equals(390.0));
+    expect(l2RestRect.height, equals(844.0));
+
+    // 3. Mid-screen swipe-back (start at x=90, y=240 -> horizontal claim +26px -> curve to +130px right, +90px down at x=220, y=330):
+    //    - Pill tracks BOTH exact horizontal sheet seam (130 - 36 = 94px, zero 18px touch-slop lag!) AND vertical finger Y (330px) 1:1!
+    //    - Level-2 DecoratedBox stays full height 844.0 (zero top-left shrink notch)!
+    final midSwipe = await tester.startGesture(const Offset(90.0, 240.0));
+    await tester.pump();
+    await midSwipe.moveBy(const Offset(26.0, 2.0));
+    await tester.pump();
+    await midSwipe.moveBy(const Offset(104.0, 88.0));
+    await tester.pump();
+
+    final pillFinder = find.byKey(const ValueKey('setup-swipe-back-pill'));
+    expect(pillFinder, findsOneWidget);
+    final pillRect = tester.getRect(pillFinder);
+    expect((pillRect.left - (130.0 - 36.0)).abs(), lessThan(2.0));
+    expect((pillRect.center.dy - 330.0).abs(), lessThan(2.0));
+
+    // Pure vertical thumb wiggle (+40px down to y=370 without horizontal change) ALSO tracks finger Y immediately!
+    await midSwipe.moveBy(const Offset(0.0, 40.0));
+    await tester.pump();
+    expect((tester.getRect(pillFinder).center.dy - 370.0).abs(), lessThan(2.0));
+
+    // Cancel mid-swipe (<24% ratio if moved back) so we stay in Level-2 to test Android edge suppression
+    await midSwipe.moveBy(const Offset(-115.0, 0.0));
+    await tester.pump();
+    await midSwipe.up();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+
+    // 4. Android left-edge swipe (start x = 12 < 28px) -> auto-suppresses custom pill to avoid double-arrow overlap!
+    final edgeSwipe = await tester.startGesture(const Offset(12.0, 260.0));
+    await tester.pump();
+    await edgeSwipe.moveBy(const Offset(28.0, 0.0));
+    await tester.pump();
+    await edgeSwipe.moveBy(const Offset(92.0, 0.0));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('setup-swipe-back-pill')), findsNothing);
+    await edgeSwipe.up();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 45));
+    }
     expect(tester.takeException(), isNull);
   });
 }

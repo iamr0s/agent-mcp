@@ -504,7 +504,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.4.0').toString();
+      _version = (auth['version'] ?? '3.4.1').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -1819,43 +1819,59 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         ? (46.0 + safeTop + (isMobile ? 14.0 : 22.0))
         : 0.0;
     final pageExtraBottom = isMobile ? safeBottom : 0.0;
+    final mobilePadLeft = (width < 380 ? 15.0 : 18.0) + safeLeft;
+    final mobilePadRight = (width < 380 ? 15.0 : 18.0) + safeRight;
+
+    Widget wrapMobilePageGutter(Widget child) {
+      if (!isMobile) return child;
+      return Padding(
+        padding: EdgeInsets.only(left: mobilePadLeft, right: mobilePadRight),
+        child: child,
+      );
+    }
 
     final pages = <Widget>[
-      ActivityFeedPage(
-        key: const ValueKey('page-activity'),
-        events: _events,
-        topPadding: pageTopInset,
-        extraBottomPadding: pageExtraBottom,
-        onClear: () async {
-          await widget.backend.clearLogs();
-          setState(_events.clear);
-          _showToast('已清空活动记录');
-        },
-        onExport: _exportLogs,
-        onToast: _showToast,
+      wrapMobilePageGutter(
+        ActivityFeedPage(
+          key: const ValueKey('page-activity'),
+          events: _events,
+          topPadding: pageTopInset,
+          extraBottomPadding: pageExtraBottom,
+          onClear: () async {
+            await widget.backend.clearLogs();
+            setState(_events.clear);
+            _showToast('已清空活动记录');
+          },
+          onExport: _exportLogs,
+          onToast: _showToast,
+        ),
       ),
-      SubMcpGatewayPage(
-        key: const ValueKey('page-submcp'),
-        backend: widget.backend,
-        servers: _subMcps,
-        topPadding: pageTopInset,
-        extraBottomPadding: pageExtraBottom,
-        onRefresh: _refreshSubMcps,
-        onToast: _showToast,
+      wrapMobilePageGutter(
+        SubMcpGatewayPage(
+          key: const ValueKey('page-submcp'),
+          backend: widget.backend,
+          servers: _subMcps,
+          topPadding: pageTopInset,
+          extraBottomPadding: pageExtraBottom,
+          onRefresh: _refreshSubMcps,
+          onToast: _showToast,
+        ),
       ),
-      ExposureSharePage(
-        key: const ValueKey('page-exposure'),
-        backend: widget.backend,
-        exposureSummary: _exposureSummary,
-        droppedPathSignal: _droppedSharePath,
-        onConsumeDroppedPath: () => _droppedSharePath.value = null,
-        topPadding: pageTopInset,
-        extraBottomPadding: pageExtraBottom,
-        onRefresh: () async {
-          _lastStatusSignature = '';
-          await _refreshStatus();
-        },
-        onToast: _showToast,
+      wrapMobilePageGutter(
+        ExposureSharePage(
+          key: const ValueKey('page-exposure'),
+          backend: widget.backend,
+          exposureSummary: _exposureSummary,
+          droppedPathSignal: _droppedSharePath,
+          onConsumeDroppedPath: () => _droppedSharePath.value = null,
+          topPadding: pageTopInset,
+          extraBottomPadding: pageExtraBottom,
+          onRefresh: () async {
+            _lastStatusSignature = '';
+            await _refreshStatus();
+          },
+          onToast: _showToast,
+        ),
       ),
       ServiceSetupPage(
         key: const ValueKey('page-setup'),
@@ -1869,6 +1885,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         accentId: widget.accentId,
         topPadding: pageTopInset,
         extraBottomPadding: pageExtraBottom,
+        horizontalPaddingLeft: isMobile ? mobilePadLeft : 0.0,
+        horizontalPaddingRight: isMobile ? mobilePadRight : 0.0,
         onThemeChanged: _applyThemeWithSnapshot,
         onAccentChanged: _applyAccentWithSnapshot,
         dynamicColor: widget.dynamicColor,
@@ -2413,14 +2431,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             constraints: const BoxConstraints(maxWidth: 1320),
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
-                                isMobile
-                                    ? (width < 380 ? 15.0 : 18.0) + safeLeft
-                                    : 26.0,
+                                isMobile ? 0.0 : 26.0,
                                 useFloatingTopBar
                                     ? 0.0
                                     : (isMobile ? 16.0 : 20.0),
-                                (isMobile ? (width < 380 ? 15.0 : 18.0) : 26.0) +
-                                    safeRight,
+                                isMobile ? 0.0 : 26.0 + safeRight,
                                 0.0,
                               ),
                               child: Listener(
@@ -2962,12 +2977,17 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
         ? 0.016
         : ((elapsed - prev).inMicroseconds / 1000000.0).clamp(0.001, 0.032);
 
-    // 1. Horizontal lens spring: tight 1:1 tracking while dragging, fluid glide on tap/snap
-    final stiffness = _isDragging ? 760.0 : 330.0;
-    final damping = _isDragging ? 44.0 : 25.5;
-    final ax = (_targetSlotPos - _lensSlotPos) * stiffness - _lensVel * damping;
-    _lensVel += ax * dt;
-    _lensSlotPos += _lensVel * dt;
+    // 1. Horizontal lens position: 100% zero-lag 1:1 finger lock while dragging,
+    //    fluid spring glide only after release / tap.
+    if (_isDragging) {
+      _lensVel *= 0.82;
+    } else {
+      const stiffness = 340.0;
+      const damping = 26.0;
+      final ax = (_targetSlotPos - _lensSlotPos) * stiffness - _lensVel * damping;
+      _lensVel += ax * dt;
+      _lensSlotPos += _lensVel * dt;
+    }
 
     // 2. Lift spring (0 -> 1 while pressed/scrubbing)
     final aLift = (_liftTarget - _liftVal) * 420.0 - _liftVel * 30.0;
@@ -2997,14 +3017,13 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
     _fingerNormX = (localDx / barWidth).clamp(0.04, 0.96);
     final relX = localDx - 4.0;
     final rawSlot = (relX / slotWidth) - 0.5;
-    double clamped = rawSlot;
-    if (rawSlot < 0.0) {
-      clamped = rawSlot * 0.22;
-    } else if (rawSlot > 3.0) {
-      clamped = 3.0 + (rawSlot - 3.0) * 0.22;
-    }
+    final clamped = rawSlot.clamp(0.0, 3.0);
+    final deltaSlot = clamped - _lensSlotPos;
+    _lensVel = (_lensVel * 0.45 + (deltaSlot * 48.0) * 0.55).clamp(-14.0, 14.0);
     _targetSlotPos = clamped;
+    _lensSlotPos = clamped;
     _ensureTicker();
+    if (mounted) setState(() {});
 
     final hoverIdx = clamped.round().clamp(0, 3);
     if (hoverIdx != _lastHoverReportedIdx) {
@@ -3126,10 +3145,16 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
               final slotWidth = innerWidth / 4.0;
 
               final speedStretch =
-                  (_lensVel.abs() * 0.018).clamp(0.0, 0.16);
-              final lensScaleX = (1.0 + 0.105 * tLift) * (1.0 + speedStretch);
+                  (_lensVel.abs() * 0.012).clamp(0.0, 0.09);
+              final endcapProximity = math.max(
+                (0.35 - _lensSlotPos).clamp(0.0, 0.35) / 0.35,
+                (_lensSlotPos - 2.65).clamp(0.0, 0.35) / 0.35,
+              );
+              final safeLiftScale = 1.0 + 0.075 * tLift * (1.0 - 0.7 * endcapProximity);
+              final lensScaleX =
+                  safeLiftScale * (1.0 + speedStretch * (1.0 - endcapProximity));
               final lensScaleY =
-                  (1.0 + 0.105 * tLift) * (1.0 - 0.40 * speedStretch);
+                  safeLiftScale * (1.0 - 0.35 * speedStretch);
               final lensTilt = (_lensVel * 0.0032).clamp(-0.042, 0.042);
               final lensLiftDy = -1.5 * tLift;
               final barScale = 1.0 + 0.022 * tLift;

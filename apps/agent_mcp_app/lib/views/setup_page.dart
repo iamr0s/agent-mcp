@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -82,6 +83,8 @@ class ServiceSetupPage extends StatefulWidget {
   final ValueChanged<String> onToast;
   final double topPadding;
   final double extraBottomPadding;
+  final double horizontalPaddingLeft;
+  final double horizontalPaddingRight;
   final UpdatePreferences updatePrefs;
   final bool checkingUpdate;
   final UpdateInfo? latestUpdate;
@@ -112,6 +115,8 @@ class ServiceSetupPage extends StatefulWidget {
     required this.onToast,
     this.topPadding = 0.0,
     this.extraBottomPadding = 0.0,
+    this.horizontalPaddingLeft = 0.0,
+    this.horizontalPaddingRight = 0.0,
     this.updatePrefs = const UpdatePreferences(),
     this.checkingUpdate = false,
     this.latestUpdate,
@@ -162,6 +167,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
   bool _mobileInDetail = false;
   bool _swipingBack = false;
   double _swipeDragDx = 0.0;
+  double _swipeBaseSheetLeft = 0.0;
+  double _swipePointerY = 280.0;
+  double _swipeStartLocalX = 120.0;
   late final AnimationController _mobileSubCtrl;
   String? _activeInlineEdit;
   final Set<String> _togglingTunnels = <String>{};
@@ -1125,9 +1133,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         : (_basicDirty ? '基础服务配置有未保存的更改' : '权限与日志策略有未保存的更改');
 
     final screenW = MediaQuery.sizeOf(context).width;
+    final hLeft =
+        widget.horizontalPaddingLeft > 0 ? widget.horizontalPaddingLeft : 12.0;
+    final hRight = widget.horizontalPaddingRight > 0
+        ? widget.horizontalPaddingRight
+        : 12.0;
     return Positioned(
-      left: 12,
-      right: 12,
+      left: hLeft,
+      right: hRight,
       bottom: (screenW < 700 ? 84 : 14) + widget.extraBottomPadding,
       child: Center(
         child: ConstrainedBox(
@@ -2421,10 +2434,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         key: const ValueKey('setup-mobile-list'),
         controller: !_mobileInDetail ? _scrollCtrl : null,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(
-          top: widget.topPadding,
-          right: 2,
-          bottom: bottomPad,
+        padding: EdgeInsets.fromLTRB(
+          widget.horizontalPaddingLeft,
+          widget.topPadding,
+          widget.horizontalPaddingRight > 0 ? widget.horizontalPaddingRight : 2,
+          bottomPad,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2506,10 +2520,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         key: ValueKey('setup-mobile-detail-$_setupSection'),
         controller: _mobileInDetail ? _scrollCtrl : null,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(
-          top: widget.topPadding,
-          right: 2,
-          bottom: bottomPad,
+        padding: EdgeInsets.fromLTRB(
+          widget.horizontalPaddingLeft,
+          widget.topPadding,
+          widget.horizontalPaddingRight > 0 ? widget.horizontalPaddingRight : 2,
+          bottomPad,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2604,6 +2619,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
       builder: (ctx, stackBox) {
         final paneWidth =
             stackBox.maxWidth.isFinite ? stackBox.maxWidth : screenW;
+        final paneHeight = stackBox.maxHeight.isFinite
+            ? stackBox.maxHeight
+            : MediaQuery.sizeOf(context).height;
         return AnimatedBuilder(
           animation: _mobileSubCtrl,
           builder: (ctx, _) {
@@ -2612,70 +2630,122 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
             final hideLevel1 = t >= 0.999 && !_swipingBack;
             final inTransition = t > 0.002 && t < 0.998;
             final draggedRatio = (1.0 - t).clamp(0.0, 1.0);
-            final l2Scale =
-                _swipingBack ? (1.0 - draggedRatio * 0.045) : 1.0;
+            final sheetLeft = (1.0 - t) * paneWidth;
+            final isSystemEdgeSwipe =
+                widget.backend.isAndroidPlatform && _swipeStartLocalX < 28.0;
+            final minPillTop = widget.topPadding + 8.0;
+            final maxPillTop = math.max(
+              minPillTop,
+              paneHeight - bottomPad - 52.0,
+            );
+            final double pillTop =
+                (_swipePointerY - 22.0).clamp(minPillTop, maxPillTop).toDouble();
+            final double pillLeft = (sheetLeft - 36.0)
+                .clamp(8.0, math.max(8.0, paneWidth - 42.0))
+                .toDouble();
 
-            return Stack(
-              fit: StackFit.expand,
-              clipBehavior: Clip.none,
-              children: [
-                // Underlying Level-1 Directory with -26% Parallax Reveal
-                Offstage(
-                  key: const ValueKey('setup-mobile-l1-slot'),
-                  offstage: hideLevel1,
-                  child: IgnorePointer(
-                    ignoring: t > 0.01,
-                    child: ExcludeSemantics(
-                      excluding: t > 0.01,
-                      child: Transform.translate(
-                        offset: Offset(-0.26 * paneWidth * t, 0.0),
-                        child: Opacity(
-                          opacity: (1.0 - 0.18 * t).clamp(0.0, 1.0),
-                          child: buildMobileLevel1List(),
+            return Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (ev) {
+                _swipeStartLocalX = ev.localPosition.dx;
+                _swipePointerY = ev.localPosition.dy;
+                _swipeBaseSheetLeft =
+                    (1.0 - _mobileSubCtrl.value) * paneWidth;
+              },
+              onPointerMove: (ev) {
+                if (_swipingBack &&
+                    (_swipePointerY - ev.localPosition.dy).abs() > 0.25) {
+                  setState(() {
+                    _swipePointerY = ev.localPosition.dy;
+                  });
+                }
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  // Underlying Level-1 Directory with -26% Parallax Reveal (full-bleed 0..paneWidth)
+                  Offstage(
+                    key: const ValueKey('setup-mobile-l1-slot'),
+                    offstage: hideLevel1,
+                    child: IgnorePointer(
+                      ignoring: t > 0.01,
+                      child: ExcludeSemantics(
+                        excluding: t > 0.01,
+                        child: Transform.translate(
+                          offset: Offset(-0.26 * paneWidth * t, 0.0),
+                          child: Opacity(
+                            opacity: (1.0 - 0.16 * t).clamp(0.0, 1.0),
+                            child: ColoredBox(
+                              color: c.paper,
+                              child: buildMobileLevel1List(),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Positioned.fill(
-                  key: const ValueKey('setup-mobile-scrim-slot'),
-                  child: IgnorePointer(
-                    child: inTransition
-                        ? ColoredBox(
-                            color: Colors.black.withValues(
-                              alpha: (c.isDark ? 0.34 : 0.10) * t,
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-                if (showLevel2)
                   Positioned.fill(
-                    key: const ValueKey('setup-mobile-l2-slot'),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragStart: (details) {
-                        if (!_mobileInDetail) return;
-                        _mobileSubCtrl.stop();
-                        setState(() {
-                          _swipingBack = true;
-                          _swipeDragDx = (1.0 - _mobileSubCtrl.value) * paneWidth;
-                        });
-                      },
-                      onHorizontalDragUpdate: (details) {
-                        if (!_swipingBack) return;
-                        _swipeDragDx = (_swipeDragDx + details.delta.dx)
-                            .clamp(0.0, paneWidth);
-                        _mobileSubCtrl.value =
-                            (1.0 - _swipeDragDx / paneWidth).clamp(0.0, 1.0);
-                      },
-                      onHorizontalDragEnd: (details) {
-                        if (!_swipingBack) return;
-                        final vx = details.primaryVelocity ?? 0.0;
-                        final outRatio = 1.0 - _mobileSubCtrl.value;
-                        if (outRatio > 0.24 || vx > 380.0) {
-                          _popMobileDetail();
-                        } else {
+                    key: const ValueKey('setup-mobile-scrim-slot'),
+                    child: IgnorePointer(
+                      child: inTransition
+                          ? ColoredBox(
+                              color: Colors.black.withValues(
+                                alpha: (c.isDark ? 0.32 : 0.08) * t,
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                  if (showLevel2)
+                    Positioned.fill(
+                      key: const ValueKey('setup-mobile-l2-slot'),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onHorizontalDragStart: (details) {
+                          if (!_mobileInDetail) return;
+                          _mobileSubCtrl.stop();
+                          final nextDx = (_swipeBaseSheetLeft +
+                                  (details.localPosition.dx -
+                                      _swipeStartLocalX))
+                              .clamp(0.0, paneWidth);
+                          _swipeDragDx = nextDx;
+                          _mobileSubCtrl.value =
+                              (1.0 - nextDx / paneWidth).clamp(0.0, 1.0);
+                          setState(() {
+                            _swipingBack = true;
+                            _swipePointerY = details.localPosition.dy;
+                          });
+                        },
+                        onHorizontalDragUpdate: (details) {
+                          if (!_swipingBack) return;
+                          _swipePointerY = details.localPosition.dy;
+                          _swipeDragDx = (_swipeBaseSheetLeft +
+                                  (details.localPosition.dx -
+                                      _swipeStartLocalX))
+                              .clamp(0.0, paneWidth);
+                          _mobileSubCtrl.value =
+                              (1.0 - _swipeDragDx / paneWidth).clamp(0.0, 1.0);
+                        },
+                        onHorizontalDragEnd: (details) {
+                          if (!_swipingBack) return;
+                          final vx = details.primaryVelocity ?? 0.0;
+                          final outRatio = 1.0 - _mobileSubCtrl.value;
+                          if (outRatio > 0.24 || vx > 380.0) {
+                            _popMobileDetail();
+                          } else {
+                            setState(() => _swipingBack = false);
+                            unawaited(
+                              _mobileSubCtrl.animateTo(
+                                1.0,
+                                duration: const Duration(milliseconds: 220),
+                                curve: PrismMotion.snappySpring,
+                              ),
+                            );
+                          }
+                        },
+                        onHorizontalDragCancel: () {
+                          if (!_swipingBack) return;
                           setState(() => _swipingBack = false);
                           unawaited(
                             _mobileSubCtrl.animateTo(
@@ -2684,90 +2754,75 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               curve: PrismMotion.snappySpring,
                             ),
                           );
-                        }
-                      },
-                      onHorizontalDragCancel: () {
-                        if (!_swipingBack) return;
-                        setState(() => _swipingBack = false);
-                        unawaited(
-                          _mobileSubCtrl.animateTo(
-                            1.0,
-                            duration: const Duration(milliseconds: 220),
-                            curve: PrismMotion.snappySpring,
-                          ),
-                        );
-                      },
-                      child: Transform.translate(
-                        offset: Offset((1.0 - t) * paneWidth, 0.0),
-                        child: Transform.scale(
-                          scale: l2Scale,
-                          alignment: Alignment.centerLeft,
+                        },
+                        child: Transform.translate(
+                          offset: Offset(sheetLeft, 0.0),
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: c.paper,
-                              borderRadius: inTransition
-                                  ? BorderRadius.circular(24)
-                                  : BorderRadius.zero,
+                              border: inTransition
+                                  ? Border(
+                                      left: BorderSide(
+                                        color: c.hairline.withValues(alpha: 0.8),
+                                      ),
+                                    )
+                                  : null,
                               boxShadow: inTransition
                                   ? [
                                       BoxShadow(
                                         color: Colors.black.withValues(
-                                          alpha: c.isDark ? 0.62 : 0.14,
+                                          alpha: c.isDark ? 0.58 : 0.12,
                                         ),
-                                        blurRadius: 28,
+                                        blurRadius: 26,
                                         spreadRadius: -6,
-                                        offset: const Offset(-12, 0),
+                                        offset: const Offset(-10, 0),
                                       ),
                                     ]
                                   : const [],
                             ),
-                            child: ClipRRect(
-                              borderRadius: inTransition
-                                  ? BorderRadius.circular(24)
-                                  : BorderRadius.zero,
-                              child: buildMobileLevel2Detail(),
-                            ),
+                            child: buildMobileLevel2Detail(),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                if (_swipingBack && draggedRatio > 0.03)
-                  Positioned(
-                    left: 4.0 + (draggedRatio * 26.0).clamp(0.0, 22.0),
-                    top: 0,
-                    bottom: 84,
-                    child: IgnorePointer(
-                      child: Center(
+                  // 1:1 Finger-Tracked Seam Pill (locked horizontally to sheetLeft & vertically to _swipePointerY; auto-hides on OS edge gesture)
+                  if (_swipingBack && !isSystemEdgeSwipe && sheetLeft > 14.0)
+                    Positioned(
+                      key: const ValueKey('setup-swipe-back-pill'),
+                      left: pillLeft,
+                      top: pillTop,
+                      child: IgnorePointer(
                         child: Opacity(
-                          opacity: (draggedRatio * 2.8).clamp(0.0, 1.0),
+                          opacity: ((sheetLeft - 14.0) / 34.0).clamp(0.0, 1.0),
                           child: Container(
-                            width: 30,
-                            height: 48,
+                            width: 28,
+                            height: 44,
                             decoration: ShapeDecoration(
-                              color: c.navTint.withValues(alpha: 0.92),
+                              color: draggedRatio > 0.24
+                                  ? c.navTint
+                                  : c.navTint.withValues(alpha: 0.84),
                               shape: const StadiumBorder(),
                               shadows: [
                                 BoxShadow(
-                                  color: c.navTint.withValues(alpha: 0.36),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 4),
+                                  color: c.navTint.withValues(alpha: 0.32),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 3),
                                 ),
                               ],
                             ),
                             alignment: Alignment.center,
                             child: Icon(
                               Icons.chevron_left_rounded,
-                              size: 20,
+                              size: 19,
                               color: c.onClay,
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                _buildFloatingUnsavedBar(c),
-              ],
+                  _buildFloatingUnsavedBar(c),
+                ],
+              ),
             );
           },
         );
