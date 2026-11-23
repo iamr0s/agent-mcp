@@ -1,7 +1,7 @@
 name: agent_mcp_app
 description: Concentric Liquid Prism Desktop, Mobile & Web Console for Agent MCP
 publish_to: none
-version: 3.5.0+3500
+version: 3.5.1+3501
 
 resolution: workspace
 

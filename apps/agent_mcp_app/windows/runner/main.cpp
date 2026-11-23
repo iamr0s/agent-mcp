@@ -197,7 +197,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   Win32Window::Point origin(80, 60);
   Win32Window::Size size = cli_installer
-      ? Win32Window::Size(660, 520)
+      ? Win32Window::Size(700, 568)
       : Win32Window::Size(1180, 780);
   const wchar_t* win_title =
       cli_installer ? L"Agent MCP Setup" : L"Agent MCP Console";

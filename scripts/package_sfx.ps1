@@ -1,6 +1,6 @@
 param(
     [switch]$SkipBuild,
-    [string]$Version = "3.5.0"
+    [string]$Version = "3.5.1"
 )
 
 $ErrorActionPreference = "Stop"
@@ -111,7 +111,7 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Agent MCP Prism Setup")]
 [assembly: AssemblyProduct("Agent MCP Console")]
-[assembly: AssemblyVersion("3.5.0.0")]
+[assembly: AssemblyVersion("3.5.1.0")]
 
 namespace AgentMcpSfx {
     internal sealed class InstallOptions {
@@ -609,8 +609,8 @@ namespace AgentMcpSfx {
 }
 '@
 
-$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "3.5.0.0" }
-$renderedCs = $csSource.Replace('AssemblyVersion("3.5.0.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
+$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "3.5.1.0" }
+$renderedCs = $csSource.Replace('AssemblyVersion("3.5.1.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
 [System.IO.File]::WriteAllText($csFile, $renderedCs, (New-Object System.Text.UTF8Encoding($true)))
 if (Test-Path $sfxOutPath) { Remove-Item -Force $sfxOutPath }
 

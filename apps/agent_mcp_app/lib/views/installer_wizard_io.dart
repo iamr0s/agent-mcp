@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show ImageFilter, PlatformDispatcher;
 
@@ -129,24 +130,24 @@ class _InstallerWizardAppState extends State<InstallerWizardApp> {
     } catch (_) {}
   }
 
-  void _cycleThemeMode(BuildContext ctx) {
-    final next = switch (_themeMode) {
-      ThemeMode.system => ThemeMode.light,
-      ThemeMode.light => ThemeMode.dark,
-      ThemeMode.dark => ThemeMode.system,
-    };
-    PrismThemeCrossFade.runThemeTransition(ctx, () {
-      setState(() => _themeMode = next);
-      unawaited(_syncNativeWindow());
-    });
+  void _toggleTheme(BuildContext ctx, bool currentlyDark) {
+    final next = currentlyDark ? ThemeMode.light : ThemeMode.dark;
+    unawaited(
+      PrismThemeCrossFade.runThemeTransition(ctx, () {
+        setState(() => _themeMode = next);
+        unawaited(_syncNativeWindow());
+      }),
+    );
   }
 
   void _selectAccent(BuildContext ctx, PrismAccentId next) {
     if (_accentId == next) return;
-    PrismThemeCrossFade.runThemeTransition(ctx, () {
-      PrismPalette.configureAccent(next);
-      setState(() => _accentId = next);
-    });
+    unawaited(
+      PrismThemeCrossFade.runThemeTransition(ctx, () {
+        PrismPalette.configureAccent(next);
+        setState(() => _accentId = next);
+      }),
+    );
   }
 
   @override
@@ -169,7 +170,7 @@ class _InstallerWizardAppState extends State<InstallerWizardApp> {
           launchConfig: InstallerLaunchConfig.fromArgs(widget.args),
           themeMode: _themeMode,
           accentId: _accentId,
-          onCycleTheme: _cycleThemeMode,
+          onToggleTheme: _toggleTheme,
           onSelectAccent: _selectAccent,
           overrideDetectRunningPids: widget.overrideDetectRunningPids,
           overridePerformInstall: widget.overridePerformInstall,
@@ -185,7 +186,7 @@ class InstallerWizardScreen extends StatefulWidget {
   final InstallerLaunchConfig launchConfig;
   final ThemeMode themeMode;
   final PrismAccentId accentId;
-  final void Function(BuildContext) onCycleTheme;
+  final void Function(BuildContext, bool currentlyDark) onToggleTheme;
   final void Function(BuildContext, PrismAccentId) onSelectAccent;
   final Future<List<int>> Function(String targetDir)? overrideDetectRunningPids;
   final Future<void> Function(
@@ -204,7 +205,7 @@ class InstallerWizardScreen extends StatefulWidget {
     required this.launchConfig,
     required this.themeMode,
     required this.accentId,
-    required this.onCycleTheme,
+    required this.onToggleTheme,
     required this.onSelectAccent,
     this.overrideDetectRunningPids,
     this.overridePerformInstall,
@@ -403,7 +404,7 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
         _statusLabel = '安装完成！正在为您启动控制台...';
       });
 
-      await Future<void>.delayed(const Duration(milliseconds: 380));
+      await Future<void>.delayed(const Duration(milliseconds: 360));
       await _closeWizard();
     } catch (e) {
       if (!mounted) return;
@@ -508,6 +509,27 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
       }
     }
 
+    // Carry over the theme & accent previewed during fresh install so the console
+    // opens seamlessly in the exact same appearance.
+    try {
+      final cfgFile = File(p.join(dstRoot.path, 'config', 'mcp_config.json'));
+      if (!cfgFile.existsSync()) {
+        cfgFile.parent.createSync(recursive: true);
+        final modeStr = switch (widget.themeMode) {
+          ThemeMode.light => 'light',
+          ThemeMode.dark => 'dark',
+          ThemeMode.system => 'system',
+        };
+        cfgFile.writeAsStringSync(
+          '${const JsonEncoder.withIndent('  ').convert({
+            'theme_mode': modeStr,
+            'accent_theme': widget.accentId.key,
+          })}\n',
+          flush: true,
+        );
+      }
+    } catch (_) {}
+
     if (Platform.isWindows) {
       if (mounted) {
         setState(() {
@@ -571,610 +593,725 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
     } catch (_) {}
   }
 
+  Widget _buildEditorialHeaderBar(BuildContext context, PrismPalette c) {
+    final activeSpec = PrismAccentSpec.of(widget.accentId);
+    return Container(
+      height: 44,
+      color: c.sidebar,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) {
+                if (Platform.isWindows) {
+                  _winChannel.invokeMethod<void>('startDragging');
+                }
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Row(
+              children: [
+                const PrismSparkIcon(size: 18),
+                const SizedBox(width: 9),
+                Text(
+                  'Agent MCP 安装向导',
+                  style: sansStyle(
+                    c,
+                    size: 12.8,
+                    weight: FontWeight.w600,
+                    color: c.ink,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PrismPill(
+                  text: 'Prism Setup',
+                  fg: c.muted,
+                  bg: c.paper2,
+                ),
+                const Spacer(),
+                // 6-accent live preview capsule matching ConsoleShellScreen
+                DecoratedBox(
+                  decoration: ShapeDecoration(
+                    color: c.paper2,
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: c.hairline.withValues(alpha: 0.72),
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4.5,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0;
+                            i < PrismAccentSpec.presets.length;
+                            i++) ...[
+                          if (i > 0) const SizedBox(width: 5),
+                          _AccentDotSwatch(
+                            spec: PrismAccentSpec.presets[i],
+                            selected:
+                                widget.accentId == PrismAccentSpec.presets[i].id,
+                            palette: c,
+                            onTap: () => widget.onSelectAccent(
+                              context,
+                              PrismAccentSpec.presets[i].id,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                PrismActionMenuButton(
+                  tooltip: '切换主题色 · 当前：${activeSpec.label}',
+                  minMenuWidth: 204,
+                  actions: [
+                    for (final spec in PrismAccentSpec.presets)
+                      PrismMenuAction(
+                        label: spec.label,
+                        badge: widget.accentId == spec.id
+                            ? '当前'
+                            : (spec.badge.isNotEmpty ? spec.badge : null),
+                        icon: widget.accentId == spec.id
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.circle,
+                        highlight: widget.accentId == spec.id,
+                        onTap: () => widget.onSelectAccent(context, spec.id),
+                      ),
+                  ],
+                  customTrigger: Container(
+                    width: 28,
+                    height: 28,
+                    alignment: Alignment.center,
+                    decoration: ShapeDecoration(
+                      color: c.paper3.withValues(alpha: 0.55),
+                      shape: StadiumBorder(
+                        side: BorderSide(
+                          color: c.hairline.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.palette_outlined,
+                      size: 14.5,
+                      color: c.inkSoft,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                PrismButton(
+                  key: const ValueKey('installer-theme-toggle'),
+                  label: '',
+                  compact: true,
+                  variant: PrismBtnVariant.ghost,
+                  tooltip: c.isDark ? '切换至浅色模式' : '切换至暗色模式',
+                  leading: PrismFadeBox(
+                    alignment: Alignment.center,
+                    child: Icon(
+                      c.isDark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                      key: ValueKey(c.isDark),
+                      size: 15.5,
+                    ),
+                  ),
+                  onPressed: () => widget.onToggleTheme(context, c.isDark),
+                ),
+                const SizedBox(width: 6),
+                Container(width: 1, height: 15, color: c.hairline),
+                const SizedBox(width: 2),
+                PrismWindowCaptionButton(
+                  tooltip: '最小化',
+                  glyph: PrismCaptionGlyph.minimize,
+                  palette: c,
+                  onTap: () {
+                    if (Platform.isWindows) {
+                      _winChannel.invokeMethod<void>('minimize');
+                    }
+                  },
+                ),
+                PrismWindowCaptionButton(
+                  key: const ValueKey('installer-close-btn'),
+                  tooltip: '退出向导',
+                  glyph: PrismCaptionGlyph.close,
+                  isClose: true,
+                  enabled: !_installing,
+                  palette: c,
+                  onTap: _installing ? null : _closeWizard,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = PrismPalette.of(context);
-    final themeIcon = switch (widget.themeMode) {
-      ThemeMode.light => Icons.wb_sunny_rounded,
-      ThemeMode.dark => Icons.dark_mode_rounded,
-      ThemeMode.system => Icons.brightness_auto_rounded,
-    };
 
     return Scaffold(
-      backgroundColor: c.paper,
+      backgroundColor: c.sidebar,
       body: Stack(
         children: [
-          // Subtle top ambient refraction glow matching ConsoleShellScreen
-          Positioned(
-            top: -110,
-            right: -60,
-            child: IgnorePointer(
-              child: Container(
-                width: 300,
-                height: 240,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      c.clay.withValues(alpha: c.isDark ? 0.18 : 0.11),
-                      c.clay.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Native frameless drag header + theme & accent controls
-              GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onPanStart: (_) {
-                  if (Platform.isWindows) {
-                    _winChannel.invokeMethod<void>('startDragging');
-                  }
-                },
-                child: Container(
-                  height: 46,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      _PrismSetupMiniMark(accent: c.clay, isDark: c.isDark),
-                      const SizedBox(width: 9),
-                      Text(
-                        'Agent MCP 安装向导',
-                        style: TextStyle(
-                          fontFamily: kFontSans,
-                          fontFamilyFallback: kSansFallback,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: c.inkSoft,
-                        ),
-                      ),
-                      const Spacer(),
-                      // 6-accent mini dots for instant live preview
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (final spec in PrismAccentSpec.presets)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 5),
-                              child: Tooltip(
-                                message: spec.label,
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: () =>
-                                      widget.onSelectAccent(context, spec.id),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    width: widget.accentId == spec.id ? 14 : 11,
-                                    height:
-                                        widget.accentId == spec.id ? 14 : 11,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          spec.swatchStart,
-                                          spec.swatchEnd,
-                                        ],
-                                      ),
-                                      border: Border.all(
-                                        color: widget.accentId == spec.id
-                                            ? c.ink
-                                            : Colors.transparent,
-                                        width: 1.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        key: const ValueKey('installer-theme-toggle'),
-                        tooltip: '切换明暗主题',
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 16,
-                        onPressed: () => widget.onCycleTheme(context),
-                        icon: Icon(themeIcon, color: c.inkSoft),
-                      ),
-                      IconButton(
-                        tooltip: '最小化',
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 16,
-                        onPressed: () {
-                          if (Platform.isWindows) {
-                            _winChannel.invokeMethod<void>('minimize');
-                          }
-                        },
-                        icon: Icon(Icons.remove_rounded, color: c.inkSoft),
-                      ),
-                      IconButton(
-                        key: const ValueKey('installer-close-btn'),
-                        tooltip: '退出向导',
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 16,
-                        onPressed: _installing ? null : _closeWizard,
-                        icon: Icon(Icons.close_rounded, color: c.inkSoft),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
+              _buildEditorialHeaderBar(context, c),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(26, 6, 26, 22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Hero Identity Card
-                      Row(
-                        children: [
-                          _PrismHeroEmblem(accent: c.clay, isDark: c.isDark),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  spacing: 8,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Agent MCP Console',
-                                      style: TextStyle(
-                                        fontFamily: kFontSerif,
-                                        fontFamilyFallback: kSerifFallback,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.3,
-                                        color: c.ink,
-                                      ),
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                  child: CustomPaint(
+                    foregroundPainter: PrismSpecularRimPainter(
+                      radius: 24,
+                      isDark: c.isDark,
+                      intensity: c.isDark ? 0.68 : 0.88,
+                    ),
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(
+                        color: c.paper,
+                        shape: prismSuperellipse(
+                          24,
+                          side: BorderSide(
+                            color: c.hairline.withValues(alpha: 0.65),
+                          ),
+                        ),
+                        shadows: c.whisperShadow,
+                      ),
+                      child: ClipRSuperellipse(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Stack(
+                          children: [
+                            // Subtle ambient refraction glow inside 24px stage island
+                            Positioned(
+                              top: -110,
+                              right: -60,
+                              child: IgnorePointer(
+                                child: Container(
+                                  width: 300,
+                                  height: 230,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        c.clay.withValues(
+                                          alpha: c.isDark ? 0.16 : 0.10,
+                                        ),
+                                        c.clay.withValues(alpha: 0.0),
+                                      ],
                                     ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // Hero Identity Header (matches UpdateAvailableDialog)
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: c.clay.withValues(
+                                                alpha: c.isDark ? 0.34 : 0.20,
+                                              ),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const PrismSparkIcon(size: 46),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 4,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                Text(
+                                                  'Agent MCP Console',
+                                                  style: serifTitleStyle(
+                                                    c,
+                                                    size: 20,
+                                                    weight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                PrismPill(
+                                                  text: 'v$agentMcpVersion',
+                                                  fg: c.clay,
+                                                  bg: c.clay.withValues(
+                                                    alpha: 0.12,
+                                                  ),
+                                                ),
+                                                PrismPill(
+                                                  text: _isUpgrade
+                                                      ? '无损覆盖升级'
+                                                      : '免 UAC 用户态部署',
+                                                  mono: false,
+                                                  fg: _isUpgrade
+                                                      ? c.clay
+                                                      : c.sage,
+                                                  bg: _isUpgrade
+                                                      ? c.purpleBg
+                                                      : c.sageBg,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _isUpgrade
+                                                  ? '检测到已有安装实例 · 升级过程完整保留配置、子 MCP 授权与日志'
+                                                  : '原生系统托盘常驻 · 全协议子 MCP 网关 · 四态外链分享中枢',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: sansStyle(
+                                                c,
+                                                size: 12.2,
+                                                color: c.muted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 15),
+
+                                  // 22px PrismListGroup: Target Directory + 14px Recessed Input + 999px PrismButton
+                                  PrismListGroup(
+                                    radius: 22,
+                                    children: [
+                                      PrismSettingsRow(
+                                        icon: Icons.folder_open_rounded,
+                                        iconColor: c.clay,
+                                        title: '目标安装位置',
+                                        subtitle: _isUpgrade
+                                            ? '覆盖更新程序文件，现有配置与授权数据自动保留'
+                                            : '自动创建目标文件夹，无需管理员权限',
+                                        trailing: PrismPill(
+                                          text: _isUpgrade ? '覆盖升级目录' : '自动创建目录',
+                                          mono: false,
+                                          fg: c.muted,
+                                          bg: c.recessed,
+                                        ),
+                                        bottomChild: Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                key: const ValueKey(
+                                                  'installer-dir-input',
+                                                ),
+                                                controller: _dirCtrl,
+                                                enabled: !_installing,
+                                                style: monoStyle(
+                                                  c,
+                                                  size: 12.2,
+                                                  color: c.ink,
+                                                ),
+                                                decoration:
+                                                    const InputDecoration(
+                                                  hintText:
+                                                      r'C:\Users\...\AppData\Local\Programs\AgentMCP',
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            PrismButton(
+                                              key: const ValueKey(
+                                                'installer-browse-btn',
+                                              ),
+                                              label: '浏览...',
+                                              leading: const Icon(
+                                                Icons.drive_folder_upload_rounded,
+                                              ),
+                                              onPressed: _installing
+                                                  ? null
+                                                  : _pickFolder,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 11),
+
+                                  // 22px PrismListGroup: Options with 38x22 PrismSwitch
+                                  PrismListGroup(
+                                    radius: 22,
+                                    children: [
+                                      PrismSettingsRow(
+                                        icon: Icons.desktop_windows_rounded,
+                                        title: '创建桌面快捷方式',
+                                        subtitle: '在桌面生成 Agent MCP Console 启动图标',
+                                        onTap: _installing
+                                            ? null
+                                            : () => setState(
+                                                  () => _createShortcut =
+                                                      !_createShortcut,
+                                                ),
+                                        trailing: PrismSwitch(
+                                          key: const ValueKey(
+                                            'installer-shortcut-switch',
+                                          ),
+                                          value: _createShortcut,
+                                          onChanged: _installing
+                                              ? null
+                                              : (v) => setState(
+                                                    () => _createShortcut = v,
+                                                  ),
+                                        ),
+                                      ),
+                                      PrismSettingsRow(
+                                        icon: Icons.rocket_launch_rounded,
+                                        title: '安装完成后立即打开控制台',
+                                        subtitle: '部署完毕自动唤醒图形工作台并挂载后台服务',
+                                        onTap: _installing
+                                            ? null
+                                            : () => setState(
+                                                  () => _launchAfter =
+                                                      !_launchAfter,
+                                                ),
+                                        trailing: PrismSwitch(
+                                          key: const ValueKey(
+                                            'installer-launch-switch',
+                                          ),
+                                          value: _launchAfter,
+                                          onChanged: _installing
+                                              ? null
+                                              : (v) => setState(
+                                                    () => _launchAfter = v,
+                                                  ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  if (_errorMsg != null) ...[
+                                    const SizedBox(height: 10),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2.5,
+                                        horizontal: 12,
+                                        vertical: 8,
                                       ),
                                       decoration: ShapeDecoration(
-                                        color: c.purpleBg,
-                                        shape: prismSuperellipse(99),
-                                      ),
-                                      child: Text(
-                                        'v$agentMcpVersion',
-                                        style: TextStyle(
-                                          fontFamily: kFontMono,
-                                          fontFamilyFallback: kMonoFallback,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: c.clay,
+                                        color: c.dangerBg,
+                                        shape: prismSuperellipse(
+                                          14,
+                                          side: BorderSide(
+                                            color: c.danger.withValues(
+                                              alpha: 0.30,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      _isUpgrade
-                                          ? Icons.auto_awesome_rounded
-                                          : Icons.verified_user_outlined,
-                                      size: 14,
-                                      color: c.clay,
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Expanded(
-                                      child: Text(
-                                        _isUpgrade
-                                            ? '检测到已有版本 · 无损覆盖升级（完整保留配置、密钥与日志）'
-                                            : '全新零 UAC 用户态部署 · 原生系统托盘与多端协议中枢',
-                                        style: TextStyle(
-                                          fontSize: 12.2,
-                                          color: c.inkSoft,
-                                        ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.error_outline_rounded,
+                                            size: 15,
+                                            color: c.danger,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _errorMsg!,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: sansStyle(
+                                                c,
+                                                size: 12,
+                                                color: c.danger,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
 
-                      const SizedBox(height: 18),
+                                  const Spacer(),
 
-                      // Target Directory Card
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(16, 13, 16, 14),
-                        decoration: ShapeDecoration(
-                          color: c.paper2,
-                          shape: prismSuperellipse(
-                            16,
-                            side: BorderSide(color: c.hairline),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.folder_open_rounded,
-                                  size: 15,
-                                  color: c.clay,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '目标安装位置',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: c.ink,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  _isUpgrade ? '覆盖升级目录' : '自动创建目录',
-                                  style: TextStyle(
-                                    fontSize: 11.2,
-                                    color: c.muted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 9),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 38,
-                                    child: TextField(
-                                      key: const ValueKey('installer-dir-input'),
-                                      controller: _dirCtrl,
-                                      enabled: !_installing,
-                                      style: TextStyle(
-                                        fontFamily: kFontMono,
-                                        fontFamilyFallback: kMonoFallback,
-                                        fontSize: 12.2,
-                                        color: c.ink,
+                                  // Sculpted 999px Stadium Progress Capsule & PrismButton Footer
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          PrismStatusDot(
+                                            color: _completed
+                                                ? c.sage
+                                                : (_installing
+                                                    ? c.clay
+                                                    : c.meta),
+                                            pulsing: _installing,
+                                            size: 6.4,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              _statusLabel,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: sansStyle(
+                                                c,
+                                                size: 12.0,
+                                                weight:
+                                                    _installing || _completed
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w400,
+                                                color: _completed
+                                                    ? c.sage
+                                                    : (_installing
+                                                        ? c.ink
+                                                        : c.muted),
+                                              ),
+                                            ),
+                                          ),
+                                          if (_installing || _completed)
+                                            PrismPill(
+                                              text:
+                                                  '${(_progress * 100).round()}%',
+                                              fg: c.clay,
+                                              bg: c.clay.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      decoration: InputDecoration(
-                                        isDense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 10,
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        height: 7,
+                                        decoration: ShapeDecoration(
+                                          color: c.recessed,
+                                          shape: StadiumBorder(
+                                            side: BorderSide(
+                                              color: c.hairline.withValues(
+                                                alpha: 0.72,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        filled: true,
-                                        fillColor: c.paper,
-                                        border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          borderSide:
-                                              BorderSide(color: c.hairline),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          borderSide:
-                                              BorderSide(color: c.hairline),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween<double>(
+                                            begin: 0,
+                                            end: (_installing || _completed)
+                                                ? _progress.clamp(0.0, 1.0)
+                                                : 0.0,
+                                          ),
+                                          duration:
+                                              const Duration(milliseconds: 220),
+                                          curve: Curves.easeOutCubic,
+                                          builder: (ctx, val, _) {
+                                            return Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: FractionallySizedBox(
+                                                widthFactor: val,
+                                                heightFactor: 1.0,
+                                                child: DecoratedBox(
+                                                  decoration: ShapeDecoration(
+                                                    gradient: LinearGradient(
+                                                      colors: [
+                                                        c.clay,
+                                                        c.clayHover,
+                                                      ],
+                                                    ),
+                                                    shape:
+                                                        const StadiumBorder(),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
-                                    ),
+                                      const SizedBox(height: 13),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '便携包内核 · 支持随时迁移目录',
+                                            style: sansStyle(
+                                              c,
+                                              size: 11.5,
+                                              color: c.meta,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          PrismButton(
+                                            label: '取消',
+                                            variant: PrismBtnVariant.ghost,
+                                            onPressed: _installing
+                                                ? null
+                                                : _closeWizard,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          PrismButton(
+                                            key: const ValueKey(
+                                              'installer-submit-btn',
+                                            ),
+                                            label: _completed
+                                                ? '已完成部署'
+                                                : (_installing
+                                                    ? '正在部署...'
+                                                    : (_isUpgrade
+                                                        ? '立即覆盖升级'
+                                                        : '立即安装')),
+                                            variant: PrismBtnVariant.clay,
+                                            loading: _installing,
+                                            leading: Icon(
+                                              _completed
+                                                  ? Icons.check_circle_rounded
+                                                  : (_isUpgrade
+                                                      ? Icons
+                                                          .system_update_alt_rounded
+                                                      : Icons
+                                                          .download_done_rounded),
+                                            ),
+                                            onPressed:
+                                                _installing || _completed
+                                                    ? null
+                                                    : () => _startInstall(),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  height: 38,
-                                  child: OutlinedButton.icon(
-                                    key: const ValueKey('installer-browse-btn'),
-                                    onPressed: _installing ? null : _pickFolder,
-                                    icon: const Icon(
-                                      Icons.drive_folder_upload_rounded,
-                                      size: 16,
-                                    ),
-                                    label: const Text('浏览...'),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-
-                      const SizedBox(height: 12),
-
-                      // Options Card
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: ShapeDecoration(
-                          color: c.paper2,
-                          shape: prismSuperellipse(
-                            16,
-                            side: BorderSide(color: c.hairline),
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            _InstallerOptionSwitchRow(
-                              switchKey:
-                                  const ValueKey('installer-shortcut-switch'),
-                              icon: Icons.desktop_windows_rounded,
-                              title: '创建桌面快捷方式',
-                              subtitle: '在桌面生成 Agent MCP Console 启动图标',
-                              value: _createShortcut,
-                              enabled: !_installing,
-                              onChanged: (v) =>
-                                  setState(() => _createShortcut = v),
-                            ),
-                            Divider(height: 1, color: c.hairline),
-                            _InstallerOptionSwitchRow(
-                              switchKey:
-                                  const ValueKey('installer-launch-switch'),
-                              icon: Icons.rocket_launch_rounded,
-                              title: '安装完成后立即打开控制台',
-                              subtitle: '自动唤醒桌面图形界面并挂载后台服务',
-                              value: _launchAfter,
-                              enabled: !_installing,
-                              onChanged: (v) =>
-                                  setState(() => _launchAfter = v),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      if (_errorMsg != null) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: ShapeDecoration(
-                            color: c.danger.withValues(alpha: 0.10),
-                            shape: prismSuperellipse(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.error_outline_rounded,
-                                size: 15,
-                                color: c.danger,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _errorMsg!,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: c.danger,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      const Spacer(),
-
-                      // Progress & Primary Action Footer
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _statusLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11.8,
-                                    color: _completed ? c.clay : c.inkSoft,
-                                    fontWeight: _installing || _completed
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                              if (_installing || _completed)
-                                Text(
-                                  '${(_progress * 100).round()}%',
-                                  style: TextStyle(
-                                    fontFamily: kFontMono,
-                                    fontFamilyFallback: kMonoFallback,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.clay,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: TweenAnimationBuilder<double>(
-                              tween: Tween<double>(begin: 0, end: _progress),
-                              duration: const Duration(milliseconds: 220),
-                              curve: Curves.easeOutCubic,
-                              builder: (ctx, val, _) {
-                                return LinearProgressIndicator(
-                                  value: _installing || _completed ? val : 0.0,
-                                  minHeight: 6,
-                                  backgroundColor:
-                                      c.hairline.withValues(alpha: 0.7),
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(c.clay),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Text(
-                                '便携包内核 · 支持随时迁移目录',
-                                style: TextStyle(
-                                  fontSize: 11.3,
-                                  color: c.muted,
-                                ),
-                              ),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: _installing ? null : _closeWizard,
-                                child: const Text('取消'),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton.icon(
-                                key: const ValueKey('installer-submit-btn'),
-                                onPressed: _installing || _completed
-                                    ? null
-                                    : () => _startInstall(),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: c.clay,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 22,
-                                    vertical: 12,
-                                  ),
-                                  shape: prismSuperellipse(12),
-                                ),
-                                icon: Icon(
-                                  _completed
-                                      ? Icons.check_circle_rounded
-                                      : (_isUpgrade
-                                          ? Icons.system_update_alt_rounded
-                                          : Icons.download_done_rounded),
-                                  size: 17,
-                                ),
-                                label: Text(
-                                  _completed
-                                      ? '已完成部署'
-                                      : (_installing
-                                          ? '正在部署...'
-                                          : (_isUpgrade ? '立即覆盖升级' : '立即安装')),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13.5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
 
-          // Frosted-glass running instance confirmation overlay
+          // Concentric 28px Frosted-Glass Running Instance Confirmation Modal
           if (_pendingRunningPids != null)
             Positioned.fill(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: ColoredBox(
-                  color: Colors.black.withValues(alpha: c.isDark ? 0.55 : 0.30),
+                  color: const Color(0x59080B12),
                   child: Center(
-                    child: Container(
-                      width: 430,
-                      padding: const EdgeInsets.all(22),
-                      decoration: ShapeDecoration(
-                        color: c.paper2,
-                        shape: prismSuperellipse(
-                          20,
-                          side: BorderSide(color: c.hairline),
-                        ),
-                        shadows: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.22),
-                            blurRadius: 28,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
+                    child: CustomPaint(
+                      foregroundPainter: PrismSpecularRimPainter(
+                        radius: 28,
+                        isDark: c.isDark,
+                        intensity: c.isDark ? 0.72 : 0.90,
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: ShapeDecoration(
-                                  color: c.purpleBg,
-                                  shape: prismSuperellipse(10),
-                                ),
-                                child: Icon(
-                                  Icons.sync_rounded,
-                                  size: 18,
-                                  color: c.clay,
-                                ),
-                              ),
-                              const SizedBox(width: 11),
-                              Expanded(
-                                child: Text(
-                                  '检测到 Agent MCP 正在后台运行',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.ink,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '当前检测到运行实例（PID: ${_pendingRunningPids!.join(', ')}）。继续升级将自动平滑关闭旧进程并替换程序文件，您的配置文件、子 MCP 授权与历史日志将被完整保留。',
-                            style: TextStyle(
-                              fontSize: 12.6,
-                              height: 1.5,
-                              color: c.inkSoft,
+                      child: Container(
+                        width: 436,
+                        padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+                        decoration: ShapeDecoration(
+                          color: c.paper2,
+                          shape: prismSuperellipse(
+                            28,
+                            side: BorderSide(
+                              color: c.hairline.withValues(alpha: 0.72),
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () =>
-                                    setState(() => _pendingRunningPids = null),
-                                child: const Text('暂不升级'),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton(
-                                key: const ValueKey(
-                                  'installer-confirm-close-running',
+                          shadows: c.popoverShadow,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: ShapeDecoration(
+                                    color: c.clay.withValues(alpha: 0.12),
+                                    shape: prismSuperellipse(13),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.sync_rounded,
+                                    size: 17,
+                                    color: c.clay,
+                                  ),
                                 ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: c.clay,
-                                  foregroundColor: Colors.white,
-                                  shape: prismSuperellipse(10),
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Text(
+                                    '检测到 Agent MCP 正在后台运行',
+                                    style: serifTitleStyle(c, size: 16.5),
+                                  ),
                                 ),
-                                onPressed: () =>
-                                    _startInstall(confirmedCloseRunning: true),
-                                child: const Text('平滑关闭并升级'),
+                              ],
+                            ),
+                            const SizedBox(height: 11),
+                            Text(
+                              '当前检测到运行实例（PID: ${_pendingRunningPids!.join(', ')}）。继续升级将平滑关闭旧进程并替换程序文件，您的配置文件、子 MCP 授权与历史日志将被完整保留。',
+                              style: sansStyle(
+                                c,
+                                size: 13.0,
+                                height: 1.56,
+                                color: c.muted,
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                PrismButton(
+                                  label: '暂不升级',
+                                  compact: true,
+                                  onPressed: () => setState(
+                                    () => _pendingRunningPids = null,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                PrismButton(
+                                  key: const ValueKey(
+                                    'installer-confirm-close-running',
+                                  ),
+                                  label: '平滑关闭并升级',
+                                  compact: true,
+                                  variant: PrismBtnVariant.clay,
+                                  leading: const Icon(
+                                    Icons.system_update_alt_rounded,
+                                  ),
+                                  onPressed: () => _startInstall(
+                                    confirmedCloseRunning: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1187,175 +1324,61 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
   }
 }
 
-class _InstallerOptionSwitchRow extends StatelessWidget {
-  final Key? switchKey;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
+class _AccentDotSwatch extends StatefulWidget {
+  final PrismAccentSpec spec;
+  final bool selected;
+  final PrismPalette palette;
+  final VoidCallback onTap;
 
-  const _InstallerOptionSwitchRow({
-    this.switchKey,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.enabled,
-    required this.onChanged,
+  const _AccentDotSwatch({
+    required this.spec,
+    required this.selected,
+    required this.palette,
+    required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final c = PrismPalette.of(context);
-    return InkWell(
-      onTap: enabled ? () => onChanged(!value) : null,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
-        child: Row(
-          children: [
-            Icon(icon, size: 17, color: c.inkSoft),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12.6,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11.2,
-                      color: c.muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Transform.scale(
-              scale: 0.82,
-              child: Switch(
-                key: switchKey,
-                value: value,
-                onChanged: enabled ? onChanged : null,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  State<_AccentDotSwatch> createState() => _AccentDotSwatchState();
 }
 
-class _PrismSetupMiniMark extends StatelessWidget {
-  final Color accent;
-  final bool isDark;
-  const _PrismSetupMiniMark({required this.accent, required this.isDark});
+class _AccentDotSwatchState extends State<_AccentDotSwatch> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: ShapeDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            accent,
-            Color.lerp(accent, Colors.black, isDark ? 0.35 : 0.22)!,
-          ],
-        ),
-        shape: prismSuperellipse(6.5),
-      ),
-      child: CustomPaint(painter: _ConcentricFacetPainter()),
-    );
-  }
-}
-
-class _PrismHeroEmblem extends StatelessWidget {
-  final Color accent;
-  final bool isDark;
-  const _PrismHeroEmblem({required this.accent, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: ShapeDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            accent,
-            Color.lerp(accent, const Color(0xFF1E1B4B), isDark ? 0.45 : 0.30)!,
-          ],
-        ),
-        shape: prismSuperellipse(16),
-        shadows: [
-          BoxShadow(
-            color: accent.withValues(alpha: isDark ? 0.32 : 0.24),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+    final c = widget.palette;
+    final sz = widget.selected ? 13.5 : (_hovered ? 12.5 : 11.0);
+    return Tooltip(
+      message: widget.spec.label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: PrismMotion.editorialOut,
+            width: sz,
+            height: sz,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [widget.spec.swatchStart, widget.spec.swatchEnd],
+              ),
+              border: Border.all(
+                color: widget.selected
+                    ? c.ink
+                    : Colors.white.withValues(alpha: c.isDark ? 0.25 : 0.70),
+                width: widget.selected ? 1.5 : 1.0,
+              ),
+            ),
           ),
-        ],
+        ),
       ),
-      child: CustomPaint(painter: _ConcentricFacetPainter()),
     );
   }
-}
-
-class _ConcentricFacetPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w * 0.5;
-    final cy = h * 0.5;
-
-    final outer = Path()
-      ..moveTo(cx, h * 0.18)
-      ..lineTo(w * 0.80, cy)
-      ..lineTo(cx, h * 0.82)
-      ..lineTo(w * 0.20, cy)
-      ..close();
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.22)
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.72)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = (w * 0.042).clamp(1.0, 2.2),
-    );
-
-    final inner = Path()
-      ..moveTo(cx, h * 0.33)
-      ..lineTo(w * 0.67, cy)
-      ..lineTo(cx, h * 0.67)
-      ..lineTo(w * 0.33, cy)
-      ..close();
-    canvas.drawPath(
-      inner,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.94)
-        ..style = PaintingStyle.fill,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

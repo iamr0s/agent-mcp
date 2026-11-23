@@ -153,16 +153,23 @@ class _PrismWildcardRuleListCardState extends State<PrismWildcardRuleListCard> {
     final nonEmptyCount =
         _ctrls.map((x) => x.text.trim()).where((s) => s.isNotEmpty).length;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: ShapeDecoration(
-        color: c.paper2,
-        shape: prismSuperellipse(
-          14,
-          side: BorderSide(color: c.hairline.withValues(alpha: 0.85)),
-        ),
+    return CustomPaint(
+      foregroundPainter: PrismSpecularRimPainter(
+        radius: 20,
+        isDark: c.isDark,
+        intensity: c.isDark ? 0.68 : 0.88,
       ),
-      child: Column(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: ShapeDecoration(
+          color: c.paper2,
+          shape: prismSuperellipse(
+            20,
+            side: BorderSide(color: c.hairline.withValues(alpha: 0.65)),
+          ),
+          shadows: c.whisperShadow,
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -345,14 +352,10 @@ class _PrismWildcardRuleListCardState extends State<PrismWildcardRuleListCard> {
                           },
                         ),
                       for (final preset in widget.quickPresets)
-                        ActionChip(
-                          visualDensity: VisualDensity.compact,
-                          side: BorderSide(color: c.hairline),
-                          backgroundColor: c.paper,
-                          label: Text(
-                            '+ ${preset.$1}',
-                            style: monoStyle(c, size: 11, color: c.inkSoft),
-                          ),
+                        PrismButton(
+                          label: '+ ${preset.$1}',
+                          compact: true,
+                          variant: PrismBtnVariant.neutral,
                           onPressed: () => _addRow(preset.$2),
                         ),
                     ],
@@ -362,6 +365,7 @@ class _PrismWildcardRuleListCardState extends State<PrismWildcardRuleListCard> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -803,7 +807,7 @@ class _ClientOnboardingDialogState extends State<ClientOnboardingDialog> {
       backgroundColor: c.paper,
       elevation: 0,
       shape: prismSuperellipse(
-        26,
+        28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
       child: ConstrainedBox(
@@ -879,7 +883,7 @@ class _ClientOnboardingDialogState extends State<ClientOnboardingDialog> {
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: PrismSparkIcon(size: 26)),
                 )
               else
                 Flexible(
@@ -1052,7 +1056,7 @@ class _ConfigSnapshotDialogState extends State<ConfigSnapshotDialog> {
       backgroundColor: c.paper,
       elevation: 0,
       shape: prismSuperellipse(
-        26,
+        28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
       child: ConstrainedBox(

@@ -2219,7 +2219,7 @@ class _SubMcpPlaygroundDialogState extends State<_SubMcpPlaygroundDialog> {
       backgroundColor: c.paper,
       elevation: 0,
       shape: prismSuperellipse(
-        26,
+        28,
         side: BorderSide(color: c.hairline.withValues(alpha: 0.72)),
       ),
       child: ConstrainedBox(

@@ -1,5 +1,13 @@
 # Changelog
 
+## [v3.5.1] — 100% Authentic Prism Design System Unification Across Setup Wizard & Structured Editors
+
+- **Windows 原生安装向导（`--installer`）全量对齐主工作台同源 Prism 视觉语言**：
+  - **外框 + `24px` 超椭圆主舞台岛 + 原生标题栏**：移除平底 `Scaffold` 与原生 `IconButton`，完整复刻主界面 `c.sidebar` 建筑感外框包裹 `24px` 超椭圆舞台岛（含 `PrismSpecularRimPainter` 顶缘镜面高光与 `whisperShadow`），顶部 `44px` 拖拽栏换装真实 `PrismSparkIcon` 品牌徽标、6 色实时胶囊预览、下拉色板菜单与 Windows 11 矢量 `PrismWindowCaptionButton`（`1px` 最小化横线与红底悬停关闭叉号）。
+  - **100% 纯正 `PrismButton`、`PrismSwitch`、`PrismListGroup` 与 `14px` 内凹输入框**：彻底清除向导内全部 7 处原生 Material `FilledButton`/`OutlinedButton`/`TextButton` 与原生 `Switch`，全部替换为 `999px` `StadiumBorder` 高光回弹胶囊 `PrismButton`、`38×22` 弹簧开关 `PrismSwitch`、`22px` `PrismListGroup` + `38×38` `13px` 内凹图标槽 `PrismSettingsRow` 以及 `999px` 渐变胶囊进度槽；移除目录输入框手写的 `10px` 覆盖边框，完整恢复全局 `14px` `c.recessed` 内凹输入框（含悬停 `ringHover` 与聚焦 `1.4px` `focusRing`），并在全新安装时自动将向导所选主题色同步至主程序配置。
+  - **全量接入 `PrismSans + NotoSansSC` 同源字体栈**：清除向导内全部 16 处裸 `TextStyle(...)`，统一走 `serifTitleStyle`、`sansStyle` 与 `monoStyle`，并补齐 `buildPrismTheme` 全量 15 档 `TextTheme` 回退链，确保中英文与等宽数字 100% 锐利一致。
+- **结构化编辑组件与新增弹窗同心圆角收口**：将通配符白名单卡片升级为带 `PrismSpecularRimPainter` 镜面高光的 `20px` 超椭圆卡片，快捷预设标签由原生 `ActionChip` 替换为紧凑 `PrismButton`，并将客户端一键接入、配置快照与子 MCP 在线调试台弹窗统一对齐为 `28px` 同心圆角。
+
 ## [v3.5.0] — Native Flutter Setup Wizard, Universal Sub-MCP OAuth 2.1 Hub, Switch-Driven Wildcard Whitelists & Full-Platform Audit Upgrade
 
 - **真 Dart / Flutter 同源 Windows 安装向导（`--installer` 模式 + 极简零界面 SFX 引导壳）**：

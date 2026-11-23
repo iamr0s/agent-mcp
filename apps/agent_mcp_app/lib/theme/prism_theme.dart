@@ -761,13 +761,19 @@ ThemeData buildPrismTheme(
     fontFamilyFallback: kSansFallback,
     textTheme: TextTheme(
       displayLarge: serifTitleStyle(c, size: 30),
+      displayMedium: serifTitleStyle(c, size: 26),
+      displaySmall: serifTitleStyle(c, size: 22),
+      headlineLarge: serifTitleStyle(c, size: 24),
       headlineMedium: serifTitleStyle(c, size: 22),
+      headlineSmall: serifTitleStyle(c, size: 19),
       titleLarge: serifTitleStyle(c, size: 17.5),
       titleMedium: baseText.copyWith(fontSize: 14.5, fontWeight: FontWeight.w600),
+      titleSmall: baseText.copyWith(fontSize: 13.2, fontWeight: FontWeight.w600),
       bodyLarge: baseText.copyWith(fontSize: 14, height: 1.52),
       bodyMedium: baseText.copyWith(fontSize: 13, height: 1.48),
       bodySmall: baseText.copyWith(fontSize: 12, color: c.muted, height: 1.42),
       labelLarge: baseText.copyWith(fontSize: 12.8, fontWeight: FontWeight.w500),
+      labelMedium: baseText.copyWith(fontSize: 12.0, fontWeight: FontWeight.w500),
       labelSmall: baseText.copyWith(
         fontSize: 11.2,
         color: c.muted,
@@ -2850,13 +2856,13 @@ class PrismWindowCaptionActions extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 2),
-        _WinCaptionBtn(
+        PrismWindowCaptionButton(
           tooltip: '最小化',
           glyph: PrismCaptionGlyph.minimize,
           palette: c,
           onTap: onMinimize,
         ),
-        _WinCaptionBtn(
+        PrismWindowCaptionButton(
           tooltip: isMaximized ? '向下还原' : '最大化',
           glyph: isMaximized
               ? PrismCaptionGlyph.restore
@@ -2864,7 +2870,7 @@ class PrismWindowCaptionActions extends StatelessWidget {
           palette: c,
           onTap: onToggleMaximize,
         ),
-        _WinCaptionBtn(
+        PrismWindowCaptionButton(
           tooltip: '隐藏到系统托盘（MCP 服务继续运行）',
           glyph: PrismCaptionGlyph.close,
           isClose: true,
@@ -3011,52 +3017,59 @@ class _PinButtonState extends State<_PinButton> {
   }
 }
 
-class _WinCaptionBtn extends StatefulWidget {
+class PrismWindowCaptionButton extends StatefulWidget {
   final String tooltip;
   final PrismCaptionGlyph glyph;
   final bool isClose;
+  final bool enabled;
   final PrismPalette palette;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
-  const _WinCaptionBtn({
+  const PrismWindowCaptionButton({
+    super.key,
     required this.tooltip,
     required this.glyph,
     this.isClose = false,
+    this.enabled = true,
     required this.palette,
     required this.onTap,
   });
 
   @override
-  State<_WinCaptionBtn> createState() => _WinCaptionBtnState();
+  State<PrismWindowCaptionButton> createState() =>
+      _PrismWindowCaptionButtonState();
 }
 
-class _WinCaptionBtnState extends State<_WinCaptionBtn> {
+class _PrismWindowCaptionButtonState extends State<PrismWindowCaptionButton> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final c = widget.palette;
+    final active = widget.enabled && widget.onTap != null;
 
     Color bg = widget.isClose
         ? c.danger.withValues(alpha: 0.0)
         : c.ink.withValues(alpha: 0.0);
-    Color fg = c.inkSoft;
-    if (widget.isClose) {
-      if (_pressed) {
-        bg = c.danger.withValues(alpha: 0.85);
-        fg = Colors.white;
-      } else if (_hovered) {
-        bg = c.danger;
-        fg = Colors.white;
-      }
-    } else {
-      if (_pressed) {
-        bg = c.ink.withValues(alpha: 0.10);
-        fg = c.ink;
-      } else if (_hovered) {
-        bg = c.ink.withValues(alpha: 0.06);
-        fg = c.ink;
+    Color fg = active ? c.inkSoft : c.meta.withValues(alpha: 0.45);
+    if (active) {
+      if (widget.isClose) {
+        if (_pressed) {
+          bg = c.danger.withValues(alpha: 0.85);
+          fg = Colors.white;
+        } else if (_hovered) {
+          bg = c.danger;
+          fg = Colors.white;
+        }
+      } else {
+        if (_pressed) {
+          bg = c.ink.withValues(alpha: 0.10);
+          fg = c.ink;
+        } else if (_hovered) {
+          bg = c.ink.withValues(alpha: 0.06);
+          fg = c.ink;
+        }
       }
     }
 
@@ -3064,19 +3077,21 @@ class _WinCaptionBtnState extends State<_WinCaptionBtn> {
       message: widget.tooltip,
       waitDuration: const Duration(milliseconds: 500),
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
+        cursor: active ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: active ? (_) => setState(() => _hovered = true) : null,
         onExit: (_) => setState(() {
           _hovered = false;
           _pressed = false;
         }),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) {
-            setState(() => _pressed = false);
-            widget.onTap();
-          },
+          onTapDown: active ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: active
+              ? (_) {
+                  setState(() => _pressed = false);
+                  widget.onTap?.call();
+                }
+              : null,
           onTapCancel: () => setState(() => _pressed = false),
           child: AnimatedContainer(
             duration: PrismMotion.duration(

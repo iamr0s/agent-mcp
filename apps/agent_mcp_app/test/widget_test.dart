@@ -1188,8 +1188,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.0'), findsOneWidget);
-    await tester.tap(find.text('v3.5.0'));
+    expect(find.text('v3.5.1'), findsOneWidget);
+    await tester.tap(find.text('v3.5.1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1289,7 +1289,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.1'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2010,15 +2010,15 @@ void main() {
   });
 
   testWidgets(
-      'v3.5.0 Native Flutter --installer Wizard (660x520), Switch-Driven Wildcard Rule List Preservation & Offline Vector QR',
+      'v3.5.1 Authentic Prism --installer Wizard (700x568, Zero Raw Material Controls), Wildcard Rule List & Offline Vector QR',
       (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
 
-    // 1. True Dart / Flutter --installer Setup Wizard at exact 660x520 desktop dimensions
-    tester.view.physicalSize = const Size(660, 520);
+    // 1. True Dart / Flutter --installer Setup Wizard at exact 700x568 desktop dimensions
+    tester.view.physicalSize = const Size(700, 568);
     tester.view.devicePixelRatio = 1.0;
 
     expect(
@@ -2040,13 +2040,25 @@ void main() {
     expect(tester.takeException(), isNull);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.0'), findsOneWidget);
+    expect(find.text('v3.5.1'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-launch-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-submit-btn')), findsOneWidget);
 
-    // Toggle theme inside installer wizard -> point-of-click ripple animates cleanly with zero overflow!
+    // Strictly enforce 100% authentic Prism design system widgets — ZERO raw Material buttons or switches!
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.byType(TextButton), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.byType(PrismButton), findsWidgets);
+    expect(find.byType(PrismSwitch), findsNWidgets(2));
+    expect(find.byType(PrismListGroup), findsNWidgets(2));
+    expect(find.byType(PrismWindowCaptionButton), findsNWidgets(2));
+    expect(find.byType(PrismSparkIcon), findsNWidgets(2));
+
+    // Toggle theme inside installer wizard -> immediately switches Light <-> Dark with exact click-origin wave!
     await tester.tap(find.byKey(const ValueKey('installer-theme-toggle')));
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 60));
