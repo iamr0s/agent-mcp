@@ -1,7 +1,7 @@
 name: agent_mcp_app
 description: Anthropic Editorial-Style Desktop & Web Console for Agent MCP
 publish_to: none
-version: 2.9.0+2900
+version: 3.0.0+3000
 
 resolution: workspace
 

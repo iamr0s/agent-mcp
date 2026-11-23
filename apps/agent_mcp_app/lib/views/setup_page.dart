@@ -652,7 +652,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                             ? Icons.arrow_upward_rounded
                             : Icons.check_rounded,
                         size: 9,
-                        color: Colors.white,
+                        color: hasNewer ? c.onClay : Colors.white,
                       ),
                     ),
                   ),
@@ -2078,7 +2078,19 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('服务配置', style: serifTitleStyle(c, size: 20)),
+                              Text(
+                                'SYSTEM PREFERENCES',
+                                style: TextStyle(
+                                  fontFamily: kFontMono,
+                                  fontFamilyFallback: kMonoFallback,
+                                  fontSize: 10.2,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1.25,
+                                  color: c.meta,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text('服务配置', style: serifTitleStyle(c, size: 22)),
                               const SizedBox(height: 2),
                               Text(
                                 '按分类管理节点参数',
@@ -2199,15 +2211,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('服务配置', style: serifTitleStyle(c, size: 22)),
-                const SizedBox(height: 3),
-                Text(
-                  '轻点下方分组进入对应设置项',
-                  style: sansStyle(c, size: 12.2, color: c.muted),
+                const ClaudeEditorialPageHeader(
+                  eyebrow: 'SYSTEM PREFERENCES',
+                  title: '服务配置',
+                  subtitle: '轻点下方分组进入对应设置项',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 ClaudeListGroup(
-                  dividerIndent: 58,
+                  dividerIndent: 64,
                   children: [
                     for (var i = 0; i < navCategories.length; i++)
                       ClaudeSettingsRow(

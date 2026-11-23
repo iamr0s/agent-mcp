@@ -695,8 +695,8 @@ class LocalOAuthProvider {
     final page = '''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>$sname - 授权确认</title>
 <style>
-:root{--bg:#EAEFF7;--card:#FFFFFF;--elev:#F3F6FB;--border:#DDE4F0;--ink:#0F172A;--muted:#64748B;--clay:#4F46E5;--clay-h:#4338CA;--clay-bg:rgba(79,70,229,.10);--dot:rgba(15,23,42,.055);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(15,23,42,.12),0 2px 6px rgba(15,23,42,.04)}
-@media (prefers-color-scheme: dark){:root{--bg:#07090E;--card:#131823;--elev:#0D1119;--border:#1F2636;--ink:#F8FAFC;--muted:#8B95A8;--clay:#6366F1;--clay-h:#818CF8;--clay-bg:rgba(99,102,241,.17);--dot:rgba(248,250,252,.045);--sh:inset 0 1px 0 rgba(255,255,255,.15),0 22px 48px -10px rgba(0,0,0,.66),0 2px 8px rgba(0,0,0,.40)}}
+:root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:#141416;--clay-h:#27272A;--on-clay:#FFFFFF;--clay-bg:rgba(20,20,22,.075);--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
+@media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:#F4F4F6;--clay-h:#FFFFFF;--on-clay:#0A0A0C;--clay-bg:rgba(244,244,246,.10);--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter","PingFang SC","Microsoft YaHei UI",sans-serif;background-color:var(--bg);background-image:radial-gradient(560px 340px at 50% 25%,var(--clay-bg),transparent 70%),radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:100% 100%,22px 22px;color:var(--ink)}
 .card{width:100%;max-width:396px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px 24px;box-shadow:var(--sh);animation:rise .22s cubic-bezier(.16,1,.3,1) both}
@@ -708,9 +708,9 @@ input{width:100%;padding:10px 40px 10px 12px;background:var(--elev);color:var(--
 input:focus{border-color:var(--clay)}
 .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px;display:inline-flex}
 .eye:hover{color:var(--ink)}
-.submit{width:100%;padding:10px;background:var(--clay);color:#FFFFFF;border:0;border-radius:9.5px;font-size:13.8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
+.submit{width:100%;padding:10px;background:var(--clay);color:var(--on-clay);border:0;border-radius:9.5px;font-size:13.8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
 .submit:hover{background:var(--clay-h)}
-.spin{width:13px;height:13px;border-radius:99px;border:2px solid rgba(255,255,255,.35);border-top-color:#FFF;display:none;animation:sp .75s linear infinite}
+.spin{width:13px;height:13px;border-radius:99px;border:2px solid rgba(128,128,136,.35);border-top-color:var(--on-clay);display:none;animation:sp .75s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>

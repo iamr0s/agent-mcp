@@ -94,9 +94,15 @@ class ClaudePalette {
   /// Interactive ring border on hover
   final Color ringHover;
 
-  /// Surgical Indigo primary accent
+  /// High-contrast gallery focal accent (Deep Onyx in light / Pure Alabaster in dark)
   final Color clay;
   final Color clayHover;
+
+  /// Foreground ink guaranteed legible on solid [clay] surfaces.
+  Color get onClay =>
+      ThemeData.estimateBrightnessForColor(clay) == Brightness.light
+          ? const Color(0xFF0A0A0C)
+          : Colors.white;
 
   /// Input & keyboard focus ring
   final Color focusRing;
@@ -138,54 +144,54 @@ class ClaudePalette {
 
   static const light = ClaudePalette(
     isDark: false,
-    paper: Color(0xFFF3F6FB), // Cool porcelain canvas for crisp white card elevation
-    paper2: Color(0xFFFFFFFF), // Pure porcelain elevated card / lens surface
-    paper3: Color(0xFFE9EEF7), // Soft cool slate hover fill
-    sidebar: Color(0xFFEAEFF7), // Recessed Linear architectural outer rail
-    recessed: Color(0xFFEEF2F9), // Subtle inset input / pill well
-    ink: Color(0xFF0F172A), // Deep slate ink
-    inkSoft: Color(0xFF334155),
-    muted: Color(0xFF64748B),
-    meta: Color(0xFF94A3B8),
-    hairline: Color(0xFFDDE4F0), // Refined 1px structural hairline
-    ringHover: Color(0xFFCBD5E1),
-    clay: Color(0xFF4F46E5), // Surgical Indigo
-    clayHover: Color(0xFF4338CA),
-    focusRing: Color(0xFF4F46E5),
+    paper: Color(0xFFFAFAFB), // Pure gallery alabaster canvas
+    paper2: Color(0xFFFFFFFF), // Pure gallery white elevated surface
+    paper3: Color(0xFFF1F1F4), // Neutral tactile hover fill
+    sidebar: Color(0xFFF3F3F6), // Architectural neutral outer rail
+    recessed: Color(0xFFF4F4F6), // Sculpted inset icon & input well
+    ink: Color(0xFF111113), // Deep gallery onyx ink
+    inkSoft: Color(0xFF27272A),
+    muted: Color(0xFF71717A),
+    meta: Color(0xFFA1A1AA),
+    hairline: Color(0xFFE6E6EA), // Crisp 1px architectural hairline
+    ringHover: Color(0xFFD4D4D8),
+    clay: Color(0xFF141416), // Decisive Deep Onyx primary focal accent
+    clayHover: Color(0xFF27272A),
+    focusRing: Color(0xFF18181B),
     sage: Color(0xFF059669),
     sageBg: Color(0x1610B981),
     danger: Color(0xFFDC2626),
     dangerBg: Color(0x14EF4444),
     purple: Color(0xFF6366F1),
     purpleBg: Color(0x146366F1),
-    termBg: Color(0xFFF6F8FC),
-    termFg: Color(0xFF0F172A),
+    termBg: Color(0xFFF8F8FA),
+    termFg: Color(0xFF111113),
   );
 
   static const dark = ClaudePalette(
     isDark: true,
-    paper: Color(0xFF0B0E15), // Deep Obsidian workspace canvas
-    paper2: Color(0xFF131823), // Elevated obsidian group / lens surface
-    paper3: Color(0xFF1B2232), // Interactive slate hover fill
-    sidebar: Color(0xFF07090E), // Deep space outer architectural rail
-    recessed: Color(0xFF0D1119), // Subtle recessed input / code well
-    ink: Color(0xFFF8FAFC),
-    inkSoft: Color(0xFFCBD5E1),
-    muted: Color(0xFF8B95A8),
-    meta: Color(0xFF647084),
-    hairline: Color(0xFF1F2636), // Subtle 1px obsidian hairline
-    ringHover: Color(0xFF333E56),
-    clay: Color(0xFF6366F1), // Luminous Indigo
-    clayHover: Color(0xFF818CF8),
-    focusRing: Color(0xFF818CF8),
+    paper: Color(0xFF0A0A0C), // Deep gallery obsidian canvas
+    paper2: Color(0xFF121216), // Elevated onyx card & group surface
+    paper3: Color(0xFF1B1B21), // Tactile neutral hover fill
+    sidebar: Color(0xFF060608), // Deep space architectural rail
+    recessed: Color(0xFF0E0E12), // Sculpted inset code & icon well
+    ink: Color(0xFFFAFAFA),
+    inkSoft: Color(0xFFD4D4D8),
+    muted: Color(0xFF8E8E98),
+    meta: Color(0xFF63636E),
+    hairline: Color(0xFF222228), // Crisp 1px dark architectural hairline
+    ringHover: Color(0xFF34343E),
+    clay: Color(0xFFF4F4F6), // Luminous Alabaster primary focal accent
+    clayHover: Color(0xFFFFFFFF),
+    focusRing: Color(0xFFE4E4E7),
     sage: Color(0xFF34D399),
     sageBg: Color(0x2034D399),
     danger: Color(0xFFF87171),
     dangerBg: Color(0x20F87171),
     purple: Color(0xFFA5B4FC),
     purpleBg: Color(0x206366F1),
-    termBg: Color(0xFF0E131C),
-    termFg: Color(0xFFE2E8F0),
+    termBg: Color(0xFF0D0D11),
+    termFg: Color(0xFFECECEF),
   );
 
   static bool _dynamicEnabled = false;
@@ -274,8 +280,8 @@ class ClaudePalette {
 
   /// Translucent frosted glass tint for mobile/web floating bars & popovers.
   Color get glassBarTint => isDark
-      ? const Color(0xDC121620)
-      : const Color(0xE8F8FAFC);
+      ? const Color(0xE0121216)
+      : const Color(0xECFFFFFF);
 
   /// Solid architectural outer rail tint.
   Color get micaSidebarTint => sidebar;
@@ -283,12 +289,12 @@ class ClaudePalette {
   /// Elevated workspace island surface.
   Color get micaCanvasTint => paper;
 
-  /// Theme-adaptive code & inspector surfaces (GitHub Primer / HTTPie contrast).
+  /// Theme-adaptive code & inspector surfaces (Gallery Monochrome contrast).
   Color get codeSheet => termBg;
   Color get codeHeader =>
-      isDark ? const Color(0xFF161C28) : const Color(0xFFEAEFF7);
+      isDark ? const Color(0xFF15151B) : const Color(0xFFF2F2F5);
   Color get codeGutter =>
-      isDark ? const Color(0xFF0D1119) : const Color(0xFFEDF2F9);
+      isDark ? const Color(0xFF0B0B0F) : const Color(0xFFF4F4F7);
   Color get codeBorder => hairline;
   Color get diffDelBg =>
       isDark ? const Color(0x2EF85149) : const Color(0xFFFFEBE9);
@@ -299,37 +305,37 @@ class ClaudePalette {
   Color get diffAddFg =>
       isDark ? const Color(0xFF7EE787) : const Color(0xFF116329);
   Color get diffHunkFg =>
-      isDark ? const Color(0xFF79C0FF) : const Color(0xFF0969DA);
+      isDark ? const Color(0xFFA5B4FC) : const Color(0xFF3F3F46);
 
   /// Specular 1px highlight on floating popovers.
   Color get glassSpecular => isDark
-      ? const Color(0x1AF8FAFC)
-      : const Color(0x99FFFFFF);
+      ? const Color(0x1EFFFFFF)
+      : const Color(0xADFFFFFF);
 
-  /// Whisper-subtle dual elevation shadow (cool slate, never muddy brown).
+  /// Whisper-subtle neutral gallery elevation shadow.
   List<BoxShadow> get whisperShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x52000000),
+            color: Color(0x58000000),
             offset: Offset(0, 4),
             blurRadius: 14,
             spreadRadius: -3,
           ),
           BoxShadow(
-            color: Color(0x2E000000),
+            color: Color(0x30000000),
             offset: Offset(0, 1),
             blurRadius: 3,
           ),
         ]
       : const [
           BoxShadow(
-            color: Color(0x0C0F172A),
+            color: Color(0x0A000000),
             offset: Offset(0, 4),
-            blurRadius: 12,
+            blurRadius: 14,
             spreadRadius: -3,
           ),
           BoxShadow(
-            color: Color(0x070F172A),
+            color: Color(0x06000000),
             offset: Offset(0, 1),
             blurRadius: 2.5,
           ),
@@ -339,7 +345,7 @@ class ClaudePalette {
   List<BoxShadow> get cardHoverShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x52000000),
+            color: Color(0x58000000),
             offset: Offset(0, 6),
             blurRadius: 18,
             spreadRadius: -3,
@@ -347,37 +353,37 @@ class ClaudePalette {
         ]
       : const [
           BoxShadow(
-            color: Color(0x0D0F172A),
-            offset: Offset(0, 4),
-            blurRadius: 14,
+            color: Color(0x0E000000),
+            offset: Offset(0, 5),
+            blurRadius: 16,
             spreadRadius: -2,
           ),
         ];
 
-  /// Crisp popover / dropdown menu shadow (shadcn / Raycast elevation).
+  /// Crisp popover / dropdown menu shadow (Vercel Geist / Raycast elevation).
   List<BoxShadow> get popoverShadow => isDark
       ? const [
           BoxShadow(
-            color: Color(0x7A000000),
+            color: Color(0x80000000),
             offset: Offset(0, 10),
             blurRadius: 28,
             spreadRadius: -2,
           ),
           BoxShadow(
-            color: Color(0x3D000000),
+            color: Color(0x40000000),
             offset: Offset(0, 2),
             blurRadius: 6,
           ),
         ]
       : const [
           BoxShadow(
-            color: Color(0x1C0F172A),
-            offset: Offset(0, 10),
-            blurRadius: 26,
+            color: Color(0x18000000),
+            offset: Offset(0, 12),
+            blurRadius: 28,
             spreadRadius: -4,
           ),
           BoxShadow(
-            color: Color(0x0D0F172A),
+            color: Color(0x0A000000),
             offset: Offset(0, 2),
             blurRadius: 6,
           ),
@@ -403,7 +409,7 @@ TextStyle serifTitleStyle(
     fontWeight: effectiveWeight,
     color: color ?? c.ink,
     height: height,
-    letterSpacing: size >= 20 ? -0.35 : -0.2,
+    letterSpacing: size >= 22 ? -0.52 : (size >= 18 ? -0.35 : -0.2),
     fontFeatures: tabular ? const [ui.FontFeature.tabularFigures()] : null,
   );
 }
@@ -455,7 +461,7 @@ ThemeData buildClaudeTheme(
   final scheme = ColorScheme(
     brightness: c.isDark ? Brightness.dark : Brightness.light,
     primary: c.clay,
-    onPrimary: Colors.white,
+    onPrimary: c.onClay,
     secondary: c.sage,
     onSecondary: Colors.white,
     error: c.danger,
@@ -746,6 +752,120 @@ class ClaudeGlassBar extends StatelessWidget {
   }
 }
 
+/// Editorial Gravity Page Header (Tracked Monospace Eyebrow + Tight Display Title).
+class ClaudeEditorialPageHeader extends StatelessWidget {
+  final String eyebrow;
+  final String title;
+  final Widget? titleBadge;
+  final String? subtitle;
+  final Widget? leadingDot;
+  final Widget? trailing;
+
+  const ClaudeEditorialPageHeader({
+    super.key,
+    required this.eyebrow,
+    required this.title,
+    this.titleBadge,
+    this.subtitle,
+    this.leadingDot,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        final narrow = box.maxWidth < 540;
+        final titleSize = box.maxWidth < 430 ? 22.0 : 24.0;
+        final headerLeft = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leadingDot != null) ...[
+                  leadingDot!,
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    eyebrow.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: kFontMono,
+                      fontFamilyFallback: kMonoFallback,
+                      fontSize: 10.6,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.35,
+                      color: c.meta,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 9,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: serifTitleStyle(
+                    c,
+                    size: titleSize,
+                    weight: FontWeight.w700,
+                    height: 1.18,
+                  ),
+                ),
+                if (titleBadge != null) titleBadge!,
+              ],
+            ),
+            if (subtitle != null && subtitle!.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                subtitle!,
+                maxLines: narrow ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: sansStyle(c, size: 12.6, color: c.muted, height: 1.4),
+              ),
+            ],
+          ],
+        );
+
+        if (trailing == null) return headerLeft;
+
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              headerLeft,
+              const SizedBox(height: 12),
+              trailing!,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: headerLeft),
+            const SizedBox(width: 16),
+            trailing!,
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Linear / OrbStack De-Boxed Hairline Group Container.
 /// Replaces heavy nested cards with a crisp 12px-radius container and 1px
 /// inset row dividers ("structure felt, not seen").
@@ -907,22 +1027,34 @@ class ClaudeSettingsRow extends StatelessWidget {
             trailing != null &&
             trailing is! ClaudeSwitch &&
             trailing is! Icon;
+        final compactRow = box.maxWidth < 400;
         final labelBlock = Row(
-          crossAxisAlignment: subtitle != null && subtitle!.isNotEmpty
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (leading != null) ...[
               leading!,
-              const SizedBox(width: 11),
+              const SizedBox(width: 12),
             ] else if (icon != null) ...[
-              Padding(
-                padding: EdgeInsets.only(
-                  top: (subtitle != null && subtitle!.isNotEmpty) ? 2 : 0,
+              Container(
+                width: compactRow ? 32 : 34,
+                height: compactRow ? 32 : 34,
+                decoration: ShapeDecoration(
+                  color: c.recessed,
+                  shape: claudeSuperellipse(
+                    9.5,
+                    side: BorderSide(
+                      color: c.hairline.withValues(alpha: 0.78),
+                    ),
+                  ),
                 ),
-                child: Icon(icon, size: 16.5, color: iconColor ?? c.muted),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: compactRow ? 15.8 : 16.5,
+                  color: iconColor ?? c.inkSoft,
+                ),
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 12),
             ],
             Expanded(
               child: Column(
@@ -933,20 +1065,20 @@ class ClaudeSettingsRow extends StatelessWidget {
                     title,
                     style: sansStyle(
                       c,
-                      size: 13.2,
+                      size: 13.6,
                       weight: FontWeight.w500,
                       color: c.ink,
                     ),
                   ),
                   if (subtitle != null && subtitle!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 2.5),
                     Text(
                       subtitle!,
                       maxLines: box.maxWidth < 460 ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: sansStyle(
                         c,
-                        size: 11.6,
+                        size: 11.8,
                         color: c.muted,
                         height: 1.38,
                       ),
@@ -959,7 +1091,10 @@ class ClaudeSettingsRow extends StatelessWidget {
         );
 
         Widget content = Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11.5),
+          padding: EdgeInsets.symmetric(
+            horizontal: compactRow ? 15 : 18,
+            vertical: 13.5,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -1209,7 +1344,7 @@ class _ClaudeButtonState extends State<ClaudeButton> {
     switch (widget.variant) {
       case ClaudeBtnVariant.clay:
         bg = _hovered && !disabled ? c.clayHover : c.clay;
-        fg = Colors.white;
+        fg = c.onClay;
         border = bg;
       case ClaudeBtnVariant.ink:
         bg = _hovered && !disabled
@@ -1544,7 +1679,6 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
         foregroundPainter: ClaudeSpecularRimPainter(
           radius: 8.0,
           isDark: c.isDark,
-          accentTint: c.isDark ? c.clay : null,
           intensity: 0.9,
         ),
         child: DecoratedBox(
@@ -1554,14 +1688,14 @@ class _ClaudeSegmentedState<T> extends State<ClaudeSegmented<T>> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      c.clay.withValues(alpha: 0.22),
+                      const Color(0xFF282832),
                       c.paper3,
                     ],
                   )
                 : const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFFFFFFFF), Color(0xFFF9FBFF)],
+                    colors: [Color(0xFFFFFFFF), Color(0xFFFAFAFC)],
                   ),
             shape: claudeSuperellipse(8.0),
             shadows: [
@@ -1961,7 +2095,7 @@ class _ClaudeSwitchState extends State<ClaudeSwitch>
                         height: thumbH,
                         child: DecoratedBox(
                           decoration: ShapeDecoration(
-                            color: Colors.white,
+                            color: Color.lerp(Colors.white, c.onClay, linearPos)!,
                             shape: const StadiumBorder(),
                             shadows: [
                               BoxShadow(
@@ -2058,11 +2192,11 @@ class _ClaudeCheckToggleState extends State<ClaudeCheckToggle> {
                       child: child,
                     ),
                     child: widget.value
-                        ? const Icon(
+                        ? Icon(
                             Icons.check_rounded,
-                            key: ValueKey('checked'),
+                            key: const ValueKey('checked'),
                             size: 12.5,
-                            color: Colors.white,
+                            color: c.onClay,
                           )
                         : const SizedBox.shrink(key: ValueKey('unchecked')),
                   ),
@@ -3716,10 +3850,10 @@ class ClaudeSplitButton extends StatelessWidget {
 
     final isClay = variant == ClaudeBtnVariant.clay;
     final bg = isClay ? c.clay : c.paper2;
-    final fg = isClay ? Colors.white : c.inkSoft;
+    final fg = isClay ? c.onClay : c.inkSoft;
     final border = isClay ? c.clay : c.hairline;
     final sepColor = isClay
-        ? Colors.white.withValues(alpha: 0.24)
+        ? c.onClay.withValues(alpha: 0.22)
         : c.hairline;
 
     return DecoratedBox(

@@ -462,58 +462,51 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
               ClaudeStaggeredReveal(
                 index: 0,
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 12,
-                      runSpacing: 6,
-                      children: [
-                        Text('活动与调用流', style: serifTitleStyle(c, size: 20)),
-                        _InlineTelemetryRibbon(
-                          total: widget.events.length,
-                          toolCalls: toolCalls,
-                          errCount: errCount,
-                          avgText: avgText,
+                child: ClaudeEditorialPageHeader(
+                  eyebrow: 'LIVE INSPECTOR',
+                  leadingDot: ClaudeStatusDot(
+                    color: errCount > 0 ? c.danger : c.sage,
+                    pulsing: widget.events.isNotEmpty,
+                    size: 6.0,
+                  ),
+                  title: '活动与调用流',
+                  titleBadge: _InlineTelemetryRibbon(
+                    total: widget.events.length,
+                    toolCalls: toolCalls,
+                    errCount: errCount,
+                    avgText: avgText,
+                  ),
+                  trailing: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (canSplit)
+                        ClaudeSegmented<bool>(
+                          value: _splitView,
+                          items: const [
+                            (true, '分栏预览'),
+                            (false, '行内展开'),
+                          ],
+                          onChanged: (v) => setState(() => _splitView = v),
                         ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (canSplit)
-                          ClaudeSegmented<bool>(
-                            value: _splitView,
-                            items: const [
-                              (true, '分栏预览'),
-                              (false, '行内展开'),
-                            ],
-                            onChanged: (v) => setState(() => _splitView = v),
-                          ),
-                        ClaudeButton(
-                          label: '清空',
-                          compact: true,
-                          leading: const Icon(Icons.delete_sweep_outlined),
-                          onPressed: widget.onClear,
-                        ),
-                        ClaudeButton(
-                          label: '导出日志',
-                          compact: true,
-                          leading: const Icon(Icons.download_outlined),
-                          onPressed: widget.onExport,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ClaudeButton(
+                        label: '清空',
+                        compact: true,
+                        leading: const Icon(Icons.delete_sweep_outlined),
+                        onPressed: widget.onClear,
+                      ),
+                      ClaudeButton(
+                        label: '导出日志',
+                        compact: true,
+                        leading: const Icon(Icons.download_outlined),
+                        onPressed: widget.onExport,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               ClaudeStaggeredReveal(index: 1, child: filterBarWidget),
               const SizedBox(height: 8),
             ],
@@ -632,54 +625,47 @@ class _ActivityFeedPageState extends State<ActivityFeedPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: [
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 14,
-                        runSpacing: 6,
-                        children: [
-                          Text('活动与调用流', style: serifTitleStyle(c, size: 20)),
-                          _InlineTelemetryRibbon(
-                            total: widget.events.length,
-                            toolCalls: toolCalls,
-                            errCount: errCount,
-                            avgText: avgText,
-                          ),
-                        ],
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          ClaudeSegmented<bool>(
-                            value: _splitView,
-                            items: const [
-                              (true, '分栏预览'),
-                              (false, '行内展开'),
-                            ],
-                            onChanged: (v) => setState(() => _splitView = v),
-                          ),
-                          ClaudeButton(
-                            label: '清空',
-                            compact: true,
-                            leading: const Icon(Icons.delete_sweep_outlined),
-                            onPressed: widget.onClear,
-                          ),
-                          ClaudeButton(
-                            label: '导出日志',
-                            compact: true,
-                            leading: const Icon(Icons.download_outlined),
-                            onPressed: widget.onExport,
-                          ),
-                        ],
-                      ),
-                    ],
+                  ClaudeEditorialPageHeader(
+                    eyebrow: 'LIVE INSPECTOR',
+                    leadingDot: ClaudeStatusDot(
+                      color: errCount > 0 ? c.danger : c.sage,
+                      pulsing: widget.events.isNotEmpty,
+                      size: 6.0,
+                    ),
+                    title: '活动与调用流',
+                    titleBadge: _InlineTelemetryRibbon(
+                      total: widget.events.length,
+                      toolCalls: toolCalls,
+                      errCount: errCount,
+                      avgText: avgText,
+                    ),
+                    trailing: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ClaudeSegmented<bool>(
+                          value: _splitView,
+                          items: const [
+                            (true, '分栏预览'),
+                            (false, '行内展开'),
+                          ],
+                          onChanged: (v) => setState(() => _splitView = v),
+                        ),
+                        ClaudeButton(
+                          label: '清空',
+                          compact: true,
+                          leading: const Icon(Icons.delete_sweep_outlined),
+                          onPressed: widget.onClear,
+                        ),
+                        ClaudeButton(
+                          label: '导出日志',
+                          compact: true,
+                          leading: const Icon(Icons.download_outlined),
+                          onPressed: widget.onExport,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 11),
                   filterBarWidget,
@@ -3157,6 +3143,63 @@ class _StructuredCodeSheet extends StatefulWidget {
 class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
   bool _softWrap = false;
 
+  static final RegExp _tokenRegex = RegExp(
+    r'(//[^\n]*|#[^\n]*)'
+    r'''|('(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*")'''
+    r'|\b(import|export|library|part|class|enum|mixin|extension|extends|implements|with|final|const|var|late|required|return|async|await|yield|void|bool|int|double|num|dynamic|if|else|switch|case|default|for|in|while|do|break|continue|try|catch|finally|throw|new|this|super|true|false|null|static|override|function|def|let|interface|type|struct|impl|fn|pub|use|from|as)\b'
+    r'|(@[A-Za-z_]\w*|\b[A-Z][A-Za-z0-9_]*\b)'
+    r'|\b(\d+(?:\.\d+)?)\b',
+  );
+
+  TextSpan _buildSyntaxSpan(ClaudePalette c, String src) {
+    final baseStyle = monoStyle(c, size: 11.8, height: 1.62, color: c.termFg);
+    if (src.isEmpty || src.length > 48000) {
+      return TextSpan(text: src, style: baseStyle);
+    }
+    final commentCol = c.meta;
+    final stringCol =
+        c.isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857);
+    final keywordCol =
+        c.isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9);
+    final typeCol =
+        c.isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1);
+    final numCol =
+        c.isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309);
+
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    for (final m in _tokenRegex.allMatches(src)) {
+      if (m.start > cursor) {
+        spans.add(TextSpan(text: src.substring(cursor, m.start)));
+      }
+      Color tokenColor = c.termFg;
+      FontWeight weight = FontWeight.w400;
+      if (m.group(1) != null) {
+        tokenColor = commentCol;
+      } else if (m.group(2) != null) {
+        tokenColor = stringCol;
+      } else if (m.group(3) != null) {
+        tokenColor = keywordCol;
+        weight = FontWeight.w500;
+      } else if (m.group(4) != null) {
+        tokenColor = typeCol;
+      } else if (m.group(5) != null) {
+        tokenColor = numCol;
+      }
+      spans.add(
+        TextSpan(
+          text: m.group(0),
+          style: TextStyle(color: tokenColor, fontWeight: weight),
+        ),
+      );
+      cursor = m.end;
+    }
+    if (cursor < src.length) {
+      spans.add(TextSpan(text: src.substring(cursor)));
+    }
+    return TextSpan(style: baseStyle, children: spans);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.palette;
@@ -3181,10 +3224,9 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
         if (!isDiff) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: SelectableText(
-              cleanText,
+            child: SelectableText.rich(
+              _buildSyntaxSpan(c, cleanText),
               strutStyle: strut,
-              style: monoStyle(c, size: 11.8, height: 1.62, color: c.termFg),
             ),
           );
         }
@@ -3255,15 +3297,9 @@ class _StructuredCodeSheetState extends State<_StructuredCodeSheet> {
                           )
                         : Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: SelectableText(
-                              cleanText,
+                            child: SelectableText.rich(
+                              _buildSyntaxSpan(c, cleanText),
                               strutStyle: strut,
-                              style: monoStyle(
-                                c,
-                                size: 11.8,
-                                height: 1.62,
-                                color: c.termFg,
-                              ),
                             ),
                           ),
                   ),

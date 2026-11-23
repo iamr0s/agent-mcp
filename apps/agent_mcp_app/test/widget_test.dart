@@ -1160,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v2.9.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v3.0.0 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v2.9.0'), findsOneWidget);
-    await tester.tap(find.text('v2.9.0'));
+    expect(find.text('v3.0.0'), findsOneWidget);
+    await tester.tap(find.text('v3.0.0'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1252,9 +1252,9 @@ void main() {
       findsOneWidget,
     );
 
-    // Verify ProKit Concentric Floating Dock is inset from edges & floating above bottom (not edge-to-edge brick)
+    // Verify Centered Morphing Jewel Capsule Dock sits surrounded by generous negative space & floats above bottom
     final callFlowTabRect = tester.getRect(find.text('调用流').last);
-    expect(callFlowTabRect.left, greaterThan(16.0));
+    expect(callFlowTabRect.left, greaterThan(40.0));
     expect(callFlowTabRect.bottom, lessThan(770.0));
 
     // Navigate to ServiceSetupPage at 360px and verify Level-1 chevron does NOT wrap below title!
@@ -1263,7 +1263,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v2.9.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.0.0'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1279,7 +1279,7 @@ void main() {
     expect(prefixPillCenter.dx, greaterThan(prefixTitleCenter.dx + 60));
     expect((prefixTitleCenter.dy - prefixPillCenter.dy).abs(), lessThan(18.0));
 
-    // Switch to Exposure tab and open Share dialog via file drop -> verify 4 equal-width segments & zero right-edge overflow at 360px!
+    // Switch to Exposure tab and open Share dialog via file drop -> verify 2x2 Bento Mode Grid & zero right-edge overflow at 360px!
     backend.emitDroppedFiles([r'D:\demo\folder_share']);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -1289,6 +1289,10 @@ void main() {
       expect(rect.left, greaterThanOrEqualTo(0.0));
       expect(rect.right, lessThanOrEqualTo(360.0));
     }
+    expect(
+      tester.getRect(find.text('端口映射').last).top,
+      lessThan(tester.getRect(find.text('文件夹').last).top - 24.0),
+    );
     expect(find.text('粘贴路径'), findsOneWidget);
   });
 }

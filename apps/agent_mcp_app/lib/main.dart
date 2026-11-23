@@ -296,7 +296,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '2.9.0';
+  String _version = '3.0.0';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -481,7 +481,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '2.9.0').toString();
+      _version = (auth['version'] ?? '3.0.0').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -2079,11 +2079,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                             constraints: const BoxConstraints(maxWidth: 1320),
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
-                                isMobile ? 14.0 + safeLeft : 24.0,
+                                isMobile
+                                    ? (width < 380 ? 15.0 : 18.0) + safeLeft
+                                    : 26.0,
                                 useFloatingTopBar
                                     ? 0.0
-                                    : (isMobile ? 14.0 : 18.0),
-                                (isMobile ? 14.0 : 24.0) + safeRight,
+                                    : (isMobile ? 16.0 : 20.0),
+                                (isMobile ? (width < 380 ? 15.0 : 18.0) : 26.0) +
+                                    safeRight,
                                 0.0,
                               ),
                               child: Listener(
@@ -2310,7 +2313,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     child: Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerSignal: _handlePointerSignal,
-                      child: _MobileProKitFloatingDock(
+                      child: _MobileMorphingJewelDock(
                         selectedIndex: _tabIndex,
                         enabledSubCount: enabledSubCount,
                         activeExposeCount: activeExposeCount,
@@ -2528,10 +2531,11 @@ class _ProgressiveScrollEdgeVeil extends StatelessWidget {
   }
 }
 
-/// Linear ProKit Liquid Glass + Apple Concentric Floating Dock (R_outer 24 -> R_inner 20).
-/// Combines a single uncluttered floating squircle shell, 1px directional specular top rim,
-/// dual ambient/contact shadow, and a spring-driven luminous active lens.
-class _MobileProKitFloatingDock extends StatelessWidget {
+/// Centered Morphing Jewel Capsule Dock (Expanding Label Capsule + ProKit Liquid Glass).
+/// Floats as a compact centered stadium jewel surrounded by generous open canvas;
+/// only the active destination expands smoothly into a high-contrast Onyx/Alabaster pill
+/// with icon + label, while inactive destinations breathe as pure 20px icons.
+class _MobileMorphingJewelDock extends StatelessWidget {
   final int selectedIndex;
   final int enabledSubCount;
   final int activeExposeCount;
@@ -2541,7 +2545,7 @@ class _MobileProKitFloatingDock extends StatelessWidget {
   final double safeRight;
   final ValueChanged<int> onSelect;
 
-  const _MobileProKitFloatingDock({
+  const _MobileMorphingJewelDock({
     required this.selectedIndex,
     required this.enabledSubCount,
     this.activeExposeCount = 0,
@@ -2551,10 +2555,6 @@ class _MobileProKitFloatingDock extends StatelessWidget {
     this.safeRight = 0,
     required this.onSelect,
   });
-
-  static const double _outerRadius = 24.0;
-  static const double _innerPad = 4.0;
-  static const double _innerRadius = _outerRadius - _innerPad; // 20.0 concentric!
 
   @override
   Widget build(BuildContext context) {
@@ -2576,35 +2576,31 @@ class _MobileProKitFloatingDock extends StatelessWidget {
       (Icons.tune_outlined, Icons.tune_rounded, '服务配置', null),
     ];
 
-    final slideDur = ClaudeMotion.duration(
-      context,
-      const Duration(milliseconds: 280),
-    );
     final blurSigma = micaActive ? (kIsWeb ? 12.0 : 24.0) : 0.0;
 
     final shellShadows = c.isDark
         ? const [
             BoxShadow(
-              color: Color(0xAD000000),
-              blurRadius: 34,
+              color: Color(0xB8000000),
+              blurRadius: 36,
               spreadRadius: -4,
               offset: Offset(0, 14),
             ),
             BoxShadow(
-              color: Color(0x66000000),
+              color: Color(0x68000000),
               blurRadius: 8,
               offset: Offset(0, 3),
             ),
           ]
         : const [
             BoxShadow(
-              color: Color(0x220F172A),
-              blurRadius: 28,
+              color: Color(0x1E000000),
+              blurRadius: 32,
               spreadRadius: -6,
-              offset: Offset(0, 12),
+              offset: Offset(0, 14),
             ),
             BoxShadow(
-              color: Color(0x0F0F172A),
+              color: Color(0x0D000000),
               blurRadius: 8,
               spreadRadius: -1,
               offset: Offset(0, 3),
@@ -2616,12 +2612,12 @@ class _MobileProKitFloatingDock extends StatelessWidget {
             ? const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xCF1C2334), Color(0xE0101520)],
+                colors: [Color(0xDC1B1B22), Color(0xEB101015)],
               )
             : const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xDBFFFFFF), Color(0xC4F1F5FC)],
+                colors: [Color(0xEBFFFFFF), Color(0xD8F4F4F7)],
               ))
         : LinearGradient(
             begin: Alignment.topCenter,
@@ -2631,131 +2627,47 @@ class _MobileProKitFloatingDock extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        16 + safeLeft,
+        18 + safeLeft,
         0,
-        16 + safeRight,
-        safeBottom > 0 ? safeBottom + 6 : 12,
+        18 + safeRight,
+        safeBottom > 0 ? safeBottom + 8 : 14,
       ),
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 432),
-          child: DecoratedBox(
-            decoration: ShapeDecoration(
-              shape: claudeSuperellipse(_outerRadius),
-              shadows: shellShadows,
-            ),
-            child: ClipRSuperellipse(
-              borderRadius: BorderRadius.circular(_outerRadius),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-                child: CustomPaint(
-                  foregroundPainter: ClaudeSpecularRimPainter(
-                    radius: _outerRadius,
-                    isDark: c.isDark,
-                    intensity: 1.0,
-                  ),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(gradient: shellGradient),
-                    child: Padding(
-                      padding: const EdgeInsets.all(_innerPad),
-                      child: SizedBox(
-                        height: 50,
-                        child: LayoutBuilder(
-                          builder: (ctx, box) {
-                            final slotW = box.maxWidth / items.length;
-                            final pillLeft = selectedIndex * slotW;
-
-                            return Stack(
-                              alignment: Alignment.centerLeft,
-                              children: [
-                                AnimatedPositioned(
-                                  duration: slideDur,
-                                  curve: ClaudeMotion.snappySpring,
-                                  left: pillLeft,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: slotW,
-                                  child: CustomPaint(
-                                    foregroundPainter: ClaudeSpecularRimPainter(
-                                      radius: _innerRadius,
-                                      isDark: c.isDark,
-                                      accentTint: c.clay,
-                                      intensity: 1.0,
-                                    ),
-                                    child: DecoratedBox(
-                                      decoration: ShapeDecoration(
-                                        gradient: c.isDark
-                                            ? LinearGradient(
-                                                begin: Alignment.topCenter,
-                                                end: Alignment.bottomCenter,
-                                                colors: [
-                                                  c.clay.withValues(alpha: 0.28),
-                                                  const Color(0x6B20293E),
-                                                ],
-                                              )
-                                            : const LinearGradient(
-                                                begin: Alignment.topCenter,
-                                                end: Alignment.bottomCenter,
-                                                colors: [
-                                                  Color(0xFAFFFFFF),
-                                                  Color(0xF2F8FAFF),
-                                                ],
-                                              ),
-                                        shape: claudeSuperellipse(_innerRadius),
-                                        shadows: c.isDark
-                                            ? [
-                                                const BoxShadow(
-                                                  color: Color(0x61000000),
-                                                  blurRadius: 10,
-                                                  offset: Offset(0, 3),
-                                                ),
-                                                BoxShadow(
-                                                  color: c.clay.withValues(
-                                                    alpha: 0.16,
-                                                  ),
-                                                  blurRadius: 12,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ]
-                                            : [
-                                                const BoxShadow(
-                                                  color: Color(0x160F172A),
-                                                  blurRadius: 8,
-                                                  offset: Offset(0, 2),
-                                                ),
-                                                BoxShadow(
-                                                  color: c.clay.withValues(
-                                                    alpha: 0.08,
-                                                  ),
-                                                  blurRadius: 10,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    for (var i = 0; i < items.length; i++)
-                                      Expanded(
-                                        child: _MobileNavTabButton(
-                                          icon: selectedIndex == i
-                                              ? items[i].$2
-                                              : items[i].$1,
-                                          label: items[i].$3,
-                                          badge: items[i].$4,
-                                          active: selectedIndex == i,
-                                          onTap: () => onSelect(i),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            shape: const StadiumBorder(),
+            shadows: shellShadows,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+              child: CustomPaint(
+                foregroundPainter: ClaudeSpecularRimPainter(
+                  radius: 999,
+                  isDark: c.isDark,
+                  intensity: 1.0,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(gradient: shellGradient),
+                  child: Padding(
+                    padding: const EdgeInsets.all(5.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < items.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 4),
+                          _MobileMorphingJewelTab(
+                            icon: selectedIndex == i
+                                ? items[i].$2
+                                : items[i].$1,
+                            label: items[i].$3,
+                            badge: items[i].$4,
+                            active: selectedIndex == i,
+                            onTap: () => onSelect(i),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -2853,14 +2765,14 @@ class _MobileCollapsedRestorePillState
   }
 }
 
-class _MobileNavTabButton extends StatefulWidget {
+class _MobileMorphingJewelTab extends StatefulWidget {
   final IconData icon;
   final String label;
   final String? badge;
   final bool active;
   final VoidCallback onTap;
 
-  const _MobileNavTabButton({
+  const _MobileMorphingJewelTab({
     required this.icon,
     required this.label,
     this.badge,
@@ -2869,114 +2781,183 @@ class _MobileNavTabButton extends StatefulWidget {
   });
 
   @override
-  State<_MobileNavTabButton> createState() => _MobileNavTabButtonState();
+  State<_MobileMorphingJewelTab> createState() =>
+      _MobileMorphingJewelTabState();
 }
 
-class _MobileNavTabButtonState extends State<_MobileNavTabButton> {
+class _MobileMorphingJewelTabState extends State<_MobileMorphingJewelTab> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final c = ClaudePalette.of(context);
-    final activeColor = c.isDark ? const Color(0xFFEEF2FF) : c.clay;
-    final activeIconColor = c.isDark ? const Color(0xFFA5B4FC) : c.clay;
-    final iconColor = widget.active
-        ? activeIconColor
-        : (_hovered ? c.inkSoft : c.muted);
-    final labelColor = widget.active
-        ? activeColor
-        : (_hovered ? c.inkSoft : c.muted);
-    final scale = _pressed
-        ? 0.93
-        : (widget.active ? 1.035 : (_hovered ? 1.015 : 1.0));
+    final morphDur = ClaudeMotion.duration(
+      context,
+      const Duration(milliseconds: 280),
+    );
+    final activeBg = c.clay;
+    final activeFg = c.onClay;
+    final inactiveFg = _hovered ? c.ink : c.muted;
+    final scale = _pressed ? 0.95 : (_hovered && !widget.active ? 1.03 : 1.0);
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onTap,
-        child: SizedBox.expand(
-          child: AnimatedSlide(
-            duration: ClaudeMotion.duration(
-              context,
-              const Duration(milliseconds: 220),
-            ),
-            curve: ClaudeMotion.snappySpring,
-            offset: widget.active ? const Offset(0, -0.02) : Offset.zero,
+    return Semantics(
+      selected: widget.active,
+      button: true,
+      label: widget.label,
+      child: Tooltip(
+        message: widget.label,
+        waitDuration: const Duration(milliseconds: 420),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapUp: (_) => setState(() => _pressed = false),
+            onTapCancel: () => setState(() => _pressed = false),
+            onTap: widget.onTap,
             child: AnimatedScale(
               scale: scale,
               duration: ClaudeMotion.duration(
                 context,
                 _pressed
-                    ? const Duration(milliseconds: 80)
-                    : const Duration(milliseconds: 220),
+                    ? const Duration(milliseconds: 75)
+                    : const Duration(milliseconds: 200),
               ),
               curve:
                   _pressed ? ClaudeMotion.standard : ClaudeMotion.snappySpring,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
+              child: AnimatedContainer(
+                duration: morphDur,
+                curve: ClaudeMotion.snappySpring,
+                height: 42,
+                constraints: BoxConstraints(
+                  minWidth: widget.active ? 86 : 46,
+                ),
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.active ? 15.0 : 13.0,
+                ),
+                decoration: ShapeDecoration(
+                  color: widget.active
+                      ? activeBg
+                      : (_hovered
+                          ? c.paper3.withValues(alpha: 0.72)
+                          : activeBg.withValues(alpha: 0.0)),
+                  shape: const StadiumBorder(),
+                  shadows: widget.active
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: c.isDark ? 0.42 : 0.18,
+                            ),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: AnimatedSize(
+                  duration: morphDur,
+                  curve: ClaudeMotion.snappySpring,
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(widget.icon, size: 19.0, color: iconColor),
-                      if (widget.badge != null)
-                        Positioned(
-                          top: -5,
-                          right: -12,
-                          child: DecoratedBox(
+                      Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(
+                            widget.icon,
+                            size: widget.active ? 18.5 : 20.0,
+                            color: widget.active ? activeFg : inactiveFg,
+                          ),
+                          if (widget.badge != null && !widget.active)
+                            Positioned(
+                              top: -1.5,
+                              right: -2.5,
+                              child: Container(
+                                width: 6.5,
+                                height: 6.5,
+                                decoration: BoxDecoration(
+                                  color: c.sage,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: c.isDark
+                                        ? const Color(0xFF14141A)
+                                        : Colors.white,
+                                    width: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (!widget.active)
+                            Positioned.fill(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  widget.label,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: sansStyle(
+                                    c,
+                                    size: 10,
+                                    color: Colors.transparent,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (widget.active) ...[
+                        const SizedBox(width: 6.5),
+                        Text(
+                          widget.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: sansStyle(
+                            c,
+                            size: 12.8,
+                            weight: FontWeight.w600,
+                            color: activeFg,
+                            letterSpacing: -0.15,
+                            height: 1.1,
+                          ),
+                        ),
+                        if (widget.badge != null) ...[
+                          const SizedBox(width: 5),
+                          DecoratedBox(
                             decoration: ShapeDecoration(
-                              color: c.clay,
+                              color: activeFg.withValues(alpha: 0.16),
                               shape: const StadiumBorder(),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 4.5,
-                                vertical: 0.5,
+                                horizontal: 5.0,
+                                vertical: 1.0,
                               ),
                               child: Text(
                                 widget.badge!,
                                 style: monoStyle(
                                   c,
-                                  size: 9.0,
+                                  size: 9.5,
                                   weight: FontWeight.w700,
-                                  color: Colors.white,
-                                  height: 1.15,
+                                  color: activeFg,
+                                  height: 1.1,
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 2.5),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Text(
-                      widget.label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: sansStyle(
-                        c,
-                        size: 10.8,
-                        weight:
-                            widget.active ? FontWeight.w600 : FontWeight.w500,
-                        color: labelColor,
-                        height: 1.1,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -3165,7 +3146,7 @@ class _SidebarNavBtnState extends State<_SidebarNavBtn> {
                       style: monoStyle(
                         c,
                         size: 11,
-                        color: widget.active ? Colors.white : c.clay,
+                        color: widget.active ? c.onClay : c.clay,
                         weight: FontWeight.w600,
                       ),
                     ),

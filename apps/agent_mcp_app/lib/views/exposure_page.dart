@@ -272,113 +272,102 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text('外网映射与链接分享', style: serifTitleStyle(c, size: 20)),
-                  ClaudeActionMenuButton(
-                    label: channelPillLabel,
-                    tooltip: '查看网络通道就绪状态',
-                    minMenuWidth: 310,
-                    leading: ClaudeStatusDot(
-                      color: channelReady
-                          ? c.sage
-                          : (_enabled ? c.clay : c.meta),
-                      pulsing: channelReady,
-                      size: 6.5,
-                    ),
-                    actions: [
-                      ClaudeMenuAction(
-                        label: 'Tailscale 组网 / Funnel',
-                        subtitle: tsSummary,
-                        icon: Icons.hub_rounded,
-                        badge: !_tsEnabled
-                            ? '已关'
-                            : (tsReachable ? '在线' : '待连'),
-                        onTap: () {
-                          if (tsIps.isNotEmpty) {
-                            _copyText(
-                              tsIps.first,
-                              '已复制本机 Tailscale IP：${tsIps.first}',
-                            );
-                          } else {
-                            _doRefresh();
-                          }
-                        },
-                      ),
-                      ClaudeMenuAction(
-                        label: '网关直享通道 (/share)',
-                        subtitle: gwSummary,
-                        icon: Icons.bolt_rounded,
-                        badge: _pubBases.isNotEmpty ? '公网' : '局域网',
-                        onTap: () {
-                          if (_pubBases.isNotEmpty) {
-                            _copyText(
-                              _pubBases.first,
-                              '已复制公网网关域名：${_pubBases.first}',
-                            );
-                          }
-                        },
-                      ),
-                      ClaudeMenuAction(
-                        label: 'Cloudflared 临时隧道',
-                        subtitle: cfSummary,
-                        icon: Icons.cloud_outlined,
-                        badge: _cfInstalled ? '就绪' : '可选',
-                        onTap: _doRefresh,
-                      ),
-                      ClaudeMenuAction(
-                        label: '重新检测通道状态',
-                        icon: Icons.refresh_rounded,
-                        dividerBefore: true,
-                        onTap: _doRefresh,
-                      ),
-                    ],
-                  ),
-                ],
+          ClaudeEditorialPageHeader(
+            eyebrow: 'NETWORK & SHARE',
+            leadingDot: ClaudeStatusDot(
+              color: channelReady ? c.sage : (_enabled ? c.clay : c.meta),
+              pulsing: channelReady,
+              size: 6.0,
+            ),
+            title: '外网映射与链接分享',
+            titleBadge: ClaudeActionMenuButton(
+              label: channelPillLabel,
+              tooltip: '查看网络通道就绪状态',
+              minMenuWidth: 310,
+              leading: ClaudeStatusDot(
+                color: channelReady ? c.sage : (_enabled ? c.clay : c.meta),
+                pulsing: channelReady,
+                size: 6.5,
               ),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
+              actions: [
+                ClaudeMenuAction(
+                  label: 'Tailscale 组网 / Funnel',
+                  subtitle: tsSummary,
+                  icon: Icons.hub_rounded,
+                  badge: !_tsEnabled ? '已关' : (tsReachable ? '在线' : '待连'),
+                  onTap: () {
+                    if (tsIps.isNotEmpty) {
+                      _copyText(
+                        tsIps.first,
+                        '已复制本机 Tailscale IP：${tsIps.first}',
+                      );
+                    } else {
+                      _doRefresh();
+                    }
+                  },
+                ),
+                ClaudeMenuAction(
+                  label: '网关直享通道 (/share)',
+                  subtitle: gwSummary,
+                  icon: Icons.bolt_rounded,
+                  badge: _pubBases.isNotEmpty ? '公网' : '局域网',
+                  onTap: () {
+                    if (_pubBases.isNotEmpty) {
+                      _copyText(
+                        _pubBases.first,
+                        '已复制公网网关域名：${_pubBases.first}',
+                      );
+                    }
+                  },
+                ),
+                ClaudeMenuAction(
+                  label: 'Cloudflared 临时隧道',
+                  subtitle: cfSummary,
+                  icon: Icons.cloud_outlined,
+                  badge: _cfInstalled ? '就绪' : '可选',
+                  onTap: _doRefresh,
+                ),
+                ClaudeMenuAction(
+                  label: '重新检测通道状态',
+                  icon: Icons.refresh_rounded,
+                  dividerBefore: true,
+                  onTap: _doRefresh,
+                ),
+              ],
+            ),
+            trailing: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ClaudeButton(
+                  label: _refreshing ? '刷新中...' : '刷新',
+                  compact: true,
+                  variant: ClaudeBtnVariant.ghost,
+                  loading: _refreshing,
+                  leading: const Icon(Icons.refresh_rounded),
+                  onPressed: _doRefresh,
+                ),
+                if (items.isNotEmpty)
                   ClaudeButton(
-                    label: _refreshing ? '刷新中...' : '刷新',
+                    label: _closingAll ? '关闭中...' : '全部关闭 (${items.length})',
                     compact: true,
-                    variant: ClaudeBtnVariant.ghost,
-                    loading: _refreshing,
-                    leading: const Icon(Icons.refresh_rounded),
-                    onPressed: _doRefresh,
+                    loading: _closingAll,
+                    leading: const Icon(Icons.link_off_rounded),
+                    onPressed: _closeAll,
                   ),
-                  if (items.isNotEmpty)
-                    ClaudeButton(
-                      label: _closingAll ? '关闭中...' : '全部关闭 (${items.length})',
-                      compact: true,
-                      loading: _closingAll,
-                      leading: const Icon(Icons.link_off_rounded),
-                      onPressed: _closeAll,
-                    ),
-                  ClaudeButton(
-                    label: '新建外网分享',
-                    compact: true,
-                    variant: ClaudeBtnVariant.clay,
-                    leading: const Icon(Icons.add_link_rounded),
-                    onPressed: _enabled
-                        ? () => _openCreateDialog(initialMode: 'wizard')
-                        : null,
-                  ),
-                ],
-              ),
-            ],
+                ClaudeButton(
+                  label: '新建外网分享',
+                  compact: true,
+                  variant: ClaudeBtnVariant.clay,
+                  leading: const Icon(Icons.add_link_rounded),
+                  onPressed: _enabled
+                      ? () => _openCreateDialog(initialMode: 'wizard')
+                      : null,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           if (!_enabled) ...[
             ClaudeListGroup(
@@ -1377,28 +1366,23 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         const SizedBox(height: 8),
                       ],
                       if (!_folderStep)
-                        ClaudeSegmented<String>(
-                          expand: true,
+                        _ExposureBentoModeGrid(
                           value: _mode,
-                          items: const [
-                            ('port', '端口映射'),
-                            ('file', '单个文件'),
-                            ('folder', '文件夹'),
-                            ('site', '静态网页'),
-                          ],
                           onChanged: (v) {
                             setState(() {
                               _mode = v;
                               _error = '';
                               _editingRawPath = false;
                               if (v == 'port' &&
-                                  int.tryParse(_targetCtrl.text.trim()) == null) {
+                                  int.tryParse(_targetCtrl.text.trim()) ==
+                                      null) {
                                 _targetCtrl.text =
                                     widget.activeLocalPorts.isNotEmpty
                                         ? '${widget.activeLocalPorts.first}'
                                         : '3000';
                               } else if (v != 'port' &&
-                                  int.tryParse(_targetCtrl.text.trim()) != null) {
+                                  int.tryParse(_targetCtrl.text.trim()) !=
+                                      null) {
                                 _targetCtrl.clear();
                               }
                             });
@@ -2515,6 +2499,221 @@ class _WizardChoiceCardState extends State<_WizardChoiceCard> {
               ),
               Icon(Icons.chevron_right_rounded, size: 18, color: c.meta),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 2×2 Sculptural Bento Mode Grid for Share Creation Dialog.
+/// Eliminates cramped 4-column single-row pill clipping on narrow viewports.
+class _ExposureBentoModeGrid extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _ExposureBentoModeGrid({
+    required this.value,
+    required this.onChanged,
+  });
+
+  static const _modes = <(String, IconData, String, String)>[
+    ('port', Icons.podcasts_rounded, '端口映射', '本地 Web 与热重载'),
+    ('file', Icons.insert_drive_file_outlined, '单个文件', '流式预览与直链'),
+    ('folder', Icons.folder_open_rounded, '文件夹', '目录树浏览与下载'),
+    ('site', Icons.web_rounded, '静态网页', '独立 HTML 站点直出'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _ExposureBentoModeTile(
+                icon: _modes[0].$2,
+                title: _modes[0].$3,
+                subtitle: _modes[0].$4,
+                active: value == _modes[0].$1,
+                onTap: () => onChanged(_modes[0].$1),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ExposureBentoModeTile(
+                icon: _modes[1].$2,
+                title: _modes[1].$3,
+                subtitle: _modes[1].$4,
+                active: value == _modes[1].$1,
+                onTap: () => onChanged(_modes[1].$1),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ExposureBentoModeTile(
+                icon: _modes[2].$2,
+                title: _modes[2].$3,
+                subtitle: _modes[2].$4,
+                active: value == _modes[2].$1,
+                onTap: () => onChanged(_modes[2].$1),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ExposureBentoModeTile(
+                icon: _modes[3].$2,
+                title: _modes[3].$3,
+                subtitle: _modes[3].$4,
+                active: value == _modes[3].$1,
+                onTap: () => onChanged(_modes[3].$1),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ExposureBentoModeTile extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _ExposureBentoModeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  State<_ExposureBentoModeTile> createState() => _ExposureBentoModeTileState();
+}
+
+class _ExposureBentoModeTileState extends State<_ExposureBentoModeTile> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ClaudePalette.of(context);
+    final active = widget.active;
+    final bg = active
+        ? c.clay
+        : (_hovered ? c.paper3.withValues(alpha: 0.75) : c.paper2);
+    final titleFg = active ? c.onClay : c.ink;
+    final subFg =
+        active ? c.onClay.withValues(alpha: 0.72) : c.muted;
+    final iconFg = active ? c.onClay : c.inkSoft;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: ClaudeMotion.duration(
+            context,
+            const Duration(milliseconds: 120),
+          ),
+          curve: ClaudeMotion.snappySpring,
+          child: AnimatedContainer(
+            duration: ClaudeMotion.duration(
+              context,
+              const Duration(milliseconds: 180),
+            ),
+            curve: ClaudeMotion.editorialOut,
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9.5),
+            decoration: ShapeDecoration(
+              color: bg,
+              shape: claudeSuperellipse(
+                11.5,
+                side: BorderSide(
+                  color: active
+                      ? c.clay
+                      : (_hovered ? c.ringHover : c.hairline),
+                ),
+              ),
+              shadows: active
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: c.isDark ? 0.42 : 0.14,
+                        ),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: ShapeDecoration(
+                    color: active
+                        ? c.onClay.withValues(alpha: 0.14)
+                        : c.recessed,
+                    shape: claudeSuperellipse(8),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(widget.icon, size: 15, color: iconFg),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: sansStyle(
+                          c,
+                          size: 12.6,
+                          weight: FontWeight.w600,
+                          color: titleFg,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 1.5),
+                      Text(
+                        widget.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: sansStyle(
+                          c,
+                          size: 10.6,
+                          color: subFg,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

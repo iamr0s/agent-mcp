@@ -91,60 +91,45 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
               if (widget.topPadding > 0) SizedBox(height: widget.topPadding),
               ClaudeStaggeredReveal(
                 index: 0,
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('子 MCP 网关', style: serifTitleStyle(c, size: 20)),
-                            if (widget.servers.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              ClaudePill(
-                                text: '$enabledCount / ${widget.servers.length} 已启用',
-                                mono: false,
-                                fg: enabledCount > 0 ? c.sage : c.muted,
-                                bg: enabledCount > 0 ? c.sageBg : c.recessed,
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '挂载第三方 MCP 服务并由热驻留网关按需转发，避免客户端首轮工具表膨胀',
-                          style: sansStyle(c, size: 12.2, color: c.muted),
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ClaudeButton(
-                          label: '粘贴 JSON 导入',
-                          compact: true,
-                          leading: const Icon(Icons.data_object_rounded),
-                          onPressed: () => _openEditModal(jsonMode: true),
-                        ),
-                        ClaudeButton(
-                          label: '添加子 MCP',
-                          compact: true,
-                          leading: const Icon(Icons.add_rounded),
-                          variant: ClaudeBtnVariant.clay,
-                          onPressed: () => _openEditModal(),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: ClaudeEditorialPageHeader(
+                  eyebrow: 'SUB-MCP GATEWAY',
+                  leadingDot: ClaudeStatusDot(
+                    color: enabledCount > 0 ? c.sage : c.meta,
+                    pulsing: enabledCount > 0,
+                    size: 6.0,
+                  ),
+                  title: '子 MCP 网关',
+                  titleBadge: widget.servers.isNotEmpty
+                      ? ClaudePill(
+                          text: '$enabledCount / ${widget.servers.length} 已启用',
+                          mono: false,
+                          fg: enabledCount > 0 ? c.sage : c.muted,
+                          bg: enabledCount > 0 ? c.sageBg : c.recessed,
+                        )
+                      : null,
+                  subtitle: '挂载第三方 MCP 服务并由热驻留网关按需转发，避免客户端首轮工具表膨胀',
+                  trailing: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ClaudeButton(
+                        label: '粘贴 JSON 导入',
+                        compact: true,
+                        leading: const Icon(Icons.data_object_rounded),
+                        onPressed: () => _openEditModal(jsonMode: true),
+                      ),
+                      ClaudeButton(
+                        label: '添加子 MCP',
+                        compact: true,
+                        leading: const Icon(Icons.add_rounded),
+                        variant: ClaudeBtnVariant.clay,
+                        onPressed: () => _openEditModal(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
             ],
           ),
         ),
