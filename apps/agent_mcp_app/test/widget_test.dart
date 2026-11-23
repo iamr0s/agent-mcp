@@ -570,7 +570,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('暂无匹配的活动记录'), findsOneWidget);
 
-    // Emit discrete desktop mouse wheel down over empty feed -> hides docked bottom bar smoothly!
+    // Emit discrete desktop mouse wheel down over empty feed -> morphs docked bottom bar into compact on-screen pill!
+    final dockShell = find.byKey(const ValueKey('mobile-liquid-jade-dock'));
+    expect(tester.getSize(dockShell).width, greaterThan(300));
+    expect(tester.getSize(dockShell).height, closeTo(58.0, 0.5));
     final center = tester.getCenter(find.text('暂无匹配的活动记录'));
     final pointer = TestPointer(1, PointerDeviceKind.mouse);
     await tester.sendEventToBinding(pointer.hover(center));
@@ -578,25 +581,29 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
-    expect(tester.getCenter(find.text('调用流')).dy, greaterThan(760));
+    expect(find.text('调用流'), findsNothing);
+    expect(tester.getSize(dockShell).width, closeTo(86.0, 1.0));
+    expect(tester.getSize(dockShell).height, closeTo(26.0, 1.0));
     expect(tester.getCenter(find.byTooltip('展开导航栏')).dy, lessThan(760));
 
-    // Restore via subtle bottom pill
+    // Restore via subtle bottom pill -> springs same shell back to full 58px height!
     await tester.tap(find.byTooltip('展开导航栏'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     expect(tester.getCenter(find.text('调用流')).dy, lessThan(760));
+    expect(tester.getSize(dockShell).height, closeTo(58.0, 0.5));
 
     // Wheel down then wheel up restores chrome smoothly even when page is empty!
     await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.getCenter(find.text('调用流')).dy, greaterThan(760));
+    expect(find.text('调用流'), findsNothing);
+    expect(tester.getSize(dockShell).width, closeTo(86.0, 1.0));
 
     await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     expect(tester.getCenter(find.text('调用流')).dy, lessThan(760));
   });
@@ -1178,8 +1185,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.4.1'), findsOneWidget);
-    await tester.tap(find.text('v3.4.1'));
+    expect(find.text('v3.4.2'), findsOneWidget);
+    await tester.tap(find.text('v3.4.2'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1279,7 +1286,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.1'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.4.2'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1887,6 +1894,115 @@ void main() {
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 45));
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.4.2 Continuous Dock-to-Pill Morph Trajectory & Single-Dialog Share Wizard AnimatedSize + SharedAxis Transition',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend()
+      ..customTitleBar = false
+      ..emptyLogs = true;
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // 1. Verify mid-animation continuous width & height morph of the SAME dock shell (not two separate sliding widgets!)
+    final dockFinder = find.byKey(const ValueKey('mobile-liquid-jade-dock'));
+    final dockElemBefore = tester.element(dockFinder);
+    final sizeExpanded = tester.getSize(dockFinder);
+    expect(sizeExpanded.width, closeTo(354.0, 1.0));
+    expect(sizeExpanded.height, closeTo(58.0, 0.5));
+
+    final feedCenter = tester.getCenter(find.text('暂无匹配的活动记录'));
+    final wheel = TestPointer(9, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(wheel.hover(feedCenter));
+    await tester.sendEventToBinding(wheel.scroll(const Offset(0, 140)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    // Mid-shrink frame (80ms / 270ms): SAME element, intermediate width & intermediate height, still visible on screen!
+    expect(tester.element(dockFinder), same(dockElemBefore));
+    final sizeMidShrink = tester.getSize(dockFinder);
+    expect(sizeMidShrink.width, greaterThan(100.0));
+    expect(sizeMidShrink.width, lessThan(330.0));
+    expect(sizeMidShrink.height, greaterThan(28.0));
+    expect(sizeMidShrink.height, lessThan(55.0));
+    expect(tester.getCenter(dockFinder).dy, lessThan(844.0));
+
+    // Finish shrink -> settles at 86x26 mini indicator pill
+    await tester.pump(const Duration(milliseconds: 250));
+    final sizeCollapsed = tester.getSize(dockFinder);
+    expect(sizeCollapsed.width, closeTo(86.0, 1.0));
+    expect(sizeCollapsed.height, closeTo(26.0, 1.0));
+
+    // Tap mini pill -> mid-expand frame ALSO interpolates smoothly back out!
+    await tester.tap(find.byTooltip('展开导航栏'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final sizeMidExpand = tester.getSize(dockFinder);
+    expect(sizeMidExpand.width, greaterThan(110.0));
+    expect(sizeMidExpand.height, greaterThan(30.0));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getSize(dockFinder).height, closeTo(58.0, 0.5));
+
+    // 2. Navigate to '外网' tab -> open '新建外网分享' -> verify continuous single-dialog morph from Step 1 -> Step 2 -> Step 1
+    await tester.tap(find.text('外网').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    await tester.tap(find.text('新建外网分享'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final dialogFinder = find.byKey(const ValueKey('expose-wizard-card'));
+    final dialogElemStep1 = tester.element(dialogFinder);
+    final hStep1 = tester.getSize(dialogFinder).height;
+    expect(find.text('第 1 步 · 选择要分享的内容类型'), findsOneWidget);
+
+    // Tap '单个文件' inside Dialog -> check mid-morph at 80ms: SAME Dialog card element, intermediate interpolated height (no 1-frame snap!)
+    await tester.tap(
+      find.descendant(of: dialogFinder, matching: find.text('单个文件')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.element(dialogFinder), same(dialogElemStep1));
+    final hMidForward = tester.getSize(dialogFinder).height;
+    await tester.pump(const Duration(milliseconds: 260));
+    final hStep2 = tester.getSize(dialogFinder).height;
+    expect((hStep2 - hStep1).abs(), greaterThan(30.0));
+    if (hStep2 > hStep1) {
+      expect(hMidForward, greaterThan(hStep1 + 4.0));
+      expect(hMidForward, lessThan(hStep2 - 2.0));
+    } else {
+      expect(hMidForward, lessThan(hStep1 - 4.0));
+      expect(hMidForward, greaterThan(hStep2 + 2.0));
+    }
+
+    // Tap '更换分享类型' -> smoothly reverses back to Step 1 inside the exact same Dialog card!
+    await tester.tap(
+      find.descendant(of: dialogFinder, matching: find.text('更换分享类型')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.element(dialogFinder), same(dialogElemStep1));
+    final hMidBack = tester.getSize(dialogFinder).height;
+    if (hStep2 > hStep1) {
+      expect(hMidBack, lessThan(hStep2 - 4.0));
+      expect(hMidBack, greaterThan(hStep1 + 2.0));
+    } else {
+      expect(hMidBack, greaterThan(hStep2 + 4.0));
+      expect(hMidBack, lessThan(hStep1 - 2.0));
+    }
+    await tester.pump(const Duration(milliseconds: 260));
+    expect(tester.getSize(dialogFinder).height, closeTo(hStep1, 1.5));
     expect(tester.takeException(), isNull);
   });
 }

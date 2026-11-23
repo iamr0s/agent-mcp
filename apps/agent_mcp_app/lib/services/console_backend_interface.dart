@@ -193,7 +193,7 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.4.1';
+  String get currentAppVersion => '3.4.2';
   bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;

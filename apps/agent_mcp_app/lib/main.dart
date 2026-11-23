@@ -504,7 +504,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.4.1').toString();
+      _version = (auth['version'] ?? '3.4.2').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -2561,6 +2561,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
           ),
           if (useFloatingTopBar && safeTop > 0)
             Positioned(
+              key: const ValueKey('shell-top-status-scrim'),
               top: 0,
               left: 0,
               right: 0,
@@ -2589,6 +2590,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           if (!showTopChrome)
             Positioned(
+              key: const ValueKey('shell-top-hover-sensor'),
               top: 0,
               left: 0,
               right: 0,
@@ -2604,6 +2606,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           if (useFloatingTopBar)
             Positioned(
+              key: const ValueKey('shell-floating-header'),
               top: 0,
               left: 0,
               right: 0,
@@ -2630,6 +2633,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           if (isMobile)
             Positioned(
+              key: const ValueKey('shell-mobile-bottom-veil'),
               left: 0,
               right: 0,
               bottom: 0,
@@ -2648,69 +2652,33 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ),
           if (isMobile)
             Positioned(
+              key: const ValueKey('shell-mobile-dock-slot'),
               left: 0,
               right: 0,
               bottom: 0,
               child: RepaintBoundary(
-                child: AnimatedSlide(
-                  duration: chromeDur,
-                  curve: PrismMotion.editorialOut,
-                  offset: _chromeVisible ? Offset.zero : const Offset(0, 1.24),
-                  child: AnimatedOpacity(
-                    duration: chromeDur,
-                    curve: PrismMotion.editorialOut,
-                    opacity: _chromeVisible ? 1.0 : 0.0,
-                    child: IgnorePointer(
-                      ignoring: !_chromeVisible,
-                      child: Listener(
-                        behavior: HitTestBehavior.translucent,
-                        onPointerSignal: _handlePointerSignal,
-                        child: _MobileMorphingJewelDock(
-                          selectedIndex: _tabIndex,
-                          enabledSubCount: enabledSubCount,
-                          activeExposeCount: activeExposeCount,
-                          micaActive: micaActive,
-                          safeBottom: safeBottom,
-                          safeLeft: safeLeft,
-                          safeRight: safeRight,
-                          onSelect: _selectTab,
-                          onReselectActive: _handleReselectActiveTab,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (isMobile)
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.only(bottom: 8),
-                  child: AnimatedSlide(
-                    duration: chromeDur,
-                    curve: PrismMotion.editorialOut,
-                    offset:
-                        _chromeVisible ? const Offset(0, 1.6) : Offset.zero,
-                    child: AnimatedOpacity(
-                      duration: chromeDur,
-                      curve: PrismMotion.editorialOut,
-                      opacity: _chromeVisible ? 0.0 : 1.0,
-                      child: IgnorePointer(
-                        ignoring: _chromeVisible,
-                        child: _MobileCollapsedRestorePill(
-                          onRestore: () => _setChromeVisibleManual(true),
-                        ),
-                      ),
-                    ),
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerSignal: _handlePointerSignal,
+                  child: _MobileMorphingJewelDock(
+                    selectedIndex: _tabIndex,
+                    enabledSubCount: enabledSubCount,
+                    activeExposeCount: activeExposeCount,
+                    micaActive: micaActive,
+                    collapsed: !_chromeVisible,
+                    safeBottom: safeBottom,
+                    safeLeft: safeLeft,
+                    safeRight: safeRight,
+                    onSelect: _selectTab,
+                    onReselectActive: _handleReselectActiveTab,
+                    onRestore: () => _setChromeVisibleManual(true),
                   ),
                 ),
               ),
             ),
           if (widget.onGlobalToast == null)
             Positioned(
+              key: const ValueKey('shell-toast-slot'),
               right: isMobile ? 16 : 24,
               left: isMobile ? 16 : null,
               bottom: isMobile ? (86 + safeBottom) : 44,
@@ -2898,22 +2866,26 @@ class _MobileMorphingJewelDock extends StatefulWidget {
   final int enabledSubCount;
   final int activeExposeCount;
   final bool micaActive;
+  final bool collapsed;
   final double safeBottom;
   final double safeLeft;
   final double safeRight;
   final ValueChanged<int> onSelect;
   final VoidCallback? onReselectActive;
+  final VoidCallback? onRestore;
 
   const _MobileMorphingJewelDock({
     required this.selectedIndex,
     required this.enabledSubCount,
     this.activeExposeCount = 0,
     required this.micaActive,
+    this.collapsed = false,
     this.safeBottom = 0,
     this.safeLeft = 0,
     this.safeRight = 0,
     required this.onSelect,
     this.onReselectActive,
+    this.onRestore,
   });
 
   @override
@@ -2922,8 +2894,9 @@ class _MobileMorphingJewelDock extends StatefulWidget {
 }
 
 class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final Ticker _ticker;
+  late final AnimationController _collapseCtrl;
   Duration? _lastTickElapsed;
 
   late double _lensSlotPos;
@@ -2937,6 +2910,8 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
   double _fingerNormX = 0.5;
   bool _isPressing = false;
   bool _isDragging = false;
+  bool _pillHovered = false;
+  bool _pillPressed = false;
   int _lastHoverReportedIdx = 0;
 
   @override
@@ -2945,12 +2920,42 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
     _lensSlotPos = widget.selectedIndex.toDouble();
     _targetSlotPos = _lensSlotPos;
     _lastHoverReportedIdx = widget.selectedIndex;
+    _collapseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+      value: widget.collapsed ? 1.0 : 0.0,
+    );
     _ticker = createTicker(_onTick);
   }
 
   @override
   void didUpdateWidget(covariant _MobileMorphingJewelDock oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.collapsed != widget.collapsed) {
+      _isDragging = false;
+      _isPressing = false;
+      _pillPressed = false;
+      _liftTarget = 0.0;
+      if (PrismMotion.reduceMotion(context)) {
+        _collapseCtrl.value = widget.collapsed ? 1.0 : 0.0;
+      } else if (widget.collapsed) {
+        unawaited(
+          _collapseCtrl.animateTo(
+            1.0,
+            duration: const Duration(milliseconds: 270),
+            curve: PrismMotion.editorialOut,
+          ),
+        );
+      } else {
+        unawaited(
+          _collapseCtrl.animateBack(
+            0.0,
+            duration: const Duration(milliseconds: 320),
+            curve: PrismMotion.snappySpring,
+          ),
+        );
+      }
+    }
     if (oldWidget.selectedIndex != widget.selectedIndex && !_isDragging) {
       _targetSlotPos = widget.selectedIndex.toDouble();
       _lastHoverReportedIdx = widget.selectedIndex;
@@ -3048,6 +3053,7 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
 
   @override
   void dispose() {
+    _collapseCtrl.dispose();
     _ticker.dispose();
     super.dispose();
   }
@@ -3128,221 +3134,466 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
             colors: [c.paper2, c.isDark ? c.paper : c.recessed],
           );
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        18 + widget.safeLeft,
-        0,
-        18 + widget.safeRight,
-        widget.safeBottom > 0 ? widget.safeBottom + 8 : 14,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: LayoutBuilder(
-            builder: (ctx, box) {
-              final barWidth = box.maxWidth.isFinite ? box.maxWidth : 324.0;
-              final innerWidth = math.max(160.0, barWidth - 8.0);
-              final slotWidth = innerWidth / 4.0;
+    final miniShadows = c.isDark
+        ? const [
+            BoxShadow(
+              color: Color(0x78000000),
+              blurRadius: 14,
+              spreadRadius: -2,
+              offset: Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ]
+        : const [
+            BoxShadow(
+              color: Color(0x180F172A),
+              blurRadius: 14,
+              spreadRadius: -2,
+              offset: Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Color(0x0A0F172A),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ];
 
-              final speedStretch =
-                  (_lensVel.abs() * 0.012).clamp(0.0, 0.09);
-              final endcapProximity = math.max(
-                (0.35 - _lensSlotPos).clamp(0.0, 0.35) / 0.35,
-                (_lensSlotPos - 2.65).clamp(0.0, 0.35) / 0.35,
-              );
-              final safeLiftScale = 1.0 + 0.075 * tLift * (1.0 - 0.7 * endcapProximity);
-              final lensScaleX =
-                  safeLiftScale * (1.0 + speedStretch * (1.0 - endcapProximity));
-              final lensScaleY =
-                  safeLiftScale * (1.0 - 0.35 * speedStretch);
-              final lensTilt = (_lensVel * 0.0032).clamp(-0.042, 0.042);
-              final lensLiftDy = -1.5 * tLift;
-              final barScale = 1.0 + 0.022 * tLift;
+    return AnimatedBuilder(
+      animation: _collapseCtrl,
+      builder: (context, _) {
+        final cProg = _collapseCtrl.value.clamp(0.0, 1.0);
+        final isCollapsedMode = cProg > 0.52;
+        final expandedBottom =
+            widget.safeBottom > 0 ? widget.safeBottom + 8.0 : 14.0;
+        final collapsedBottom =
+            widget.safeBottom > 0 ? widget.safeBottom + 6.0 : 8.0;
+        final curBottom = lerpDouble(expandedBottom, collapsedBottom, cProg)!;
+        final effectiveShadows =
+            BoxShadow.lerpList(shellShadows, miniShadows, cProg) ?? shellShadows;
 
-              return Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (ev) {
-                  _isPressing = true;
-                  _fingerNormX =
-                      (ev.localPosition.dx / barWidth).clamp(0.04, 0.96);
-                  if (!PrismMotion.reduceMotion(context)) {
-                    _liftTarget = 1.0;
-                    _ensureTicker();
-                  } else {
-                    setState(() => _liftVal = 1.0);
-                  }
-                },
-                onPointerUp: (_) {
-                  if (!_isDragging) {
-                    _isPressing = false;
-                    _liftTarget = 0.0;
-                    if (PrismMotion.reduceMotion(context)) {
-                      setState(() => _liftVal = 0.0);
-                    } else {
-                      _ensureTicker();
-                    }
-                  }
-                },
-                onPointerCancel: (_) {
-                  if (!_isDragging) {
-                    _isPressing = false;
-                    _liftTarget = 0.0;
-                    if (PrismMotion.reduceMotion(context)) {
-                      setState(() => _liftVal = 0.0);
-                    } else {
-                      _ensureTicker();
-                    }
-                  }
-                },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragStart: (details) {
-                    _isDragging = true;
-                    _isPressing = true;
-                    _liftTarget = 1.0;
-                    _lastHoverReportedIdx = widget.selectedIndex;
-                    _updateDragLocalDx(
-                      details.localPosition.dx,
-                      innerWidth,
-                      barWidth,
-                    );
-                  },
-                  onHorizontalDragUpdate: (details) {
-                    if (!_isDragging) return;
-                    _updateDragLocalDx(
-                      details.localPosition.dx,
-                      innerWidth,
-                      barWidth,
-                    );
-                  },
-                  onHorizontalDragEnd: (_) {
-                    if (!_isDragging) return;
-                    _isDragging = false;
-                    _isPressing = false;
-                    _liftTarget = 0.0;
-                    final snappedIdx = _targetSlotPos.round().clamp(0, 3);
-                    _targetSlotPos = snappedIdx.toDouble();
-                    _lastHoverReportedIdx = snappedIdx;
-                    if (PrismMotion.reduceMotion(context)) {
-                      _lensSlotPos = _targetSlotPos;
-                      _liftVal = 0.0;
-                      setState(() {});
-                    } else {
-                      _ensureTicker();
-                    }
-                    if (snappedIdx != widget.selectedIndex) {
-                      widget.onSelect(snappedIdx);
-                    }
-                  },
-                  onHorizontalDragCancel: () {
-                    if (!_isDragging) return;
-                    _isDragging = false;
-                    _isPressing = false;
-                    _liftTarget = 0.0;
-                    _targetSlotPos = widget.selectedIndex.toDouble();
-                    _ensureTicker();
-                  },
-                  child: Transform.scale(
-                    scale: barScale,
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            18 + widget.safeLeft,
+            0,
+            18 + widget.safeRight,
+            curBottom,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: LayoutBuilder(
+                builder: (ctx, box) {
+                  final barWidth =
+                      box.maxWidth.isFinite ? box.maxWidth : 324.0;
+                  final innerWidth = math.max(160.0, barWidth - 8.0);
+                  final slotWidth = innerWidth / 4.0;
+
+                  const miniWidth = 86.0;
+                  const miniHeight = 26.0;
+                  final morphWidth = lerpDouble(barWidth, miniWidth, cProg)!;
+                  final morphHeight = lerpDouble(58.0, miniHeight, cProg)!;
+
+                  final speedStretch =
+                      (_lensVel.abs() * 0.012).clamp(0.0, 0.09);
+                  final endcapProximity = math.max(
+                    (0.35 - _lensSlotPos).clamp(0.0, 0.35) / 0.35,
+                    (_lensSlotPos - 2.65).clamp(0.0, 0.35) / 0.35,
+                  );
+                  final safeLiftScale =
+                      1.0 + 0.075 * tLift * (1.0 - 0.7 * endcapProximity);
+                  final lensScaleX = safeLiftScale *
+                      (1.0 + speedStretch * (1.0 - endcapProximity));
+                  final lensScaleY = safeLiftScale * (1.0 - 0.35 * speedStretch);
+                  final lensTilt = (_lensVel * 0.0032).clamp(-0.042, 0.042);
+                  final lensLiftDy = -1.5 * tLift;
+                  final expandedScale = 1.0 + 0.022 * tLift;
+                  final pillScale =
+                      _pillPressed ? 0.92 : (_pillHovered ? 1.04 : 1.0);
+                  final barScale =
+                      lerpDouble(expandedScale, pillScale, cProg)!;
+
+                  final curLensLeft = lerpDouble(
+                    4.0 + _lensSlotPos * slotWidth,
+                    3.0,
+                    cProg,
+                  )!;
+                  final curLensTop = lerpDouble(4.0, 3.0, cProg)!;
+                  final curLensW = lerpDouble(
+                    slotWidth,
+                    math.max(24.0, morphWidth - 6.0),
+                    cProg,
+                  )!;
+                  final curLensH = lerpDouble(
+                    50.0,
+                    math.max(14.0, morphHeight - 6.0),
+                    cProg,
+                  )!;
+                  final curLensOpacity = lerpDouble(
+                    1.0,
+                    c.isDark ? 0.62 : 0.76,
+                    cProg,
+                  )!;
+
+                  final tabOpacity = (1.0 - cProg * 2.25).clamp(0.0, 1.0);
+                  final tabScale = lerpDouble(1.0, 0.72, cProg)!;
+                  final miniOpacity = ((cProg - 0.30) / 0.70).clamp(0.0, 1.0);
+                  final miniScale = lerpDouble(
+                    0.76,
+                    1.0,
+                    Curves.easeOut.transform(miniOpacity),
+                  )!;
+
+                  return Align(
                     alignment: Alignment.bottomCenter,
-                    child: DecoratedBox(
-                      key: const ValueKey('mobile-liquid-jade-dock'),
-                      decoration: ShapeDecoration(
-                        shape: const StadiumBorder(),
-                        shadows: shellShadows,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(
-                            sigmaX: blurSigma,
-                            sigmaY: blurSigma,
-                          ),
-                          child: CustomPaint(
-                            foregroundPainter: PrismSpecularRimPainter(
-                              radius: 999,
-                              isDark: c.isDark,
-                              accentTint: c.navTint,
-                              intensity: 0.86 + 0.14 * tLift,
+                    heightFactor: 1.0,
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (ev) {
+                        if (isCollapsedMode) return;
+                        _isPressing = true;
+                        _fingerNormX =
+                            (ev.localPosition.dx / barWidth).clamp(0.04, 0.96);
+                        if (!PrismMotion.reduceMotion(context)) {
+                          _liftTarget = 1.0;
+                          _ensureTicker();
+                        } else {
+                          setState(() => _liftVal = 1.0);
+                        }
+                      },
+                      onPointerUp: (_) {
+                        if (!_isDragging && !isCollapsedMode) {
+                          _isPressing = false;
+                          _liftTarget = 0.0;
+                          if (PrismMotion.reduceMotion(context)) {
+                            setState(() => _liftVal = 0.0);
+                          } else {
+                            _ensureTicker();
+                          }
+                        }
+                      },
+                      onPointerCancel: (_) {
+                        if (!_isDragging && !isCollapsedMode) {
+                          _isPressing = false;
+                          _liftTarget = 0.0;
+                          if (PrismMotion.reduceMotion(context)) {
+                            setState(() => _liftVal = 0.0);
+                          } else {
+                            _ensureTicker();
+                          }
+                        }
+                      },
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragStart: isCollapsedMode
+                            ? null
+                            : (details) {
+                                _isDragging = true;
+                                _isPressing = true;
+                                _liftTarget = 1.0;
+                                _lastHoverReportedIdx = widget.selectedIndex;
+                                _updateDragLocalDx(
+                                  details.localPosition.dx,
+                                  innerWidth,
+                                  barWidth,
+                                );
+                              },
+                        onHorizontalDragUpdate: isCollapsedMode
+                            ? null
+                            : (details) {
+                                if (!_isDragging) return;
+                                _updateDragLocalDx(
+                                  details.localPosition.dx,
+                                  innerWidth,
+                                  barWidth,
+                                );
+                              },
+                        onHorizontalDragEnd: isCollapsedMode
+                            ? null
+                            : (_) {
+                                if (!_isDragging) return;
+                                _isDragging = false;
+                                _isPressing = false;
+                                _liftTarget = 0.0;
+                                final snappedIdx =
+                                    _targetSlotPos.round().clamp(0, 3);
+                                _targetSlotPos = snappedIdx.toDouble();
+                                _lastHoverReportedIdx = snappedIdx;
+                                if (PrismMotion.reduceMotion(context)) {
+                                  _lensSlotPos = _targetSlotPos;
+                                  _liftVal = 0.0;
+                                  setState(() {});
+                                } else {
+                                  _ensureTicker();
+                                }
+                                if (snappedIdx != widget.selectedIndex) {
+                                  widget.onSelect(snappedIdx);
+                                }
+                              },
+                        onHorizontalDragCancel: isCollapsedMode
+                            ? null
+                            : () {
+                                if (!_isDragging) return;
+                                _isDragging = false;
+                                _isPressing = false;
+                                _liftTarget = 0.0;
+                                _targetSlotPos =
+                                    widget.selectedIndex.toDouble();
+                                _ensureTicker();
+                              },
+                        onVerticalDragEnd: isCollapsedMode
+                            ? (details) {
+                                if ((details.primaryVelocity ?? 0.0) < -90.0) {
+                                  widget.onRestore?.call();
+                                }
+                              }
+                            : null,
+                        child: Transform.scale(
+                          scale: barScale,
+                          alignment: Alignment.bottomCenter,
+                          child: DecoratedBox(
+                            key: const ValueKey('mobile-liquid-jade-dock'),
+                            decoration: ShapeDecoration(
+                              shape: const StadiumBorder(),
+                              shadows: effectiveShadows,
                             ),
-                            child: DecoratedBox(
-                              decoration:
-                                  BoxDecoration(gradient: baseTrayGradient),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: tLift > 0.005
-                                      ? RadialGradient(
-                                          center: Alignment(
-                                            _fingerNormX * 2.0 - 1.0,
-                                            0.0,
-                                          ),
-                                          radius: 1.25,
-                                          colors: [
-                                            c.navTint.withValues(
-                                              alpha: (c.isDark ? 0.24 : 0.18) *
-                                                  tLift,
-                                            ),
-                                            c.navTint.withValues(alpha: 0.0),
-                                          ],
-                                        )
-                                      : null,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: blurSigma,
+                                  sigmaY: blurSigma,
                                 ),
-                                child: SizedBox(
-                                  height: 58,
-                                  width: barWidth,
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      // Single continuous sliding + finger-following Jade Lens Pill
-                                      Positioned(
-                                        left: 4.0 + _lensSlotPos * slotWidth,
-                                        top: 4.0,
-                                        width: slotWidth,
-                                        height: 50.0,
-                                        child: IgnorePointer(
-                                          child: Transform.translate(
-                                            offset: Offset(0.0, lensLiftDy),
-                                            child: Transform.rotate(
-                                              angle: lensTilt,
-                                              child: Transform.scale(
-                                                scaleX: lensScaleX,
-                                                scaleY: lensScaleY,
-                                                child: _LiquidJadeLensPill(
-                                                  key: const ValueKey(
-                                                    'mobile-liquid-jade-lens',
+                                child: CustomPaint(
+                                  foregroundPainter: PrismSpecularRimPainter(
+                                    radius: 999,
+                                    isDark: c.isDark,
+                                    accentTint: c.navTint,
+                                    intensity: 0.86 + 0.14 * tLift,
+                                  ),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: baseTrayGradient,
+                                    ),
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: tLift > 0.005 && cProg < 0.5
+                                            ? RadialGradient(
+                                                center: Alignment(
+                                                  _fingerNormX * 2.0 - 1.0,
+                                                  0.0,
+                                                ),
+                                                radius: 1.25,
+                                                colors: [
+                                                  c.navTint.withValues(
+                                                    alpha: (c.isDark
+                                                            ? 0.24
+                                                            : 0.18) *
+                                                        tLift *
+                                                        (1.0 - cProg * 2.0)
+                                                            .clamp(0.0, 1.0),
                                                   ),
-                                                  palette: c,
-                                                  liftProgress: tLift,
+                                                  c.navTint
+                                                      .withValues(alpha: 0.0),
+                                                ],
+                                              )
+                                            : null,
+                                      ),
+                                      child: SizedBox(
+                                        height: morphHeight,
+                                        width: morphWidth,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            // 1. Continuous Jade Lens Pill (converges from active tab into mini-pill jewel core)
+                                            Positioned(
+                                              left: curLensLeft,
+                                              top: curLensTop,
+                                              width: curLensW,
+                                              height: curLensH,
+                                              child: IgnorePointer(
+                                                child: Opacity(
+                                                  opacity: curLensOpacity,
+                                                  child: Transform.translate(
+                                                    offset: Offset(
+                                                      0.0,
+                                                      lensLiftDy *
+                                                          (1.0 - cProg),
+                                                    ),
+                                                    child: Transform.rotate(
+                                                      angle: lensTilt *
+                                                          (1.0 - cProg),
+                                                      child: Transform.scale(
+                                                        scaleX: lerpDouble(
+                                                          lensScaleX,
+                                                          1.0,
+                                                          cProg,
+                                                        )!,
+                                                        scaleY: lerpDouble(
+                                                          lensScaleY,
+                                                          1.0,
+                                                          cProg,
+                                                        )!,
+                                                        child:
+                                                            _LiquidJadeLensPill(
+                                                          key: const ValueKey(
+                                                            'mobile-liquid-jade-lens',
+                                                          ),
+                                                          palette: c,
+                                                          liftProgress: tLift *
+                                                              (1.0 - cProg),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                      ),
-                                      // 4 Equal-Width Tab Slots with +16% Gaussian Proximity Magnification
-                                      Positioned.fill(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(4.0),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              for (var i = 0;
-                                                  i < items.length;
-                                                  i++)
-                                                Expanded(
-                                                  child: _buildLensSlot(
-                                                    c: c,
-                                                    index: i,
-                                                    item: items[i],
-                                                    tLift: tLift,
+                                            // 2. 4 Equal-Width Tab Slots (compresses smoothly inward without layout squish)
+                                            Offstage(
+                                              offstage: cProg > 0.92,
+                                              child: IgnorePointer(
+                                                ignoring: isCollapsedMode,
+                                                child: Opacity(
+                                                  opacity: tabOpacity,
+                                                  child: OverflowBox(
+                                                    alignment: Alignment.center,
+                                                    minWidth: barWidth,
+                                                    maxWidth: barWidth,
+                                                    minHeight: 58.0,
+                                                    maxHeight: 58.0,
+                                                    child: Transform.scale(
+                                                      scale: tabScale,
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                          4.0,
+                                                        ),
+                                                        child: Row(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .stretch,
+                                                          children: [
+                                                            for (var i = 0;
+                                                                i <
+                                                                    items
+                                                                        .length;
+                                                                i++)
+                                                              Expanded(
+                                                                child:
+                                                                    _buildLensSlot(
+                                                                  c: c,
+                                                                  index: i,
+                                                                  item:
+                                                                      items[i],
+                                                                  tLift: tLift,
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
-                                            ],
-                                          ),
+                                              ),
+                                            ),
+                                            // 3. Collapsed Mini Indicator Handle (materializes inside the exact same morphed capsule)
+                                            Offstage(
+                                              offstage: cProg < 0.14,
+                                              child: IgnorePointer(
+                                                ignoring: !isCollapsedMode,
+                                                child: Tooltip(
+                                                  message: '展开导航栏',
+                                                  waitDuration: const Duration(
+                                                    milliseconds: 350,
+                                                  ),
+                                                  child: MouseRegion(
+                                                    cursor: SystemMouseCursors
+                                                        .click,
+                                                    onEnter: (_) => setState(
+                                                      () => _pillHovered = true,
+                                                    ),
+                                                    onExit: (_) => setState(() {
+                                                      _pillHovered = false;
+                                                      _pillPressed = false;
+                                                    }),
+                                                    child: GestureDetector(
+                                                      behavior: HitTestBehavior
+                                                          .opaque,
+                                                      onTapDown: (_) =>
+                                                          setState(
+                                                        () =>
+                                                            _pillPressed = true,
+                                                      ),
+                                                      onTapUp: (_) => setState(
+                                                        () => _pillPressed =
+                                                            false,
+                                                      ),
+                                                      onTapCancel: () =>
+                                                          setState(
+                                                        () => _pillPressed =
+                                                            false,
+                                                      ),
+                                                      onTap: widget.onRestore,
+                                                      child: SizedBox.expand(
+                                                        child: Center(
+                                                          child: Opacity(
+                                                            opacity:
+                                                                miniOpacity,
+                                                            child:
+                                                                Transform.scale(
+                                                              scale: miniScale,
+                                                              child: Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .min,
+                                                                children: [
+                                                                  Container(
+                                                                    width: 20,
+                                                                    height: 3.2,
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: _pillHovered
+                                                                          ? c.clay
+                                                                          : c.navActiveIcon
+                                                                              .withValues(
+                                                                              alpha: 0.84,
+                                                                            ),
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                        99,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 4,
+                                                                  ),
+                                                                  Icon(
+                                                                    Icons
+                                                                        .keyboard_arrow_up_rounded,
+                                                                    size: 15,
+                                                                    color: _pillHovered
+                                                                        ? c.clay
+                                                                        : c.navActiveIcon,
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3351,13 +3602,13 @@ class _MobileMorphingJewelDockState extends State<_MobileMorphingJewelDock>
                         ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -3636,91 +3887,6 @@ class _LiquidJadeCabochonRimPainter extends CustomPainter {
       old.isDark != isDark ||
       old.sage != sage ||
       (old.liftProgress - liftProgress).abs() > 0.005;
-}
-
-class _MobileCollapsedRestorePill extends StatefulWidget {
-  final VoidCallback onRestore;
-
-  const _MobileCollapsedRestorePill({required this.onRestore});
-
-  @override
-  State<_MobileCollapsedRestorePill> createState() =>
-      _MobileCollapsedRestorePillState();
-}
-
-class _MobileCollapsedRestorePillState
-    extends State<_MobileCollapsedRestorePill> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = PrismPalette.of(context);
-    return Tooltip(
-      message: '展开导航栏',
-      waitDuration: const Duration(milliseconds: 350),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() {
-          _hovered = false;
-          _pressed = false;
-        }),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) => setState(() => _pressed = false),
-          onTapCancel: () => setState(() => _pressed = false),
-          onTap: widget.onRestore,
-          child: AnimatedScale(
-            scale: _pressed ? 0.92 : (_hovered ? 1.04 : 1.0),
-            duration: PrismMotion.duration(
-              context,
-              const Duration(milliseconds: 130),
-            ),
-            curve: PrismMotion.editorialOut,
-            child: PrismGlassBar(
-              blurSigma: 16,
-              borderRadius: 99,
-              tintColor: c.isDark
-                  ? const Color(0xD8181A20)
-                  : const Color(0xE8FFFFFF),
-              border: Border.all(
-                color: _hovered ? c.ringHover : c.hairline,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: c.isDark ? 0.34 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 20,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: _hovered ? c.clay : c.muted.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    size: 15,
-                    color: _hovered ? c.clay : c.muted,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _SidebarNavGroup extends StatelessWidget {

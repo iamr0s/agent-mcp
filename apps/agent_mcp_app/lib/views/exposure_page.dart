@@ -1016,6 +1016,62 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   late bool _inStep1 = widget.initialMode == 'wizard' &&
       (widget.initialTarget == null || widget.initialTarget!.trim().isEmpty);
   bool _folderStep = false;
+  bool _stepReverse = false;
+  bool _modeReverse = false;
+
+  static const List<String> _modeOrder = <String>[
+    'port',
+    'file',
+    'folder',
+    'site',
+  ];
+
+  void _enterStep2({required String mode, required bool folderStep}) {
+    setState(() {
+      _stepReverse = false;
+      _mode = mode;
+      _folderStep = folderStep;
+      _inStep1 = false;
+      _error = '';
+      if (mode == 'port' && int.tryParse(_targetCtrl.text.trim()) == null) {
+        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
+            ? '${widget.activeLocalPorts.first}'
+            : '3000';
+      } else if (mode != 'port' &&
+          int.tryParse(_targetCtrl.text.trim()) != null) {
+        _targetCtrl.clear();
+      }
+    });
+  }
+
+  void _backToStep1() {
+    setState(() {
+      _stepReverse = true;
+      _inStep1 = true;
+      _error = '';
+    });
+  }
+
+  void _switchMode(String nextMode) {
+    if (_mode == nextMode) return;
+    final oldIdx = _modeOrder.indexOf(_mode);
+    final newIdx = _modeOrder.indexOf(nextMode);
+    setState(() {
+      _modeReverse = oldIdx != -1 && newIdx != -1 ? newIdx < oldIdx : false;
+      _mode = nextMode;
+      _error = '';
+      _editingRawPath = false;
+      if (nextMode == 'port' &&
+          int.tryParse(_targetCtrl.text.trim()) == null) {
+        _targetCtrl.text = widget.activeLocalPorts.isNotEmpty
+            ? '${widget.activeLocalPorts.first}'
+            : '3000';
+      } else if (nextMode != 'port' &&
+          int.tryParse(_targetCtrl.text.trim()) != null) {
+        _targetCtrl.clear();
+      }
+    });
+  }
   late final TextEditingController _targetCtrl = TextEditingController(
     text: (widget.initialTarget != null &&
             widget.initialTarget!.trim().isNotEmpty)
@@ -1209,10 +1265,11 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         canPop: _inStep1 || widget.initialMode != 'wizard',
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && mounted) {
-            setState(() => _inStep1 = true);
+            _backToStep1();
           }
         },
         child: ConstrainedBox(
+        key: const ValueKey('expose-wizard-card'),
         constraints: const BoxConstraints(maxWidth: 600, maxHeight: 740),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1249,176 +1306,191 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
             ),
             Divider(color: c.hairline, height: 1),
             Flexible(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 18 : 22,
-                  16,
-                  compact ? 18 : 22,
-                  16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_inStep1) ...[
-                      Text(
-                        '第 1 步 · 选择要分享的内容类型',
-                        style: sansStyle(
-                          c,
-                          size: 13,
-                          weight: FontWeight.w600,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _WizardChoiceCard(
-                        icon: Icons.insert_drive_file_outlined,
-                        title: '单个文件',
-                        subtitle: '视频流式播放、PDF / 图片直接预览、APK 或安装包高速直下',
-                        onTap: () => setState(() {
-                          _mode = 'file';
-                          _folderStep = false;
-                          _inStep1 = false;
-                        }),
-                      ),
-                      const SizedBox(height: 8),
-                      _WizardChoiceCard(
-                        icon: Icons.folder_open_rounded,
-                        title: '文件夹 / 静态网站',
-                        subtitle: '下一步选择作为「文件夹目录共享」或「静态网站目录」发布',
-                        onTap: () => setState(() {
-                          _mode = 'folder';
-                          _folderStep = true;
-                          _inStep1 = false;
-                        }),
-                      ),
-                      const SizedBox(height: 8),
-                      _WizardChoiceCard(
-                        icon: Icons.podcasts_rounded,
-                        title: '本地端口转发',
-                        subtitle: '把本机 :3000 / :5173 等 Web 服务与 WebSocket 实时映射出去',
-                        onTap: () => setState(() {
-                          _mode = 'port';
-                          _folderStep = false;
-                          _inStep1 = false;
-                          if (_targetCtrl.text.trim().isEmpty) {
-                            _targetCtrl.text =
-                                widget.activeLocalPorts.isNotEmpty
-                                    ? '${widget.activeLocalPorts.first}'
-                                    : '3000';
-                          }
-                        }),
-                      ),
-                    ] else ...[
-                      if (_folderStep) ...[
-                        Row(
-                          children: [
-                            PrismButton(
-                              label: '更换类型',
-                              compact: true,
-                              variant: PrismBtnVariant.ghost,
-                              leading: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                size: 13,
-                              ),
-                              onPressed: () => setState(() => _inStep1 = true),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '第 2 步 · 选择文件夹分享方式',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: sansStyle(
-                                  c,
-                                  size: 13,
-                                  weight: FontWeight.w600,
-                                  color: c.ink,
+              child: ClipRect(
+                child: AnimatedSize(
+                  duration: PrismMotion.duration(
+                    context,
+                    const Duration(milliseconds: 260),
+                  ),
+                  curve: PrismMotion.editorialOut,
+                  alignment: Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 18 : 22,
+                      16,
+                      compact ? 18 : 22,
+                      16,
+                    ),
+                    child: PrismSharedAxisSwitcher(
+                      axis: Axis.horizontal,
+                      reverse: _stepReverse,
+                      duration: const Duration(milliseconds: 230),
+                      distance: 26.0,
+                      child: _inStep1
+                          ? Column(
+                              key: const ValueKey('expose-wizard-step1'),
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '第 1 步 · 选择要分享的内容类型',
+                                  style: sansStyle(
+                                    c,
+                                    size: 13,
+                                    weight: FontWeight.w600,
+                                    color: c.ink,
+                                  ),
                                 ),
+                                const SizedBox(height: 10),
+                                _WizardChoiceCard(
+                                  icon: Icons.insert_drive_file_outlined,
+                                  title: '单个文件',
+                                  subtitle:
+                                      '视频流式播放、PDF / 图片直接预览、APK 或安装包高速直下',
+                                  onTap: () => _enterStep2(
+                                    mode: 'file',
+                                    folderStep: false,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _WizardChoiceCard(
+                                  icon: Icons.folder_open_rounded,
+                                  title: '文件夹 / 静态网站',
+                                  subtitle:
+                                      '下一步选择作为「文件夹目录共享」或「静态网站目录」发布',
+                                  onTap: () => _enterStep2(
+                                    mode: 'folder',
+                                    folderStep: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _WizardChoiceCard(
+                                  icon: Icons.podcasts_rounded,
+                                  title: '本地端口转发',
+                                  subtitle:
+                                      '把本机 :3000 / :5173 等 Web 服务与 WebSocket 实时映射出去',
+                                  onTap: () => _enterStep2(
+                                    mode: 'port',
+                                    folderStep: false,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              key: ValueKey(
+                                'expose-wizard-step2-${_folderStep ? "folder" : "main"}',
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _FolderKindChip(
-                                icon: Icons.folder_shared_outlined,
-                                title: '文件夹目录共享',
-                                subtitle: '列表浏览与文件下载',
-                                active: _mode == 'folder',
-                                onTap: () => setState(() => _mode = 'folder'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _FolderKindChip(
-                                icon: Icons.web_rounded,
-                                title: '静态网站目录',
-                                subtitle: '直接作为网页运行',
-                                active: _mode == 'site',
-                                onTap: () => setState(() => _mode = 'site'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ] else if (widget.initialMode == 'wizard') ...[
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: PrismButton(
-                            label: '更换分享类型',
-                            compact: true,
-                            variant: PrismBtnVariant.ghost,
-                            leading: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              size: 13,
-                            ),
-                            onPressed: () => setState(() => _inStep1 = true),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (!_folderStep)
-                        _ExposureBentoModeGrid(
-                          value: _mode,
-                          onChanged: (v) {
-                            setState(() {
-                              _mode = v;
-                              _error = '';
-                              _editingRawPath = false;
-                              if (v == 'port' &&
-                                  int.tryParse(_targetCtrl.text.trim()) ==
-                                      null) {
-                                _targetCtrl.text =
-                                    widget.activeLocalPorts.isNotEmpty
-                                        ? '${widget.activeLocalPorts.first}'
-                                        : '3000';
-                              } else if (v != 'port' &&
-                                  int.tryParse(_targetCtrl.text.trim()) !=
-                                      null) {
-                                _targetCtrl.clear();
-                              }
-                            });
-                          },
-                        ),
-                      if (!_folderStep) const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: ShapeDecoration(
-                          color: c.paper2,
-                          shape: prismSuperellipse(
-                            20,
-                            side: BorderSide(
-                              color: c.hairline.withValues(alpha: 0.65),
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_folderStep) ...[
+                                  Row(
+                                    children: [
+                                      PrismButton(
+                                        label: '更换类型',
+                                        compact: true,
+                                        variant: PrismBtnVariant.ghost,
+                                        leading: const Icon(
+                                          Icons.arrow_back_ios_new_rounded,
+                                          size: 13,
+                                        ),
+                                        onPressed: _backToStep1,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '第 2 步 · 选择文件夹分享方式',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: sansStyle(
+                                            c,
+                                            size: 13,
+                                            weight: FontWeight.w600,
+                                            color: c.ink,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _FolderKindChip(
+                                          icon: Icons.folder_shared_outlined,
+                                          title: '文件夹目录共享',
+                                          subtitle: '列表浏览与文件下载',
+                                          active: _mode == 'folder',
+                                          onTap: () => _switchMode('folder'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _FolderKindChip(
+                                          icon: Icons.web_rounded,
+                                          title: '静态网站目录',
+                                          subtitle: '直接作为网页运行',
+                                          active: _mode == 'site',
+                                          onTap: () => _switchMode('site'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                ] else if (widget.initialMode == 'wizard') ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: PrismButton(
+                                      label: '更换分享类型',
+                                      compact: true,
+                                      variant: PrismBtnVariant.ghost,
+                                      leading: const Icon(
+                                        Icons.arrow_back_ios_new_rounded,
+                                        size: 13,
+                                      ),
+                                      onPressed: _backToStep1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                                if (!_folderStep)
+                                  _ExposureBentoModeGrid(
+                                    value: _mode,
+                                    onChanged: _switchMode,
+                                  ),
+                                if (!_folderStep) const SizedBox(height: 12),
+                                ClipRect(
+                                  child: AnimatedSize(
+                                    duration: PrismMotion.duration(
+                                      context,
+                                      const Duration(milliseconds: 200),
+                                    ),
+                                    curve: PrismMotion.editorialOut,
+                                    alignment: Alignment.topCenter,
+                                    child: PrismSharedAxisSwitcher(
+                                      axis: Axis.vertical,
+                                      reverse: _modeReverse,
+                                      duration:
+                                          const Duration(milliseconds: 180),
+                                      distance: 10.0,
+                                      child: Container(
+                                        key: ValueKey('expose-target-$_mode'),
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(15),
+                                        decoration: ShapeDecoration(
+                                          color: c.paper2,
+                                          shape: prismSuperellipse(
+                                            20,
+                                            side: BorderSide(
+                                              color: c.hairline
+                                                  .withValues(alpha: 0.65),
+                                            ),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
                             if (_mode == 'port') ...[
                               Row(
                                 children: [
@@ -1722,7 +1794,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                       PrismListGroup(
                         children: [
                           PrismSettingsRow(
@@ -1906,8 +1981,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                           style: sansStyle(c, size: 12, color: c.danger),
                         ),
                       ],
-                    ],
-                  ],
+                              ],
+                            ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1930,17 +2007,45 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                         ? null
                         : () => Navigator.of(context).pop(),
                   ),
-                  if (!_inStep1) ...[
-                    const SizedBox(width: 8),
-                    PrismButton(
-                      label: _submitting ? '正在生成链接...' : '生成分享链接',
-                      compact: true,
-                      loading: _submitting,
-                      variant: PrismBtnVariant.clay,
-                      leading: const Icon(Icons.link_rounded),
-                      onPressed: _submit,
+                  AnimatedSize(
+                    duration: PrismMotion.duration(
+                      context,
+                      const Duration(milliseconds: 230),
                     ),
-                  ],
+                    curve: PrismMotion.editorialOut,
+                    alignment: Alignment.centerRight,
+                    child: AnimatedSwitcher(
+                      duration: PrismMotion.duration(
+                        context,
+                        const Duration(milliseconds: 210),
+                      ),
+                      switchInCurve: PrismMotion.editorialOut,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: ScaleTransition(
+                          scale: Tween<double>(begin: 0.92, end: 1.0)
+                              .animate(anim),
+                          child: child,
+                        ),
+                      ),
+                      child: _inStep1
+                          ? const SizedBox.shrink(key: ValueKey('no-submit'))
+                          : Padding(
+                              key: const ValueKey('has-submit'),
+                              padding: const EdgeInsets.only(left: 8),
+                              child: PrismButton(
+                                label:
+                                    _submitting ? '正在生成链接...' : '生成分享链接',
+                                compact: true,
+                                loading: _submitting,
+                                variant: PrismBtnVariant.clay,
+                                leading: const Icon(Icons.link_rounded),
+                                onPressed: _submit,
+                              ),
+                            ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2461,67 +2566,84 @@ class _WizardChoiceCard extends StatefulWidget {
 
 class _WizardChoiceCardState extends State<_WizardChoiceCard> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final c = PrismPalette.of(context);
+    final activeHighlight = _hovered || _pressed;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-          decoration: ShapeDecoration(
-            color: _hovered
-                ? c.clay.withValues(alpha: c.isDark ? 0.14 : 0.06)
-                : c.paper2,
-            shape: prismSuperellipse(
-              20,
-              side: BorderSide(
-                color: _hovered
-                    ? c.clay.withValues(alpha: 0.45)
-                    : c.hairline.withValues(alpha: 0.65),
+        child: AnimatedScale(
+          scale: _pressed ? 0.975 : 1.0,
+          duration: PrismMotion.duration(
+            context,
+            const Duration(milliseconds: 120),
+          ),
+          curve: PrismMotion.snappySpring,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+            decoration: ShapeDecoration(
+              color: activeHighlight
+                  ? c.clay.withValues(alpha: c.isDark ? 0.16 : 0.08)
+                  : c.paper2,
+              shape: prismSuperellipse(
+                20,
+                side: BorderSide(
+                  color: activeHighlight
+                      ? c.clay.withValues(alpha: 0.48)
+                      : c.hairline.withValues(alpha: 0.65),
+                ),
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: ShapeDecoration(
-                  color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
-                  shape: prismSuperellipse(13.5),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: ShapeDecoration(
+                    color: c.clay.withValues(alpha: c.isDark ? 0.18 : 0.10),
+                    shape: prismSuperellipse(13.5),
+                  ),
+                  child: Icon(widget.icon, size: 18.5, color: c.clay),
                 ),
-                child: Icon(widget.icon, size: 18.5, color: c.clay),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: sansStyle(
-                        c,
-                        size: 13.8,
-                        weight: FontWeight.w600,
-                        color: c.ink,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: sansStyle(
+                          c,
+                          size: 13.8,
+                          weight: FontWeight.w600,
+                          color: c.ink,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.subtitle,
-                      style: sansStyle(c, size: 11.8, color: c.muted),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle,
+                        style: sansStyle(c, size: 11.8, color: c.muted),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, size: 18, color: c.meta),
-            ],
+                Icon(Icons.chevron_right_rounded, size: 18, color: c.meta),
+              ],
+            ),
           ),
         ),
       ),
