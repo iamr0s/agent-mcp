@@ -298,7 +298,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _checkingAuth = true;
   bool _authenticated = false;
   String _serverName = 'Agent MCP';
-  String _version = '3.2.0';
+  String _version = '3.2.1';
   bool _dashboardMode = false;
 
   int _tabIndex = 0; // 0: Activity, 1: Sub-MCP, 2: Setup
@@ -485,7 +485,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.2.0').toString();
+      _version = (auth['version'] ?? '3.2.1').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -873,6 +873,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   bool _chromeVisible = true;
   double _scrollAccum = 0.0;
 
+  bool get _isNarrowMobileShell {
+    final w = MediaQuery.maybeSizeOf(context)?.width;
+    return w != null && w < 700;
+  }
+
   void _setChromeVisible(bool visible) {
     if (_chromeVisible == visible) return;
     setState(() => _chromeVisible = visible);
@@ -886,7 +891,14 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
   }
 
   void _applyScrollDelta(double delta, {double? pixels}) {
-    if (pixels != null && pixels <= 8 && delta < -1.5) {
+    if (!_isNarrowMobileShell) {
+      if (!_chromeVisible) {
+        _scrollAccum = 0.0;
+        _setChromeVisible(true);
+      }
+      return;
+    }
+    if (pixels != null && pixels <= 6 && delta < -2.0) {
       _scrollAccum = 0.0;
       _setChromeVisible(true);
       return;
@@ -896,33 +908,39 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       _scrollAccum = 0.0;
     }
     _scrollAccum += delta;
-    if (_scrollAccum > 14) {
+    if (_scrollAccum > 26.0) {
       _scrollAccum = 0.0;
       _setChromeVisible(false);
-    } else if (_scrollAccum < -6) {
+    } else if (_scrollAccum < -18.0) {
       _scrollAccum = 0.0;
       _setChromeVisible(true);
     }
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
+    if (!_isNarrowMobileShell) return;
     if (event is PointerScrollEvent) {
-      // Captures mouse wheel scroll even when page is empty (maxScrollExtent == 0).
+      // Captures mouse wheel scroll on narrow mobile viewports even when empty.
       _applyScrollDelta(event.scrollDelta.dy);
     }
   }
 
   void _handlePanZoomUpdate(PointerPanZoomUpdateEvent event) {
-    // Captures Windows Precision Touchpad two-finger swipe even when empty.
+    if (!_isNarrowMobileShell) return;
+    // Captures Windows Precision Touchpad two-finger swipe on narrow viewports.
     if (event.panDelta.dy.abs() > 0.5) {
       _applyScrollDelta(-event.panDelta.dy);
     }
   }
 
   bool _handleShellScroll(ScrollNotification n) {
+    if (!_isNarrowMobileShell) return false;
     if (n.metrics.axis != Axis.vertical) return false;
     if (n is ScrollUpdateNotification) {
       final delta = n.scrollDelta ?? 0.0;
+      if (n.dragDetails == null && delta.abs() < 4.0) {
+        return false;
+      }
       // Ignore ballistic elastic bounce-back after releasing overscroll on empty/short pages.
       final isBallisticOverscrollReturn = n.dragDetails == null &&
           (n.metrics.outOfRange ||
@@ -1634,10 +1652,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
       context,
       const Duration(milliseconds: 220),
     );
-    // Floating immersive header on Android & Web so scrolling content invades
-    // right behind the frosted glass header, status bar, and camera cutout!
+    // Floating immersive header on Android & Web; on Desktop (>= 700px) and
+    // native custom-title-bar windows, keep top header 100% pinned with zero
+    // layout height or padding mutation during scroll.
     final useFloatingTopBar = isMobile || !widget.backend.hasCustomTitleBar;
-    final hideTopOnScroll = true;
+    final hideTopOnScroll = isMobile && !widget.backend.hasCustomTitleBar;
     final showTopChrome = !hideTopOnScroll || _chromeVisible;
     final pageTopInset = useFloatingTopBar
         ? (46.0 + safeTop + (isMobile ? 14.0 : 22.0))
@@ -1780,19 +1799,11 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
           Column(
             children: [
               if (!useFloatingTopBar)
-                AnimatedContainer(
-                  duration: chromeDur,
-                  curve: ClaudeMotion.editorialOut,
-                  height: showTopChrome ? 44.0 : 0.0,
-                  clipBehavior: Clip.hardEdge,
-                  decoration: BoxDecoration(color: c.sidebar),
-                  child: SingleChildScrollView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: _buildEditorialHeaderBar(
-                      c,
-                      winState: winState,
-                      micaActive: micaActive,
-                    ),
+                RepaintBoundary(
+                  child: _buildEditorialHeaderBar(
+                    c,
+                    winState: winState,
+                    micaActive: micaActive,
                   ),
                 ),
               Expanded(
@@ -1808,15 +1819,12 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                           final labelOpacity =
                               ((t - 0.48) / 0.52).clamp(0.0, 1.0);
                           final hPad = lerpDouble(9, 12, t)!;
-                          final sidebarTopOffset = useFloatingTopBar
-                              ? (showTopChrome ? 46.0 + safeTop : safeTop)
-                              : 0.0;
+                          final sidebarTopOffset =
+                              useFloatingTopBar ? (46.0 + safeTop) : 0.0;
                           final nodes = widget.backend.savedNodes;
                           final activeNode = widget.backend.activeNode;
 
-                          return AnimatedContainer(
-                            duration: chromeDur,
-                            curve: ClaudeMotion.editorialOut,
+                          return Container(
                             width: w + safeLeft,
                             padding: EdgeInsets.fromLTRB(
                               hPad + safeLeft,
@@ -2226,12 +2234,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                     Expanded(
                       child: Container(
                         margin: !isMobile
-                            ? EdgeInsets.fromLTRB(
-                                0,
-                                (!useFloatingTopBar && !showTopChrome) ? 8 : 2,
-                                10,
-                                6,
-                              )
+                            ? const EdgeInsets.fromLTRB(0, 2, 10, 6)
                             : EdgeInsets.zero,
                         clipBehavior: !isMobile ? Clip.antiAlias : Clip.none,
                         decoration: !isMobile
@@ -2430,20 +2433,22 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: AnimatedSlide(
-                duration: chromeDur,
-                curve: ClaudeMotion.editorialOut,
-                offset: showTopChrome ? Offset.zero : const Offset(0, -1.08),
-                child: AnimatedOpacity(
+              child: RepaintBoundary(
+                child: AnimatedSlide(
                   duration: chromeDur,
                   curve: ClaudeMotion.editorialOut,
-                  opacity: showTopChrome ? 1.0 : 0.0,
-                  child: IgnorePointer(
-                    ignoring: !showTopChrome,
-                    child: _buildEditorialHeaderBar(
-                      c,
-                      winState: winState,
-                      micaActive: micaActive,
+                  offset: showTopChrome ? Offset.zero : const Offset(0, -1.08),
+                  child: AnimatedOpacity(
+                    duration: chromeDur,
+                    curve: ClaudeMotion.editorialOut,
+                    opacity: showTopChrome ? 1.0 : 0.0,
+                    child: IgnorePointer(
+                      ignoring: !showTopChrome,
+                      child: _buildEditorialHeaderBar(
+                        c,
+                        winState: winState,
+                        micaActive: micaActive,
+                      ),
                     ),
                   ),
                 ),
@@ -2472,29 +2477,31 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
               left: 0,
               right: 0,
               bottom: 0,
-              child: AnimatedSlide(
-                duration: chromeDur,
-                curve: ClaudeMotion.editorialOut,
-                offset: _chromeVisible ? Offset.zero : const Offset(0, 1.24),
-                child: AnimatedOpacity(
+              child: RepaintBoundary(
+                child: AnimatedSlide(
                   duration: chromeDur,
                   curve: ClaudeMotion.editorialOut,
-                  opacity: _chromeVisible ? 1.0 : 0.0,
-                  child: IgnorePointer(
-                    ignoring: !_chromeVisible,
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerSignal: _handlePointerSignal,
-                      child: _MobileMorphingJewelDock(
-                        selectedIndex: _tabIndex,
-                        enabledSubCount: enabledSubCount,
-                        activeExposeCount: activeExposeCount,
-                        micaActive: micaActive,
-                        safeBottom: safeBottom,
-                        safeLeft: safeLeft,
-                        safeRight: safeRight,
-                        onSelect: _selectTab,
-                        onReselectActive: _handleReselectActiveTab,
+                  offset: _chromeVisible ? Offset.zero : const Offset(0, 1.24),
+                  child: AnimatedOpacity(
+                    duration: chromeDur,
+                    curve: ClaudeMotion.editorialOut,
+                    opacity: _chromeVisible ? 1.0 : 0.0,
+                    child: IgnorePointer(
+                      ignoring: !_chromeVisible,
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerSignal: _handlePointerSignal,
+                        child: _MobileMorphingJewelDock(
+                          selectedIndex: _tabIndex,
+                          enabledSubCount: enabledSubCount,
+                          activeExposeCount: activeExposeCount,
+                          micaActive: micaActive,
+                          safeBottom: safeBottom,
+                          safeLeft: safeLeft,
+                          safeRight: safeRight,
+                          onSelect: _selectTab,
+                          onReselectActive: _handleReselectActiveTab,
+                        ),
                       ),
                     ),
                   ),

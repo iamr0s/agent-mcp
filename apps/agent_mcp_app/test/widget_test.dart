@@ -1160,10 +1160,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     expect(tester.takeException(), isNull);
 
-    // 1. Sidebar exposes un-hidden v3.2.0 About & Update entry directly on main shell
+    // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.2.0'), findsOneWidget);
-    await tester.tap(find.text('v3.2.0'));
+    expect(find.text('v3.2.1'), findsOneWidget);
+    await tester.tap(find.text('v3.2.1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1263,7 +1263,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.2.0'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.2.1'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -1491,5 +1491,66 @@ void main() {
       shareShape.borderRadius,
       equals(BorderRadius.circular(28)),
     );
+  });
+
+  testWidgets(
+      'v3.2.1 Desktop Zero-Jitter Scroll: top header, sidebar, and 24px gallery stage never collapse or shift on wheel/drag scroll',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 820);
+    tester.view.devicePixelRatio = 1.0;
+
+    final backend = _FakeConsoleBackend();
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Switch to ServiceSetupPage ('服务配置' -> 'all' so content scrolls vertically)
+    await tester.tap(find.text('服务配置').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('全部展开'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final cmdBtnBefore = tester.getRect(find.text('Ctrl K'));
+    final sidebarNavBefore = tester.getRect(find.text('关于与更新').first);
+    final setupRailBefore = tester.getRect(find.text('基础与外观').first);
+
+    // Emit downward & upward mouse wheel scrolls across multiple frames
+    final scrollTarget = tester.getCenter(find.text('基础服务与全局密码'));
+    final pointer = TestPointer(7, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(scrollTarget));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 240)));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(tester.getRect(find.text('Ctrl K')), equals(cmdBtnBefore));
+      expect(
+        tester.getRect(find.text('关于与更新').first),
+        equals(sidebarNavBefore),
+      );
+      expect(
+        tester.getRect(find.text('基础与外观').first),
+        equals(setupRailBefore),
+      );
+    }
+
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -240)));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(tester.getRect(find.text('Ctrl K')), equals(cmdBtnBefore));
+      expect(
+        tester.getRect(find.text('关于与更新').first),
+        equals(sidebarNavBefore),
+      );
+      expect(
+        tester.getRect(find.text('基础与外观').first),
+        equals(setupRailBefore),
+      );
+    }
+    expect(tester.takeException(), isNull);
   });
 }

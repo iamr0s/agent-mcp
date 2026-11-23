@@ -191,7 +191,7 @@ abstract class ConsoleBackend {
   Future<Map<String, dynamic>> getAndroidDynamicColors() async => const {'supported': false};
   bool get isWindowsPlatform => false;
   bool get isLinuxPlatform => false;
-  String get currentAppVersion => '3.2.0';
+  String get currentAppVersion => '3.2.1';
   bool get supportsInAppUpgrade => false;
   bool get supportsNodeSwitching => false;
   bool get isRemoteNodeActive => false;
