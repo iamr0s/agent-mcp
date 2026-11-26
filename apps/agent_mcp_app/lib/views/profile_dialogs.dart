@@ -46,8 +46,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   String _tunnelMode = 'none';
   bool _tunnelAuto = true;
   String _authMode = 'oauth-local';
-  bool _oauthAllowAllRedirects = true;
-  List<String> _oauthRedirectRules = <String>[];
+  bool _oauthAllowAllRedirects = false;
+  List<String> _oauthRedirectRules = List<String>.from(
+    kDefaultOAuthRedirectRules,
+  );
   bool _inheritPerm = true;
   bool _writable = true;
   bool _allowSecrets = false;
@@ -115,13 +117,16 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       _authMode = (e['auth_mode'] ?? 'oauth-local').toString();
       _cidCtrl.text = (e['oauth_client_id'] ?? '').toString();
       _csecCtrl.text = (e['oauth_client_secret'] ?? '').toString();
-      _oauthRedirectRules = ((e['oauth_redirect_uris'] as List?) ?? const [])
+      final hasSavedRedirects = e.containsKey('oauth_redirect_uris');
+      final savedRedirects = ((e['oauth_redirect_uris'] as List?) ?? const [])
           .map((x) => x.toString().trim())
           .where((s) => s.isNotEmpty)
           .toList();
-      _oauthAllowAllRedirects = e.containsKey('oauth_allow_all_redirects')
-          ? e['oauth_allow_all_redirects'] != false
-          : _oauthRedirectRules.isEmpty;
+      _oauthAllowAllRedirects = e['oauth_allow_all_redirects'] == true;
+      _oauthRedirectRules = (!hasSavedRedirects ||
+              (_oauthAllowAllRedirects && savedRedirects.isEmpty))
+          ? List<String>.from(kDefaultOAuthRedirectRules)
+          : savedRedirects;
       _apiKeyCtrl.text = (e['api_key'] ?? '').toString();
       _inheritPerm = e['inherit_permissions'] != false;
       _writable = e['read_only'] != true;
@@ -789,27 +794,35 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                   ),
                                   switchTitle: '允许所有回调地址 (Redirect URI)',
                                   switchSubtitleOn:
-                                      '默认开启：自动放行 Claude、Cursor、Gemini 及动态注册回调地址',
+                                      '已放行任意合法回调地址（建议关闭以恢复默认回调地址白名单防护）',
                                   switchSubtitleOff:
-                                      '仅允许匹配下方白名单规则的回调地址（支持 * 与 ** 通配符，同步校验动态注册）',
+                                      '默认开启白名单模式：仅允许匹配下方规则的回调地址（支持 * 与 ** 通配符，同步校验动态注册与 CIMD）',
                                   badgeOnText: '允许所有地址',
                                   badgeOffPrefix: '指定回调白名单',
                                   allowAll: _oauthAllowAllRedirects,
-                                  onAllowAllChanged: (v) => setState(
-                                    () => _oauthAllowAllRedirects = v,
-                                  ),
+                                  onAllowAllChanged: (v) => setState(() {
+                                    _oauthAllowAllRedirects = v;
+                                    if (!v && _oauthRedirectRules.isEmpty) {
+                                      _oauthRedirectRules = List<String>.from(
+                                        kDefaultOAuthRedirectRules,
+                                      );
+                                    }
+                                  }),
                                   rules: _oauthRedirectRules,
                                   onRulesChanged: (next) => setState(
                                     () => _oauthRedirectRules = next,
                                   ),
                                   rowHintText:
-                                      '如 http://127.0.0.1:*/** 或 https://*.claude.ai/**',
+                                      '如 http://127.0.0.1:*/** 或 https://*.google.com/**',
                                   addRowLabel: '添加回调地址',
                                   quickPresets: const [
                                     ('127.0.0.1:*', 'http://127.0.0.1:*/**'),
                                     ('localhost:*', 'http://localhost:*/**'),
+                                    ('Gemini', 'https://*.google.com/**'),
                                     ('Claude', 'https://*.claude.ai/**'),
+                                    ('ChatGPT', 'https://chatgpt.com/**'),
                                     ('Cursor', 'cursor://**'),
+                                    ('VS Code', 'vscode://**'),
                                   ],
                                 ),
                               ],

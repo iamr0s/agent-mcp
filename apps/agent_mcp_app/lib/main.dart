@@ -517,7 +517,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.5.1').toString();
+      _version = (auth['version'] ?? '3.5.2').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -744,6 +744,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
             ...rawEv,
             '_seq': prev['_seq'],
             'args': rawEv['args'] ?? prev['args'],
+            'ts': rawEv['ts'] ?? prev['ts'],
+            'ts_full': rawEv['ts_full'] ?? prev['ts_full'],
           };
           merged['_search_blob'] = _computeSearchBlob(merged);
           _events[idx] = merged;
@@ -776,6 +778,8 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
                 ...item,
                 '_seq': prev['_seq'],
                 'args': item['args'] ?? prev['args'],
+                'ts': item['ts'] ?? prev['ts'],
+                'ts_full': item['ts_full'] ?? prev['ts_full'],
               };
               merged['_search_blob'] = _computeSearchBlob(merged);
               _events[idx] = merged;

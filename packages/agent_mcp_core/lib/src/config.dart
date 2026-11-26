@@ -355,6 +355,21 @@ List<String> parseBindHosts(dynamic rawHosts, [dynamic fallbackHost]) {
   return deduped.isEmpty ? <String>['127.0.0.1'] : deduped;
 }
 
+/// Default OAuth 2.1 callback redirect URI allowlist patterns active out of the box
+/// when OAuth callback whitelist mode (`oauth_allow_all_redirects = false`) is enabled.
+const List<String> kDefaultOAuthRedirectUris = <String>[
+  'http://127.0.0.1:*/**',
+  'http://localhost:*/**',
+  'https://*.google.com/**',
+  'https://vertexaisearch.cloud.google.com/**',
+  'https://*.claude.ai/**',
+  'https://claude.ai/**',
+  'https://chatgpt.com/**',
+  'https://*.openai.com/**',
+  'cursor://**',
+  'vscode://**',
+];
+
 class ServerConfig {
   String serverName;
   String toolPrefix;
@@ -433,9 +448,9 @@ class ServerConfig {
   })  : hosts = parseBindHosts(hosts, host),
         host = parseBindHosts(hosts, host).first,
         oauthBaseUrls = oauthBaseUrls ?? [],
-        oauthRedirectUris = oauthRedirectUris ?? [],
-        oauthAllowAllRedirects = oauthAllowAllRedirects ??
-            ((oauthRedirectUris == null || oauthRedirectUris.isEmpty)),
+        oauthRedirectUris =
+            oauthRedirectUris ?? List<String>.from(kDefaultOAuthRedirectUris),
+        oauthAllowAllRedirects = oauthAllowAllRedirects ?? false,
         profiles = profiles ?? [],
         roots = roots ?? [],
         allowAllRoots = allowAllRoots ?? (roots == null || roots.isEmpty),
@@ -461,13 +476,14 @@ class ServerConfig {
         ? saved['allow_all_roots'] == true
         : resolvedRoots.isEmpty;
 
-    final rawRedirects = ((saved['oauth_redirect_uris'] as List?) ?? const [])
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    final allowAllRedirects = saved.containsKey('oauth_allow_all_redirects')
-        ? saved['oauth_allow_all_redirects'] == true
-        : rawRedirects.isEmpty;
+    final hasSavedRedirects = saved.containsKey('oauth_redirect_uris');
+    final rawRedirects = hasSavedRedirects
+        ? ((saved['oauth_redirect_uris'] as List?) ?? const [])
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : List<String>.from(kDefaultOAuthRedirectUris);
+    final allowAllRedirects = saved['oauth_allow_all_redirects'] == true;
 
     final bindHosts = parseBindHosts(saved['hosts'], saved['host']);
 
@@ -815,10 +831,11 @@ Map<String, dynamic> normalizeProfile(
     primaryBaseUrl = baseUrls.isNotEmpty ? baseUrls.first : '';
   }
 
-  final parsedRedirects = parseStringList(raw['oauth_redirect_uris']);
-  final oauthAllowAllRedirects = raw.containsKey('oauth_allow_all_redirects')
-      ? raw['oauth_allow_all_redirects'] == true
-      : parsedRedirects.isEmpty;
+  final hasProfileRedirects = raw.containsKey('oauth_redirect_uris');
+  final parsedRedirects = hasProfileRedirects
+      ? parseStringList(raw['oauth_redirect_uris'])
+      : List<String>.from(kDefaultOAuthRedirectUris);
+  final oauthAllowAllRedirects = raw['oauth_allow_all_redirects'] == true;
 
   final parsedRoots = parseStringList(raw['roots']);
   final allowAllRoots = raw.containsKey('allow_all_roots')
@@ -907,8 +924,9 @@ List<Map<String, dynamic>> ensureProfilesInConfig(Map<String, dynamic> data) {
           'api_key': data['api_key'],
           'oauth_client_id': data['oauth_client_id'],
           'oauth_client_secret': data['oauth_client_secret'],
-          'oauth_allow_all_redirects': data['oauth_allow_all_redirects'],
-          'oauth_redirect_uris': data['oauth_redirect_uris'] ?? const [],
+          'oauth_allow_all_redirects': data['oauth_allow_all_redirects'] == true,
+          if (data.containsKey('oauth_redirect_uris'))
+            'oauth_redirect_uris': data['oauth_redirect_uris'],
           'inherit_permissions': true,
           'read_only': data['read_only'] == true,
           'allow_secrets': data['allow_secrets'] == true,

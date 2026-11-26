@@ -15,7 +15,9 @@ tray, installer, and web surfaces in lockstep so no surface ever drifts:
 
 from __future__ import annotations
 
+import base64
 import math
+import re
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
@@ -275,6 +277,22 @@ def write_android_vectors() -> None:
     (res_dir / "ic_stat_mcp.xml").write_text(stat_xml, encoding="utf-8")
 
 
+
+def sync_core_version_png(favicon_png_path: Path) -> None:
+    """Syncs the exact 64x64 Concentric Liquid Prism PNG Base64 into `version.dart`."""
+    version_dart = ROOT / "packages" / "agent_mcp_core" / "lib" / "src" / "version.dart"
+    if not version_dart.exists():
+        return
+    b64 = base64.b64encode(favicon_png_path.read_bytes()).decode("ascii")
+    txt = version_dart.read_text(encoding="utf-8")
+    if "appIconPng64Base64" in txt:
+        updated = re.sub(
+            r"const String appIconPng64Base64 =\s*'[^']*';",
+            f"const String appIconPng64Base64 = '{b64}';",
+            txt,
+        )
+        version_dart.write_text(updated, encoding="utf-8")
+
 def main() -> None:
     print("[1/5] Rendering 2048px supersampled Concentric Liquid Prism master...")
     hi_master = render_prism_canvas(size=2048, squircle_half=0.468, full_bleed=False, symbol_scale=1.0)
@@ -333,7 +351,8 @@ def main() -> None:
             android_res / folder / "ic_launcher.png", format="PNG", optimize=True
         )
     write_android_vectors()
-    print("[OK] All 24 brand icon & vector files synchronized cleanly!")
+    sync_core_version_png(web_dir / "favicon.png")
+    print("[OK] All 25 brand icon, vector & MCP protocol surfaces synchronized cleanly!")
 
 
 if __name__ == "__main__":

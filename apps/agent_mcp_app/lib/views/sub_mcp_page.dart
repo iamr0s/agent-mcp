@@ -291,6 +291,58 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
     );
   }
 
+  Widget _buildSubServerWellGlyph({
+    required String iconSrc,
+    required String transport,
+    required bool enabled,
+    required Color trColor,
+    required PrismPalette palette,
+  }) {
+    final fallback = Icon(
+      transport == 'stdio'
+          ? Icons.terminal_rounded
+          : (transport == 'ws' ? Icons.cable_rounded : Icons.public_rounded),
+      size: 17.5,
+      color: enabled ? trColor : palette.muted,
+    );
+    if (iconSrc.isEmpty) return fallback;
+    final lower = iconSrc.toLowerCase();
+    if (lower.startsWith('data:image/') &&
+        !lower.startsWith('data:image/svg') &&
+        iconSrc.contains(';base64,')) {
+      try {
+        final b64 = iconSrc.substring(iconSrc.indexOf(';base64,') + 8);
+        final bytes = base64Decode(b64);
+        return ClipRSuperellipse(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            bytes,
+            width: 26,
+            height: 26,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => fallback,
+          ),
+        );
+      } catch (_) {
+        return fallback;
+      }
+    }
+    if ((lower.startsWith('https://') || lower.startsWith('http://')) &&
+        !lower.endsWith('.svg')) {
+      return ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          iconSrc,
+          width: 26,
+          height: 26,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
+        ),
+      );
+    }
+    return fallback;
+  }
+
   Widget _buildServerRow(
     BuildContext context,
     PrismPalette c,
@@ -426,14 +478,12 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
                             ),
                           ),
                           alignment: Alignment.center,
-                          child: Icon(
-                            tr == 'stdio'
-                                ? Icons.terminal_rounded
-                                : (tr == 'ws'
-                                    ? Icons.cable_rounded
-                                    : Icons.public_rounded),
-                            size: 17.5,
-                            color: enabled ? trColor : c.muted,
+                          child: _buildSubServerWellGlyph(
+                            iconSrc: (s['icon_src'] ?? '').toString().trim(),
+                            transport: tr,
+                            enabled: enabled,
+                            trColor: trColor,
+                            palette: c,
                           ),
                         ),
                         Positioned(

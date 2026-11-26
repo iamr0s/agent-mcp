@@ -312,22 +312,78 @@ List<Map<String, dynamic>> parseMcpServersJson(String rawText) {
   return entries;
 }
 
-Map<String, dynamic> _mcpInitParams() => {
-      'protocolVersion': '2025-03-26',
+Map<String, dynamic> _mcpInitParams([String protocolVersion = '2025-11-25']) =>
+    {
+      'protocolVersion': protocolVersion,
       'capabilities': const <String, dynamic>{},
-      'clientInfo': {'name': 'agent-mcp-gateway', 'version': agentMcpVersion},
+      'clientInfo': {
+        'name': 'agent-mcp-gateway',
+        'title': 'Agent MCP Gateway',
+        'version': agentMcpVersion,
+        'icons': buildMcpServerIcons(),
+      },
     };
+
+List<Map<String, dynamic>> _sanitizeUpstreamIcons(dynamic rawIcons) {
+  if (rawIcons is! List) return const <Map<String, dynamic>>[];
+  final out = <Map<String, dynamic>>[];
+  for (final item in rawIcons) {
+    if (item is! Map) continue;
+    final src = (item['src'] ?? '').toString().trim();
+    if (src.isEmpty) continue;
+    final lower = src.toLowerCase();
+    final safeScheme = lower.startsWith('https://') ||
+        lower.startsWith('http://') ||
+        lower.startsWith('data:image/');
+    if (!safeScheme) continue;
+    out.add(<String, dynamic>{
+      'src': src,
+      if (item['mimeType'] != null) 'mimeType': item['mimeType'].toString(),
+      if (item['sizes'] is List)
+        'sizes': (item['sizes'] as List).map((e) => e.toString()).toList(),
+      if (item['theme'] != null) 'theme': item['theme'].toString(),
+    });
+  }
+  return out;
+}
+
+String? _pickSafeUpstreamIconSrc(Map<String, dynamic> initRes) {
+  Map? info = initRes['serverInfo'] as Map?;
+  if (info == null) {
+    final meta = initRes['_meta'];
+    if (meta is Map && meta['io.modelcontextprotocol/serverInfo'] is Map) {
+      info = meta['io.modelcontextprotocol/serverInfo'] as Map;
+    }
+  }
+  if (info == null) return null;
+  final icons = _sanitizeUpstreamIcons(info['icons']);
+  if (icons.isEmpty) return null;
+  // Prefer raster PNG/WebP/JPEG first for crisp cross-platform rendering, then SVG
+  for (final ic in icons) {
+    final mime = (ic['mimeType'] ?? '').toString().toLowerCase();
+    final src = (ic['src'] ?? '').toString();
+    if (mime.contains('png') ||
+        mime.contains('webp') ||
+        src.toLowerCase().startsWith('data:image/png')) {
+      return src;
+    }
+  }
+  return (icons.first['src'] ?? '').toString();
+}
 
 List<Map<String, dynamic>> _extractMcpTools(Map<String, dynamic> res) {
   final raw = (res['tools'] as List?) ?? const [];
   return raw.whereType<Map>().map((t) {
+    final icons = _sanitizeUpstreamIcons(t['icons']);
     return <String, dynamic>{
       'name': (t['name'] ?? '').toString(),
+      if (t['title'] != null) 'title': t['title'].toString(),
       'description': (t['description'] ?? '').toString(),
       'inputSchema': t['inputSchema'] ??
           t['input_schema'] ??
           const {'type': 'object', 'properties': <String, dynamic>{}},
       if (t['annotations'] != null) 'annotations': t['annotations'],
+      if (icons.isNotEmpty) 'icons': icons,
     };
   }).toList();
 }
@@ -1518,6 +1574,59 @@ class _McpClientSession {
   })  : timeout = Duration(seconds: (entry['timeout'] as int?) ?? 30),
         oauthManager = oauth ?? SubMcpManager.instance.oauthManager;
 
+  Future<Map<String, dynamic>> _handshakeOrDiscover(_RpcSenderFn send) async {
+    try {
+      final initRes = await send('initialize', _mcpInitParams());
+      await send('notifications/initialized', null, isNotification: true);
+      return initRes;
+    } on StateError catch (e) {
+      if (e.message.contains('-32601')) {
+        // Pure MCP 2026-07-28 stateless server without legacy `initialize`: fallback to `server/discover`!
+        final disc = await send('server/discover', const <String, dynamic>{});
+        final supported = (disc['supportedVersions'] as List?)
+                ?.map((v) => v.toString())
+                .toList() ??
+            const <String>[];
+        final meta = disc['_meta'];
+        final metaInfo = (meta is Map &&
+                meta['io.modelcontextprotocol/serverInfo'] is Map)
+            ? Map<String, dynamic>.from(
+                meta['io.modelcontextprotocol/serverInfo'] as Map,
+              )
+            : null;
+        return <String, dynamic>{
+          ...disc,
+          'protocolVersion':
+              supported.contains('2026-07-28') ? '2026-07-28' : '2025-11-25',
+          if (metaInfo != null && disc['serverInfo'] == null)
+            'serverInfo': metaInfo,
+        };
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _collectPaginatedList(
+    _RpcSenderFn send,
+    String method,
+    List<Map<String, dynamic>> Function(Map<String, dynamic>) extractor,
+  ) async {
+    final all = <Map<String, dynamic>>[];
+    String? cursor;
+    final seenCursors = <String>{};
+    for (var page = 0; page < 20; page++) {
+      final params = <String, dynamic>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      };
+      final res = await send(method, params);
+      all.addAll(extractor(res));
+      final next = (res['nextCursor'] ?? '').toString().trim();
+      if (next.isEmpty || !seenCursors.add(next)) break;
+      cursor = next;
+    }
+    return all;
+  }
+
   Future<
       ({
         Map<String, dynamic> initResult,
@@ -1532,29 +1641,36 @@ class _McpClientSession {
           List<Map<String, dynamic>> resources,
           List<Map<String, dynamic>> prompts,
         })> discoverBody(_RpcSenderFn send, {Map<String, dynamic>? preInit}) async {
-      final initRes = preInit ?? await send('initialize', _mcpInitParams());
-      if (preInit == null) {
-        await send('notifications/initialized', null, isNotification: true);
-      }
+      final initRes = preInit ?? await _handshakeOrDiscover(send);
       final caps = (initRes['capabilities'] as Map?) ?? const {};
-      final listRes = await send('tools/list', const <String, dynamic>{});
+      final tools = await _collectPaginatedList(
+        send,
+        'tools/list',
+        _extractMcpTools,
+      );
       var resources = <Map<String, dynamic>>[];
       var prompts = <Map<String, dynamic>>[];
       if (caps.containsKey('resources')) {
         try {
-          final rRes = await send('resources/list', const <String, dynamic>{});
-          resources = _extractMcpResources(rRes);
+          resources = await _collectPaginatedList(
+            send,
+            'resources/list',
+            _extractMcpResources,
+          );
         } catch (_) {}
       }
       if (caps.containsKey('prompts')) {
         try {
-          final pRes = await send('prompts/list', const <String, dynamic>{});
-          prompts = _extractMcpPrompts(pRes);
+          prompts = await _collectPaginatedList(
+            send,
+            'prompts/list',
+            _extractMcpPrompts,
+          );
         } catch (_) {}
       }
       return (
         initResult: initRes,
-        tools: _extractMcpTools(listRes),
+        tools: tools,
         resources: resources,
         prompts: prompts,
       );
@@ -1606,8 +1722,7 @@ class _McpClientSession {
     } else {
       res = await _executeAcrossTransport(
         (send) async {
-          await send('initialize', _mcpInitParams());
-          await send('notifications/initialized', null, isNotification: true);
+          await _handshakeOrDiscover(send);
           return send('tools/call', {'name': toolName, 'arguments': arguments});
         },
         overrideTimeout: effTimeout,
@@ -1630,8 +1745,7 @@ class _McpClientSession {
     } else {
       res = await _executeAcrossTransport(
         (send) async {
-          await send('initialize', _mcpInitParams());
-          await send('notifications/initialized', null, isNotification: true);
+          await _handshakeOrDiscover(send);
           return send('resources/read', {'uri': uri});
         },
         overrideTimeout: effTimeout,
@@ -1661,8 +1775,7 @@ class _McpClientSession {
     } else {
       res = await _executeAcrossTransport(
         (send) async {
-          await send('initialize', _mcpInitParams());
-          await send('notifications/initialized', null, isNotification: true);
+          await _handshakeOrDiscover(send);
           return send(
             'prompts/get',
             {'name': promptName, 'arguments': arguments},
@@ -1869,6 +1982,7 @@ class _McpClientSession {
     };
     final client = _buildPkgHttpClient(entry);
     String? sessionId;
+    String? negotiatedProtocolVersion;
     var nextId = 1;
 
     Future<Map<String, dynamic>> send(
@@ -1879,6 +1993,10 @@ class _McpClientSession {
       final headers = <String, String>{
         ...baseHeaders,
         if (sessionId != null) 'Mcp-Session-Id': sessionId!,
+        if (negotiatedProtocolVersion != null &&
+            method != 'initialize' &&
+            method != 'server/discover')
+          'MCP-Protocol-Version': negotiatedProtocolVersion!,
       };
       final bodyObj = <String, dynamic>{
         'jsonrpc': '2.0',
@@ -1972,7 +2090,19 @@ class _McpClientSession {
       if (rpcMsg['error'] != null) {
         throw StateError('RPC Error: ${jsonEncode(rpcMsg['error'])}');
       }
-      return Map<String, dynamic>.from((rpcMsg['result'] as Map?) ?? const {});
+      final resMap =
+          Map<String, dynamic>.from((rpcMsg['result'] as Map?) ?? const {});
+      if (method == 'initialize' && resMap['protocolVersion'] != null) {
+        negotiatedProtocolVersion = resMap['protocolVersion'].toString();
+      } else if (method == 'server/discover') {
+        final sv = (resMap['supportedVersions'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const <String>[];
+        negotiatedProtocolVersion =
+            sv.contains('2026-07-28') ? '2026-07-28' : '2025-11-25';
+      }
+      return resMap;
     }
 
     try {
@@ -2210,6 +2340,26 @@ String _formatCallToolResult(Map<String, dynamic> res) {
   final structured = res['structuredContent'] ?? res['structured_content'];
   final content = (res['content'] as List?) ?? const [];
 
+  final hasRichBlocks = content.any((b) {
+    if (b is! Map) return false;
+    final t = b['type']?.toString();
+    return t == 'image' ||
+        t == 'audio' ||
+        t == 'resource' ||
+        t == 'resource_link';
+  });
+  if (!isError && (hasRichBlocks || structured != null)) {
+    final cleanBlocks = content
+        .whereType<Map>()
+        .map((b) => Map<String, dynamic>.from(b))
+        .toList();
+    return '$kMcpStructuredCallResultPrefix${jsonEncode({
+      'content': cleanBlocks,
+      if (structured != null) 'structuredContent': structured,
+      'isError': false,
+    })}';
+  }
+
   final parts = <String>[];
   for (final block in content) {
     if (block is! Map) {
@@ -2347,6 +2497,8 @@ class SubMcpManager {
         }).toList(),
         'resources': resources,
         'prompts': prompts,
+        if (c['icon_src'] != null) 'icon_src': c['icon_src'],
+        if (c['server_title'] != null) 'server_title': c['server_title'],
         'last_error': c['error'],
         'last_ms': c['ms'],
       };
@@ -2356,6 +2508,7 @@ class SubMcpManager {
   /// Warms any cold `expose_mode == 'direct'` Sub-MCPs and returns their mounted tool specs.
   Future<List<McpToolSpec>> resolveDirectMountedToolSpecs({
     String globalPrefix = '',
+    Set<String>? existingToolNames,
   }) async {
     final coldDirect = <String>[];
     for (final entry in loadEntries()) {
@@ -2376,13 +2529,111 @@ class SubMcpManager {
         ),
       );
     }
-    return buildDirectMountedToolSpecs(globalPrefix: globalPrefix);
+    return buildDirectMountedToolSpecs(
+      globalPrefix: globalPrefix,
+      existingToolNames: existingToolNames,
+    );
+  }
+
+  /// Aggregates discovered MCP resources across enabled Sub-MCPs (`submcp://<server>/<uri>`).
+  List<Map<String, dynamic>> collectBridgedResources() {
+    final out = <Map<String, dynamic>>[];
+    for (final entry in loadEntries()) {
+      if (entry['enabled'] == false) continue;
+      final sname = entry['name'] as String;
+      final resList = (_cache[sname]?['resources'] as List?) ?? const [];
+      for (final r in resList.whereType<Map>()) {
+        final rawUri = (r['uri'] ?? '').toString().trim();
+        if (rawUri.isEmpty) continue;
+        out.add(<String, dynamic>{
+          'uri': 'submcp://$sname/${Uri.encodeComponent(rawUri)}',
+          'name': '[$sname] ${r['name'] ?? rawUri}',
+          if (r['description'] != null) 'description': r['description'],
+          if (r['mimeType'] != null) 'mimeType': r['mimeType'],
+        });
+      }
+    }
+    return out;
+  }
+
+  Future<Map<String, dynamic>?> readBridgedResource(String requestedUri) async {
+    if (!requestedUri.startsWith('submcp://')) return null;
+    final rest = requestedUri.substring('submcp://'.length);
+    final slash = rest.indexOf('/');
+    if (slash <= 0) return null;
+    final sname = rest.substring(0, slash);
+    final origUri = Uri.decodeComponent(rest.substring(slash + 1));
+    final entry = getEntry(sname);
+    if (entry == null || entry['enabled'] == false) return null;
+    final rawJson = await _McpClientSession(
+      entry,
+      stdioPool: _stdioPool,
+      oauth: oauthManager,
+    ).readResource(origUri);
+    final decoded = jsonDecode(rawJson);
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+  }
+
+  /// Aggregates discovered MCP prompts across enabled Sub-MCPs (`<subPrefix>_<prompt>`).
+  List<Map<String, dynamic>> collectBridgedPrompts() {
+    final out = <Map<String, dynamic>>[];
+    final used = <String>{};
+    for (final entry in loadEntries()) {
+      if (entry['enabled'] == false) continue;
+      final sname = entry['name'] as String;
+      final pList = (_cache[sname]?['prompts'] as List?) ?? const [];
+      for (final p in pList.whereType<Map>()) {
+        final rawName = (p['name'] ?? '').toString().trim();
+        if (rawName.isEmpty) continue;
+        final safeName = buildSafeMcpToolName(
+          globalPrefix: '',
+          subPrefix: sanitizePrefix(sname),
+          rawToolName: rawName,
+          usedNames: used,
+        );
+        out.add(<String, dynamic>{
+          'name': safeName,
+          'description': p['description'] != null
+              ? '[$sname] ${p['description']}'
+              : '[$sname] $rawName',
+          if (p['arguments'] is List) 'arguments': p['arguments'],
+          '_sub_server': sname,
+          '_orig_prompt': rawName,
+        });
+      }
+    }
+    return out;
+  }
+
+  Future<Map<String, dynamic>?> getBridgedPrompt(
+    String requestedName,
+    Map<String, dynamic> arguments,
+  ) async {
+    final bridged = collectBridgedPrompts();
+    final hit =
+        bridged.where((p) => p['name'] == requestedName).firstOrNull;
+    if (hit == null) return null;
+    final sname = hit['_sub_server'] as String;
+    final origName = hit['_orig_prompt'] as String;
+    final entry = getEntry(sname);
+    if (entry == null || entry['enabled'] == false) return null;
+    final rawJson = await _McpClientSession(
+      entry,
+      stdioPool: _stdioPool,
+      oauth: oauthManager,
+    ).getPrompt(origName, arguments);
+    final decoded = jsonDecode(rawJson);
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
   }
 
   /// Returns MCP tool definitions for Sub-MCPs configured with `expose_mode == 'direct'`
   /// so they appear directly in the main server's `tools/list` (`<subname>__<tool>`).
-  List<McpToolSpec> buildDirectMountedToolSpecs({String globalPrefix = ''}) {
+  List<McpToolSpec> buildDirectMountedToolSpecs({
+    String globalPrefix = '',
+    Set<String>? existingToolNames,
+  }) {
     final specs = <McpToolSpec>[];
+    final usedMountedNames = <String>{...?existingToolNames};
     for (final entry in loadEntries()) {
       if (entry['enabled'] == false || entry['expose_mode'] != 'direct') {
         continue;
@@ -2398,14 +2649,35 @@ class SubMcpManager {
           .map((e) => e.toString())
           .toSet();
       final subPrefix = sanitizePrefix(sname);
+      final serverIconSrc = cached['icon_src']?.toString();
+      final fallbackSubIcons = (serverIconSrc != null && serverIconSrc.isNotEmpty)
+          ? <Map<String, dynamic>>[
+              {'src': serverIconSrc},
+            ]
+          : null;
       for (final rawTool in cached['tools'] as List) {
         if (rawTool is! Map) continue;
         final tName = (rawTool['name'] ?? '').toString().trim();
         if (tName.isEmpty || disabled.contains(tName)) continue;
-        final mountedBase = '${subPrefix}_$tName';
-        final fullName =
-            globalPrefix.isEmpty ? mountedBase : '$globalPrefix$mountedBase';
+        final fullName = buildSafeMcpToolName(
+          globalPrefix: globalPrefix,
+          subPrefix: subPrefix,
+          rawToolName: tName,
+          usedNames: usedMountedNames,
+        );
+        final mountedBase = buildSafeMcpToolName(
+          globalPrefix: '',
+          subPrefix: subPrefix,
+          rawToolName: tName,
+        );
         final desc = (rawTool['description'] ?? '').toString().trim();
+        final rawTitle = (rawTool['title'] ?? '').toString().trim();
+        final toolIcons = rawTool['icons'] is List
+            ? (rawTool['icons'] as List)
+                .whereType<Map>()
+                .map((m) => Map<String, dynamic>.from(m))
+                .toList()
+            : fallbackSubIcons;
         final schema = rawTool['inputSchema'] is Map
             ? Map<String, dynamic>.from(rawTool['inputSchema'] as Map)
             : const <String, dynamic>{
@@ -2416,9 +2688,11 @@ class SubMcpManager {
           McpToolSpec(
             baseName: mountedBase,
             name: fullName,
+            title: rawTitle.isNotEmpty ? '[$sname] $rawTitle' : '[$sname] $tName',
             description: desc.isEmpty ? '[$sname] $tName' : '[$sname] $desc',
             inputSchema: schema,
             annotations: subCallAnn,
+            icons: toolIcons,
             handler: (args) => callTool(sname, tName, arguments: args),
           ),
         );
@@ -2584,12 +2858,14 @@ class SubMcpManager {
         desc = '$rawName $version'.trim();
       }
 
+      final iconSrc = _pickSafeUpstreamIconSrc(bundle.initResult);
       return {
         'ok': true,
         'name': suggestedName,
         'raw_name': rawName,
         'version': version,
         'description': desc,
+        if (iconSrc != null) 'icon_src': iconSrc,
         'tool_count': bundle.tools.length,
         'resource_count': bundle.resources.length,
         'prompt_count': bundle.prompts.length,
@@ -2644,11 +2920,15 @@ class SubMcpManager {
       sw.stop();
       final elapsed =
           double.parse((sw.elapsedMicroseconds / 1000.0).toStringAsFixed(1));
+      final iconSrc = _pickSafeUpstreamIconSrc(bundle.initResult);
+      final sInfo = (bundle.initResult['serverInfo'] as Map?) ?? const {};
       _cache[name] = {
         'status': 'ok',
         'tools': bundle.tools,
         'resources': bundle.resources,
         'prompts': bundle.prompts,
+        if (iconSrc != null) 'icon_src': iconSrc,
+        if (sInfo['title'] != null) 'server_title': sInfo['title'].toString(),
         'error': null,
         'ms': elapsed,
       };

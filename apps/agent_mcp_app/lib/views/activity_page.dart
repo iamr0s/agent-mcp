@@ -857,6 +857,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
     final source = (ev['source'] ?? '').toString();
     final ms = ev['ms'] as num?;
     final ts = (ev['ts'] ?? '').toString();
+    final tsFull = (ev['ts_full'] ?? ts).toString().trim();
     final rawArgs = ev['args'];
     final argsMap = rawArgs is Map && rawArgs.isNotEmpty
         ? Map<String, dynamic>.from(rawArgs)
@@ -876,7 +877,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
       'status': status,
       if (ms != null) 'latency_ms': ms,
       if (source.isNotEmpty) 'source': source,
-      if (ts.isNotEmpty) 'timestamp': ts,
+      if (tsFull.isNotEmpty) 'timestamp': tsFull,
       if (argsMap != null) 'arguments': argsMap,
       if (resultStr.isNotEmpty) 'result': resultStr,
     });
@@ -928,6 +929,20 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                   spacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (source.isNotEmpty)
+                      PrismPill(
+                        text: source,
+                        mono: false,
+                        fg: c.muted,
+                        bg: c.recessed,
+                      ),
+                    if (tsFull.isNotEmpty)
+                      PrismPill(
+                        key: const ValueKey('inspector-timestamp-pill'),
+                        text: tsFull,
+                        fg: c.muted,
+                        bg: c.recessed,
+                      ),
                     PrismPill(
                       text: ms != null
                           ? '$badge · ${ms.toStringAsFixed(1)} ms'
@@ -963,7 +978,7 @@ class _DockedInspectorPaneState extends State<_DockedInspectorPane> {
                             Text(
                               [
                                 if (source.isNotEmpty) '来源: $source',
-                                if (ts.isNotEmpty) '时间: $ts',
+                                if (tsFull.isNotEmpty) '时间: $tsFull',
                               ].join('  ·  '),
                               style: monoStyle(c, size: 11.2, color: c.muted),
                             ),
@@ -1215,7 +1230,7 @@ class _EventCardState extends State<_EventCard> {
                                 source.isNotEmpty)
                               source,
                             if (ms != null) '${ms.toStringAsFixed(0)} ms',
-                            if (!widget.splitMode && ts.isNotEmpty) ts,
+                            if (ts.isNotEmpty) ts,
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

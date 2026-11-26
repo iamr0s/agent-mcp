@@ -96,6 +96,21 @@ bool _isLoopbackHost(String host) {
   return h == 'localhost' || h == '127.0.0.1' || h == '::1' || h == '[::1]';
 }
 
+bool _isPrivateOrLinkLocalIp(String host) {
+  final ip =
+      InternetAddress.tryParse(host.replaceAll('[', '').replaceAll(']', ''));
+  if (ip == null) return false;
+  if (ip.isLoopback || ip.isLinkLocal) return true;
+  if (ip.type == InternetAddressType.IPv4) {
+    final b = ip.rawAddress;
+    if (b[0] == 10) return true;
+    if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return true;
+    if (b[0] == 192 && b[1] == 168) return true;
+    if (b[0] == 169 && b[1] == 254) return true;
+  }
+  return false;
+}
+
 /// Normalizes OAuth redirect URIs for reliable comparison:
 /// - Strips trailing slash on non-root paths
 /// - Treats loopback ephemeral ports (`http://127.0.0.1:<port>/cb`) as equivalent per RFC 8252 §7.3
@@ -136,25 +151,58 @@ bool _isUnsafeRedirectScheme(String raw) {
 bool _matchesRedirectPattern(String patternRaw, String candidateRaw) {
   final pat = patternRaw.trim();
   if (pat.isEmpty) return false;
-  if (pat == '*' || pat == '**') return true;
+  if (pat == '**') return true;
   if (!pat.contains('*') && !pat.contains('?')) {
     return normalizeOAuthRedirectUri(pat) ==
         normalizeOAuthRedirectUri(candidateRaw);
   }
 
-  // Canonicalize loopback host aliases (`localhost` / `[::1]` -> `127.0.0.1`) so
-  // wildcard rules like `http://127.0.0.1:*/*` seamlessly match `http://localhost:54321/cb`.
-  String canonLoopbackInText(String input) {
+  // Canonicalize loopback host aliases (`localhost` / `[::1]` -> `127.0.0.1`) and
+  // ensure bare HTTP(S) origins without path (`http://127.0.0.1:54321`) include `/`.
+  String canonRedirectCandidate(String input) {
+    var s = input.trim().replaceFirstMapped(
+      RegExp(
+        r'^(https?://)(localhost|\[::1\]|::1)(?=[:/?#]|$)',
+        caseSensitive: false,
+      ),
+      (m) => '${m.group(1)!.toLowerCase()}127.0.0.1',
+    );
+    final parsed = Uri.tryParse(s);
+    if (parsed != null &&
+        (parsed.scheme == 'http' || parsed.scheme == 'https') &&
+        parsed.path.isEmpty) {
+      final qIdx = s.indexOf('?');
+      final fIdx = s.indexOf('#');
+      var cut = s.length;
+      if (qIdx >= 0 && qIdx < cut) cut = qIdx;
+      if (fIdx >= 0 && fIdx < cut) cut = fIdx;
+      s = '${s.substring(0, cut)}/${s.substring(cut)}';
+    }
+    return s;
+  }
+
+  String canonLoopbackPattern(String input) {
     return input.replaceFirstMapped(
-      RegExp(r'^(https?://)(localhost|\[::1\]|::1)(?=[:/?#]|$)', caseSensitive: false),
+      RegExp(
+        r'^(https?://)(localhost|\[::1\]|::1)(?=[:/?#]|$)',
+        caseSensitive: false,
+      ),
       (m) => '${m.group(1)!.toLowerCase()}127.0.0.1',
     );
   }
 
-  final normCand = canonLoopbackInText(candidateRaw.trim());
-  final normPat = canonLoopbackInText(pat);
+  final normCand = canonRedirectCandidate(candidateRaw);
+  var normPat = canonLoopbackPattern(pat);
 
   final buf = StringBuffer('^');
+  if (normPat.startsWith('http://127.0.0.1:*/')) {
+    buf.write(r'http://127\.0\.0\.1(?::[^/?#]*)?/');
+    normPat = normPat.substring('http://127.0.0.1:*/'.length);
+  } else if (normPat.startsWith('https://127.0.0.1:*/')) {
+    buf.write(r'https://127\.0\.0\.1(?::[^/?#]*)?/');
+    normPat = normPat.substring('https://127.0.0.1:*/'.length);
+  }
+
   for (var i = 0; i < normPat.length; i++) {
     final ch = normPat[i];
     if (ch == '*') {
@@ -162,11 +210,13 @@ bool _matchesRedirectPattern(String patternRaw, String candidateRaw) {
         buf.write('.*');
         i++;
       } else {
-        buf.write('.*');
+        // Single `*` matches within a single authority/path segment only (`[^/?#]*`),
+        // preventing path-traversal subdomain spoofing (`https://evil.com/.claude.ai/cb`).
+        buf.write('[^/?#]*');
       }
     } else if (ch == '?') {
-      buf.write('.');
-    } else if (r'.+^$()[]{}|\'.contains(ch)) {
+      buf.write('[^/?#]');
+    } else if ('.+^\$()[]{}|\\'.contains(ch)) {
       buf.write('\\$ch');
     } else {
       buf.write(ch);
@@ -182,7 +232,7 @@ bool isRedirectUriAllowed(
   bool? allowAll,
 }) {
   if (_isUnsafeRedirectScheme(candidate)) return false;
-  final effectiveAllowAll = allowAll ?? allowedUris.isEmpty;
+  final effectiveAllowAll = allowAll ?? false;
   if (effectiveAllowAll) return true;
   if (allowedUris.isEmpty) return false;
   for (final allowed in allowedUris) {
@@ -197,6 +247,7 @@ class _PendingAuthReq {
   final Map<String, dynamic> client;
   final String redirectUri;
   final String state;
+  final String issuer;
   final String codeChallenge;
   final String codeChallengeMethod;
   final List<String> scopes;
@@ -207,6 +258,7 @@ class _PendingAuthReq {
     required this.client,
     required this.redirectUri,
     required this.state,
+    required this.issuer,
     required this.codeChallenge,
     required this.codeChallengeMethod,
     required this.scopes,
@@ -252,8 +304,8 @@ class LocalOAuthProvider {
   final Map<String, Map<String, dynamic>> _accessTokens = {};
   final Map<String, Map<String, dynamic>> _refreshTokens = {};
 
-  bool _globalAllowAllRedirects = true;
-  List<String> _globalRedirectUris = const [];
+  bool _globalAllowAllRedirects = false;
+  List<String> _globalRedirectUris = kDefaultOAuthRedirectUris;
   String _accentThemeKey = 'indigo';
   final Map<String, ({bool allowAll, List<String> uris})>
       _profileRedirectPolicies = {};
@@ -270,9 +322,10 @@ class LocalOAuthProvider {
     List<String>? staticRedirectUris,
     List<Map<String, dynamic>>? extraStaticClients,
   }) {
-    _globalRedirectUris = List<String>.unmodifiable(staticRedirectUris ?? const []);
-    _globalAllowAllRedirects =
-        staticAllowAllRedirects ?? _globalRedirectUris.isEmpty;
+    _globalRedirectUris = List<String>.unmodifiable(
+      staticRedirectUris ?? kDefaultOAuthRedirectUris,
+    );
+    _globalAllowAllRedirects = staticAllowAllRedirects ?? false;
     _loadState();
     if (staticClientId != null &&
         staticClientId.isNotEmpty &&
@@ -282,7 +335,8 @@ class LocalOAuthProvider {
         clientId: staticClientId,
         clientSecret: staticClientSecret,
         clientName: 'Configured OAuth Client',
-        redirectUris: staticRedirectUris ?? const [],
+        redirectUris:
+            staticRedirectUris ?? List<String>.from(kDefaultOAuthRedirectUris),
         allowAllRedirects: _globalAllowAllRedirects,
       );
     }
@@ -290,13 +344,14 @@ class LocalOAuthProvider {
       final cid = (sc['client_id'] ?? '').toString().trim();
       final csec = (sc['client_secret'] ?? '').toString().trim();
       final pid = sc['profile_id']?.toString();
-      final uris = ((sc['redirect_uris'] as List?) ?? const [])
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      final allowAll = sc.containsKey('allow_all_redirects')
-          ? sc['allow_all_redirects'] == true
-          : uris.isEmpty;
+      final hasUris = sc.containsKey('redirect_uris');
+      final uris = hasUris
+          ? ((sc['redirect_uris'] as List?) ?? const [])
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : List<String>.from(kDefaultOAuthRedirectUris);
+      final allowAll = sc['allow_all_redirects'] == true;
       if (pid != null && pid.isNotEmpty) {
         _profileRedirectPolicies[pid] = (allowAll: allowAll, uris: uris);
       }
@@ -321,7 +376,7 @@ class LocalOAuthProvider {
     required String clientSecret,
     required String clientName,
     required List<String> redirectUris,
-    bool allowAllRedirects = true,
+    bool allowAllRedirects = false,
     String? profileId,
   }) {
     _clients[clientId] = {
@@ -385,26 +440,28 @@ class LocalOAuthProvider {
     if (accent.isNotEmpty) {
       _accentThemeKey = accent;
     }
-    final globalUris = ((saved['oauth_redirect_uris'] as List?) ?? const [])
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
+    final hasGlobalUris = saved.containsKey('oauth_redirect_uris');
+    final globalUris = hasGlobalUris
+        ? ((saved['oauth_redirect_uris'] as List?) ?? const [])
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : List<String>.from(kDefaultOAuthRedirectUris);
     _globalRedirectUris = globalUris;
-    _globalAllowAllRedirects = saved.containsKey('oauth_allow_all_redirects')
-        ? saved['oauth_allow_all_redirects'] == true
-        : globalUris.isEmpty;
+    _globalAllowAllRedirects = saved['oauth_allow_all_redirects'] == true;
 
     _profileRedirectPolicies.clear();
     for (final p in profiles) {
       if (p['enabled'] == false) continue;
       final pid = (p['id'] ?? '').toString().trim();
-      final uris = ((p['oauth_redirect_uris'] as List?) ?? const [])
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      final allowAll = p.containsKey('oauth_allow_all_redirects')
-          ? p['oauth_allow_all_redirects'] == true
-          : uris.isEmpty;
+      final hasProfileUris = p.containsKey('oauth_redirect_uris');
+      final uris = hasProfileUris
+          ? ((p['oauth_redirect_uris'] as List?) ?? const [])
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : List<String>.from(kDefaultOAuthRedirectUris);
+      final allowAll = p['oauth_allow_all_redirects'] == true;
       if (pid.isNotEmpty) {
         _profileRedirectPolicies[pid] = (allowAll: allowAll, uris: uris);
       }
@@ -542,6 +599,8 @@ class LocalOAuthProvider {
     if (path.startsWith('/.well-known/oauth-protected-resource')) {
       return _jsonResp(200, {
         'resource': '$base/mcp',
+        'resource_name': serverName,
+        'logo_uri': '$base/icon-192.png',
         'authorization_servers': [base],
         'scopes_supported': ['mcp'],
         'bearer_methods_supported': ['header'],
@@ -549,9 +608,13 @@ class LocalOAuthProvider {
     }
 
     if (path == '/.well-known/oauth-authorization-server' ||
-        path == '/.well-known/openid-configuration') {
+        path.startsWith('/.well-known/oauth-authorization-server/') ||
+        path == '/.well-known/openid-configuration' ||
+        path.startsWith('/.well-known/openid-configuration/')) {
       return _jsonResp(200, {
         'issuer': base,
+        'service_documentation': 'https://github.com/iamr0s/agent-mcp',
+        'logo_uri': '$base/icon-192.png',
         'authorization_endpoint': '$base/authorize',
         'token_endpoint': '$base/token',
         'registration_endpoint': '$base/register',
@@ -565,6 +628,8 @@ class LocalOAuthProvider {
           'none',
         ],
         'code_challenge_methods_supported': ['S256', 'plain'],
+        'authorization_response_iss_parameter_supported': true,
+        'client_id_metadata_document_supported': true,
       });
     }
 
@@ -585,6 +650,84 @@ class LocalOAuthProvider {
       return _handleRevoke(request);
     }
     return null;
+  }
+
+  /// Fetches and validates an OAuth Client ID Metadata Document (SEP-991 / MCP 2025-11-25+)
+  /// when `client_id` is an `https://` URL (or loopback `http://127.0.0.1:<port>/...` in local tests).
+  Future<({Map<String, dynamic>? client, String? error})>
+      _tryFetchClientIdMetadataDocument(
+    String clientId, {
+    String? targetProfileId,
+  }) async {
+    final uri = Uri.tryParse(clientId);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return (client: null, error: null);
+    }
+    final scheme = uri.scheme.toLowerCase();
+    final isLoopbackHttp =
+        scheme == 'http' && _isLoopbackHost(uri.host) && uri.hasPort;
+    if (scheme != 'https' && !isLoopbackHttp) {
+      return (client: null, error: null);
+    }
+    if (uri.path.isEmpty || uri.path == '/') {
+      return (client: null, error: null);
+    }
+    if (scheme == 'https' && _isPrivateOrLinkLocalIp(uri.host)) {
+      return (
+        client: null,
+        error: 'CIMD URL cannot target private or link-local IP addresses.',
+      );
+    }
+
+    final hc = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    try {
+      final req = await hc.getUrl(uri).timeout(const Duration(seconds: 4));
+      req.followRedirects = false;
+      req.headers.set('Accept', 'application/json');
+      final resp = await req.close().timeout(const Duration(seconds: 4));
+      if (resp.statusCode != 200) return (client: null, error: null);
+      final chunks = <int>[];
+      await for (final c in resp) {
+        chunks.addAll(c);
+        if (chunks.length > 65536) {
+          return (client: null, error: 'CIMD metadata document exceeds 64 KB.');
+        }
+      }
+      final decoded = jsonDecode(utf8.decode(chunks));
+      if (decoded is! Map) {
+        return (client: null, error: 'Invalid CIMD JSON object.');
+      }
+      final docCid = (decoded['client_id'] ?? '').toString().trim();
+      if (docCid.isNotEmpty && docCid != clientId) {
+        return (
+          client: null,
+          error: "CIMD client_id mismatch: '$docCid' != '$clientId'.",
+        );
+      }
+      final uris = ((decoded['redirect_uris'] as List?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      return (
+        client: <String, dynamic>{
+          'client_id': clientId,
+          'client_name': (decoded['client_name'] ?? uri.host).toString(),
+          if ((decoded['logo_uri'] ?? '').toString().trim().isNotEmpty)
+            'logo_uri': decoded['logo_uri'].toString().trim(),
+          'redirect_uris': uris,
+          'allow_all_redirects': false,
+          'is_cimd': true,
+          'is_dynamic': true,
+          if (targetProfileId != null && targetProfileId.isNotEmpty)
+            'profile_id': targetProfileId,
+        },
+        error: null,
+      );
+    } catch (_) {
+      return (client: null, error: null);
+    } finally {
+      hc.close(force: true);
+    }
   }
 
   Future<Response> _handleRegister(
@@ -681,8 +824,28 @@ class LocalOAuthProvider {
         : scopeRaw.split(RegExp(r'\s+'));
 
     var client = _clients[clientId];
+    if (client == null &&
+        (clientId.startsWith('https://') ||
+            clientId.startsWith('http://127.0.0.1:') ||
+            clientId.startsWith('http://localhost:'))) {
+      final cimd = await _tryFetchClientIdMetadataDocument(
+        clientId,
+        targetProfileId: targetProfileId,
+      );
+      if (cimd.error != null) {
+        return _htmlResp(
+          400,
+          '<h3>OAuth CIMD 客户端元数据校验失败</h3><p>${_esc(cimd.error!)}</p>',
+        );
+      }
+      if (cimd.client != null) {
+        client = cimd.client;
+        _clients[clientId] = client!;
+        _saveState();
+      }
+    }
     if (client == null && clientId.isNotEmpty) {
-      // Auto-accept unknown public/PKCE clients when redirect_uri is provided
+      // Auto-accept unknown public/PKCE clients when redirect_uri passes endpoint whitelist
       client = {
         'client_id': clientId,
         'client_name': clientId,
@@ -725,9 +888,10 @@ class LocalOAuthProvider {
     }
 
     final isStaticClient = client['is_static'] == true;
+    final isCimdClient = client['is_cimd'] == true;
     final clientAllowAll = client.containsKey('allow_all_redirects')
         ? client['allow_all_redirects'] == true
-        : !isStaticClient;
+        : (!isStaticClient && !isCimdClient);
     final allowedUris = ((client['redirect_uris'] as List?) ?? const [])
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
@@ -751,6 +915,7 @@ class LocalOAuthProvider {
       client: client,
       redirectUri: redirectUri,
       state: state,
+      issuer: base,
       codeChallenge: codeChallenge,
       codeChallengeMethod: codeChallengeMethod,
       scopes: scopes,
@@ -812,6 +977,7 @@ class LocalOAuthProvider {
           ...target.queryParameters,
           'code': codeStr,
           if (entry.state.isNotEmpty) 'state': entry.state,
+          if (entry.issuer.isNotEmpty) 'iss': entry.issuer,
         };
         final redirectTarget = target.replace(queryParameters: mergedQp);
         McpLogger.instance.info('[OAUTH LOGIN OK] client_id=$cid');
@@ -843,7 +1009,7 @@ class LocalOAuthProvider {
     final sname = _esc(serverName);
     final ac = resolveServerAccentPalette(_accentThemeKey);
     final page = '''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/png" sizes="64x64" href="/favicon.png"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
 <style>
 :root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:${ac.lightHex};--clay-h:${ac.lightHoverHex};--on-clay:#FFFFFF;--clay-bg:${ac.lightRgba};--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
 @media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:${ac.darkHex};--clay-h:${ac.darkHoverHex};--on-clay:#0A0A0C;--clay-bg:${ac.darkRgba};--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
@@ -1137,8 +1303,10 @@ LocalOAuthProvider buildOAuthProvider(ServerConfig config) {
       .map((p) => <String, dynamic>{
             'client_id': p['oauth_client_id'] ?? '',
             'client_secret': p['oauth_client_secret'] ?? '',
-            'allow_all_redirects': p['oauth_allow_all_redirects'] != false,
-            'redirect_uris': p['oauth_redirect_uris'] ?? const [],
+            'allow_all_redirects': p['oauth_allow_all_redirects'] == true,
+            'redirect_uris': p.containsKey('oauth_redirect_uris')
+                ? p['oauth_redirect_uris']
+                : List<String>.from(kDefaultOAuthRedirectUris),
             'client_name': p['name'] ?? 'OAuth Profile',
             'profile_id': p['id'],
           })

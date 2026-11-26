@@ -184,6 +184,7 @@ void main() {
       'host': loopback,
       'port': 0,
       'auth_mode': 'oauth-local',
+      'oauth_allow_all_redirects': true,
       'roots': [sandboxDir.path],
     });
     final cfg =
@@ -1529,6 +1530,324 @@ void main() {
     } finally {
       await ExposureManager.instance.closeAllExposures();
       await srv.close(force: true);
+    }
+  });
+
+  test('v3.5.2 Default OAuth Callback Whitelist Mode & Full MCP Protocol Compliance: Icons (PNG+SVG), Unauthenticated Favicon/ServerCard, 64-Char Safe Naming, 2024-2026 Dual-Stack, Sub-MCP Pagination/Multimodal & OAuth CIMD/iss', () async {
+    expect(sanitizeMcpMachineName('Omen Desktop Mcp'), equals('Omen-Desktop-Mcp'));
+    expect(sanitizeMcpMachineName('暗影精灵主节点'), startsWith('agent-mcp-'));
+    final used = <String>{};
+    expect(
+      buildSafeMcpToolName(
+        globalPrefix: '',
+        subPrefix: 'ws_direct_',
+        rawToolName: 'echo_ws',
+        usedNames: used,
+      ),
+      equals('ws_direct__echo_ws'),
+    );
+    final longSlashName = buildSafeMcpToolName(
+      globalPrefix: 'omen_node_',
+      subPrefix: 'enterprise_github_gateway_',
+      rawToolName: 'repos/pull_requests/reviews/comments/create_inline_suggestion_v2',
+      usedNames: used,
+    );
+    expect(longSlashName.length, lessThanOrEqualTo(64));
+    expect(RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(longSlashName), isTrue);
+
+    expect(appIconPng64Bytes.length, greaterThan(512));
+    expect(appIconPng64Bytes.sublist(0, 8), equals([137, 80, 78, 71, 13, 10, 26, 10]));
+
+    final loopback = InternetAddress.loopbackIPv4.address;
+    final mockUpstream = await HttpServer.bind(loopback, 0);
+    final upBase = 'http://$loopback:${mockUpstream.port}';
+    const tinyPngB64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    mockUpstream.listen((HttpRequest req) async {
+      final path = req.uri.path;
+      if (path == '/oauth/client.json') {
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({
+          'client_id': '$upBase/oauth/client.json',
+          'client_name': 'Gemini CIMD Test Connector',
+          'logo_uri': '$upBase/logo.png',
+          'redirect_uris': ['http://127.0.0.1:54321/cb'],
+        }));
+        await req.response.close();
+        return;
+      }
+      if (path == '/mcp2026' && req.method == 'POST') {
+        final raw = await utf8.decoder.bind(req).join();
+        final msg = jsonDecode(raw) as Map<String, dynamic>;
+        final id = msg['id'];
+        final method = msg['method'];
+        final params = (msg['params'] as Map?) ?? const {};
+        req.response.headers.contentType = ContentType.json;
+        if (method == 'initialize') {
+          req.response.write(jsonEncode({
+            'jsonrpc': '2.0',
+            'id': id,
+            'error': {'code': -32601, 'message': 'Stateless 2026 server'},
+          }));
+        } else if (method == 'server/discover') {
+          req.response.write(jsonEncode({
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'resultType': 'complete',
+              'supportedVersions': ['2026-07-28'],
+              'capabilities': {'tools': {'listChanged': false}},
+              '_meta': {
+                'io.modelcontextprotocol/serverInfo': {
+                  'name': 'vision-sub',
+                  'title': 'Vision Sub MCP',
+                  'version': '2.0.0',
+                  'icons': [
+                    {
+                      'src': 'data:image/png;base64,$tinyPngB64',
+                      'mimeType': 'image/png',
+                      'sizes': ['64x64'],
+                    },
+                  ],
+                },
+              },
+            },
+          }));
+        } else if (method == 'tools/list') {
+          expect(req.headers.value('mcp-protocol-version'), equals('2026-07-28'));
+          final cursor = params['cursor']?.toString();
+          if (cursor == null || cursor.isEmpty) {
+            req.response.write(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'resultType': 'complete',
+                'tools': [
+                  {
+                    'name': 'page1/snap_chart',
+                    'description': 'Returns PNG chart',
+                    'inputSchema': {'type': 'object', 'properties': {}},
+                  },
+                ],
+                'nextCursor': 'p2',
+              },
+            }));
+          } else {
+            req.response.write(jsonEncode({
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': {
+                'resultType': 'complete',
+                'tools': [
+                  {
+                    'name': 'page2/very_long_enterprise_namespace_operation_that_exceeds_sixty_four_chars_easily',
+                    'description': 'Second page long-named tool',
+                    'inputSchema': {'type': 'object', 'properties': {}},
+                  },
+                ],
+              },
+            }));
+          }
+        } else if (method == 'tools/call') {
+          req.response.write(jsonEncode({
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'resultType': 'complete',
+              'content': [
+                {'type': 'image', 'data': tinyPngB64, 'mimeType': 'image/png'},
+                {'type': 'text', 'text': 'Rendered chart OK'},
+              ],
+              'isError': false,
+            },
+          }));
+        }
+        await req.response.close();
+        return;
+      }
+      req.response.statusCode = 404;
+      await req.response.close();
+    });
+
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    final pwdHash = hashPassword('oauth-pass-123');
+    // Omit oauth_allow_all_redirects & oauth_redirect_uris to verify DEFAULT whitelist mode!
+    saveConfigFile(cfgFile, {
+      'server_name': 'Omen Desktop Mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'oauth-local',
+      'oauth_local_password_hash': pwdHash,
+      'roots': [sandboxDir.path],
+    });
+
+    final subMgr = SubMcpManager.instance;
+    subMgr.saveEntries([
+      normalizeSubEntry({
+        'name': 'vision2026',
+        'transport': 'http',
+        'expose_mode': 'direct',
+        'url': '$upBase/mcp2026',
+      }),
+    ]);
+
+    final cfg = ServerConfig.fromSavedMap(loadSavedConfig(cfgFile), configFile: cfgFile)
+      ..port = 0;
+    final engine = McpServerEngine(cfg);
+    final srv = await engine.serveHttp();
+    final mainBase = 'http://$loopback:${srv.port}';
+
+    try {
+      for (final iconRoute in [
+        '/favicon.ico',
+        '/favicon.png',
+        '/icon-192.png',
+        '/apple-touch-icon.png',
+        '/icon.svg',
+      ]) {
+        final r = await http.get(Uri.parse('$mainBase$iconRoute'));
+        expect(r.statusCode, equals(200), reason: 'Expected 200 for $iconRoute');
+        expect(r.bodyBytes.length, greaterThan(100));
+      }
+      final rootHtml = await http.get(Uri.parse('$mainBase/'));
+      expect(rootHtml.statusCode, equals(200));
+      expect(rootHtml.body, contains('rel="icon"'));
+
+      final cardResp = await http.get(Uri.parse('$mainBase/.well-known/mcp.json'));
+      expect(cardResp.statusCode, equals(200));
+      final cardJson = jsonDecode(cardResp.body) as Map<String, dynamic>;
+      expect(cardJson['title'], equals('Omen Desktop Mcp'));
+      expect(cardJson['name'], equals('Omen-Desktop-Mcp'));
+      expect((cardJson['icons'] as List).any((i) => (i as Map)['mimeType'] == 'image/png'), isTrue);
+
+      final asMetaResp = await http.get(
+        Uri.parse('$mainBase/.well-known/oauth-authorization-server/mcp'),
+      );
+      expect(asMetaResp.statusCode, equals(200));
+      final asMeta = jsonDecode(asMetaResp.body) as Map<String, dynamic>;
+      expect(asMeta['logo_uri'], equals('$mainBase/icon-192.png'));
+      expect(asMeta['authorization_response_iss_parameter_supported'], isTrue);
+      expect(asMeta['client_id_metadata_document_supported'], isTrue);
+
+      // Verify OAuth callback whitelist mode is ENABLED BY DEFAULT (`oauthAllowAllRedirects == false`)
+      expect(cfg.oauthAllowAllRedirects, isFalse);
+      expect(cfg.oauthRedirectUris, equals(kDefaultOAuthRedirectUris));
+      final blockedEvilReg = await http.post(
+        Uri.parse('$mainBase/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'Evil Redirect Probe',
+          'redirect_uris': ['https://evil.attacker.example/cb'],
+        }),
+      );
+      expect(blockedEvilReg.statusCode, equals(400));
+      final blockedSpoofReg = await http.post(
+        Uri.parse('$mainBase/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'Path Spoof Probe',
+          'redirect_uris': ['https://evil.com/.claude.ai/cb'],
+        }),
+      );
+      expect(blockedSpoofReg.statusCode, equals(400));
+      final allowedDefaultReg = await http.post(
+        Uri.parse('$mainBase/register'),
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({
+          'client_name': 'Default Whitelisted Clients',
+          'redirect_uris': [
+            'https://gemini.google.com/oauth/callback',
+            'http://127.0.0.1:54321',
+          ],
+        }),
+      );
+      expect(allowedDefaultReg.statusCode, equals(201));
+
+      final httpNoRedir = HttpClient();
+      final authReq = await httpNoRedir.getUrl(
+        Uri.parse(
+          '$mainBase/authorize?client_id=${Uri.encodeQueryComponent('$upBase/oauth/client.json')}'
+          '&redirect_uri=${Uri.encodeQueryComponent('http://127.0.0.1:54321/cb')}'
+          '&response_type=code&state=xyz987',
+        ),
+      );
+      authReq.followRedirects = false;
+      final auth302 = await authReq.close();
+      expect(auth302.statusCode, equals(302));
+      final loginLoc = auth302.headers.value('location')!;
+
+      final loginPost = await httpNoRedir.postUrl(Uri.parse(loginLoc));
+      loginPost.followRedirects = false;
+      loginPost.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
+      loginPost.write('password=${Uri.encodeQueryComponent('oauth-pass-123')}');
+      final cb302 = await loginPost.close();
+      expect(cb302.statusCode, equals(302));
+      final cbUri = Uri.parse(cb302.headers.value('location')!);
+      expect(cbUri.queryParameters['iss'], equals(mainBase));
+      expect(cbUri.queryParameters['state'], equals('xyz987'));
+      expect(cbUri.queryParameters['code'], isNotEmpty);
+      httpNoRedir.close(force: true);
+
+      final initFuture = await engine.handleJsonRpcMessage(
+        {
+          'jsonrpc': '2.0',
+          'id': 10,
+          'method': 'initialize',
+          'params': {'protocolVersion': '2099-01-01'},
+        },
+        effectiveBaseUrl: mainBase,
+      );
+      final initResult = initFuture!['result'] as Map<String, dynamic>;
+      expect(initResult['protocolVersion'], equals('2025-11-25'));
+      final sInfo = initResult['serverInfo'] as Map<String, dynamic>;
+      expect(sInfo['title'], equals('Omen Desktop Mcp'));
+      expect((sInfo['icons'] as List).any((i) => (i as Map)['mimeType'] == 'image/png'), isTrue);
+
+      final disc2026 = await engine.handleJsonRpcMessage(
+        {'jsonrpc': '2.0', 'id': 11, 'method': 'server/discover'},
+        effectiveBaseUrl: mainBase,
+      );
+      final discRes = disc2026!['result'] as Map<String, dynamic>;
+      expect(discRes['resultType'], equals('complete'));
+      expect(discRes['supportedVersions'], contains('2026-07-28'));
+      expect((discRes['_meta'] as Map)['io.modelcontextprotocol/serverInfo'], isA<Map>());
+
+      final listRpc = await engine.handleJsonRpcMessage(
+        {'jsonrpc': '2.0', 'id': 12, 'method': 'tools/list'},
+        effectiveBaseUrl: mainBase,
+        httpProtocolVersion: '2026-07-28',
+      );
+      final listRes = listRpc!['result'] as Map<String, dynamic>;
+      expect(listRes['resultType'], equals('complete'));
+      expect(listRes['ttlMs'], isA<int>());
+      final tools = (listRes['tools'] as List).cast<Map>();
+      final snapTool = tools.firstWhere(
+        (t) => t['name'].toString().contains('snap_chart'),
+      );
+      final longTool = tools.firstWhere(
+        (t) => t['description'].toString().contains('Second page long-named tool'),
+      );
+      expect(longTool['name'].toString().length, lessThanOrEqualTo(64));
+      expect(
+        subMgr.listWithStatus().single['icon_src'],
+        startsWith('data:image/png;base64,'),
+      );
+
+      final multimodalRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 13,
+        'method': 'tools/call',
+        'params': {'name': snapTool['name'], 'arguments': const {}},
+      });
+      final callBlocks =
+          ((multimodalRpc!['result'] as Map)['content'] as List).cast<Map>();
+      expect(callBlocks.first['type'], equals('image'));
+      expect(callBlocks.first['data'], equals(tinyPngB64));
+    } finally {
+      await srv.close(force: true);
+      await mockUpstream.close(force: true);
     }
   });
 }

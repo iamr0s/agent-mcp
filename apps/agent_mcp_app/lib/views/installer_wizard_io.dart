@@ -22,9 +22,345 @@ Widget buildInstallerWizardApp(List<String> args) {
 }
 
 @immutable
+class SixTierInstallDetection {
+  final String directory;
+  final String sourceCode;
+  final String sourceLabel;
+  final bool isUpgrade;
+
+  const SixTierInstallDetection({
+    required this.directory,
+    required this.sourceCode,
+    required this.sourceLabel,
+    required this.isUpgrade,
+  });
+
+  static String labelForCode(String code, {required bool isUpgrade}) {
+    return switch (code) {
+      'explicit' => '命令行指定目录',
+      'running_process' => '已定位运行中实例',
+      'registry_install' => '注册表安装记录',
+      'registry_autostart' => '开机自启项定位',
+      'shortcut' => '桌面快捷方式定位',
+      'manual_edit' => isUpgrade ? '覆盖升级目录' : '自定义安装目录',
+      _ => isUpgrade ? '默认目录已有安装' : '默认用户目录',
+    };
+  }
+}
+
+String? _normalizeWindowsInstallCandidate(String? rawPathOrExe) {
+  if (rawPathOrExe == null) return null;
+  var clean = rawPathOrExe.trim();
+  if (clean.startsWith('"') && clean.endsWith('"') && clean.length >= 2) {
+    clean = clean.substring(1, clean.length - 1).trim();
+  }
+  if (clean.isEmpty) return null;
+  final lower = clean.toLowerCase();
+  if (lower.endsWith('.exe')) {
+    final sepIdx = clean.lastIndexOf(RegExp(r'[\\/]'));
+    if (sepIdx <= 0) return null;
+    clean = clean.substring(0, sepIdx);
+  }
+  clean = clean.replaceAll(RegExp(r'[\\/]+$'), '');
+  if (clean.isEmpty) return null;
+  final tailName = clean.split(RegExp(r'[\\/]')).last.toLowerCase();
+  if (tailName == 'bin') {
+    final parentSep = clean.lastIndexOf(RegExp(r'[\\/]'));
+    if (parentSep > 0) {
+      clean = clean.substring(0, parentSep);
+    }
+  }
+  if (clean.toLowerCase().contains('agentmcp-setup-')) {
+    return null;
+  }
+  return clean;
+}
+
+String? _extractFirstExeFromWindowsCommand(String? rawCmd) {
+  if (rawCmd == null) return null;
+  final s = rawCmd.trim();
+  if (s.isEmpty) return null;
+  if (s.startsWith('"')) {
+    final endQ = s.indexOf('"', 1);
+    if (endQ > 1) return s.substring(1, endQ);
+  }
+  final m = RegExp(r'^(.+?\.exe)\b', caseSensitive: false).firstMatch(s);
+  return m?.group(1)?.trim();
+}
+
+String? _extractExeTargetFromLnkBytes(Uint8List bytes) {
+  String decodeUtf16LeAscii(Uint8List b) {
+    final sb = StringBuffer();
+    for (var i = 0; i + 1 < b.length; i += 2) {
+      final code = b[i] | (b[i + 1] << 8);
+      sb.writeCharCode((code >= 32 && code < 127) ? code : 0);
+    }
+    return sb.toString();
+  }
+
+  for (final text in [
+    decodeUtf16LeAscii(bytes),
+    String.fromCharCodes(bytes.map((c) => (c >= 32 && c < 127) ? c : 0)),
+  ]) {
+    final m = RegExp(
+      r'([A-Za-z]:\\[^\x00"<>|?*]+?\\agent_mcp_app\.exe)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (m != null) return m.group(1);
+  }
+  return null;
+}
+
+/// Pure testable 6-tier current install location resolver shared with Windows SFX:
+/// 1) `explicit` (`--dir`) -> 2) `running_process` (`agent_mcp_app` / `agent-mcp`) ->
+/// 3) `registry_install` (`HKCU\Software\AgentMCP\InstallDir`, verified non-stale) ->
+/// 4) `registry_autostart` (`HKCU\...\Run\AgentMCP`) ->
+/// 5) `shortcut` (Desktop / Start Menu `.lnk`) -> 6) `default_dir` (`%LOCALAPPDATA%\Programs\AgentMCP`).
+SixTierInstallDetection resolveSixTierInstallLocation({
+  String? explicitDir,
+  String? preDetectedDir,
+  String? preDetectedSource,
+  List<String> Function()? probeRunningExePaths,
+  String? Function()? readRegistryInstallDir,
+  String? Function()? readAutoStartCommand,
+  List<String> Function()? readShortcutTargetPaths,
+  bool Function(String dir)? hasInstallSignature,
+  String? defaultInstallDir,
+}) {
+  final checkSig = hasInstallSignature ??
+      (String d) {
+        try {
+          if (!Directory(d).existsSync()) return false;
+          return File(p.join(d, 'agent_mcp_app.exe')).existsSync() ||
+              File(p.join(d, 'agent-mcp.exe')).existsSync() ||
+              File(p.join(d, 'bin', 'agent-mcp.exe')).existsSync();
+        } catch (_) {
+          return false;
+        }
+      };
+
+  // Tier 1: Explicit CLI directory
+  if (explicitDir != null && explicitDir.trim().isNotEmpty) {
+    final clean = explicitDir.trim();
+    final upg = checkSig(clean);
+    return SixTierInstallDetection(
+      directory: clean,
+      sourceCode: 'explicit',
+      sourceLabel: SixTierInstallDetection.labelForCode('explicit', isUpgrade: upg),
+      isUpgrade: upg,
+    );
+  }
+
+  // Honor bootstrapper pre-detected Tier 2..5 result if valid
+  if (preDetectedDir != null &&
+      preDetectedDir.trim().isNotEmpty &&
+      preDetectedSource != null &&
+      preDetectedSource != 'default_dir') {
+    final cleanPre = preDetectedDir.trim();
+    if (checkSig(cleanPre)) {
+      return SixTierInstallDetection(
+        directory: cleanPre,
+        sourceCode: preDetectedSource,
+        sourceLabel: SixTierInstallDetection.labelForCode(
+          preDetectedSource,
+          isUpgrade: true,
+        ),
+        isUpgrade: true,
+      );
+    }
+  }
+
+  // Tier 2: Running `agent_mcp_app.exe` or `agent-mcp.exe` process image path
+  final exePaths = probeRunningExePaths != null
+      ? probeRunningExePaths()
+      : (() {
+          if (!Platform.isWindows) return const <String>[];
+          try {
+            final selfPid = pid;
+            final res = Process.runSync('powershell.exe', [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              "Get-Process -Name 'agent_mcp_app','agent-mcp' -ErrorAction SilentlyContinue | Where-Object { \$_.Id -ne $selfPid -and \$_.Path } | Select-Object -ExpandProperty Path",
+            ]);
+            if (res.exitCode != 0) return const <String>[];
+            return res.stdout
+                .toString()
+                .split(RegExp(r'\r?\n'))
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+          } catch (_) {
+            return const <String>[];
+          }
+        })();
+  for (final ep in exePaths) {
+    final cand = _normalizeWindowsInstallCandidate(ep);
+    if (cand != null && checkSig(cand)) {
+      return SixTierInstallDetection(
+        directory: cand,
+        sourceCode: 'running_process',
+        sourceLabel: SixTierInstallDetection.labelForCode(
+          'running_process',
+          isUpgrade: true,
+        ),
+        isUpgrade: true,
+      );
+    }
+  }
+
+  // Tier 3: Registry `HKCU\Software\AgentMCP\InstallDir` (skip deleted stale dirs!)
+  final regDirRaw = readRegistryInstallDir != null
+      ? readRegistryInstallDir()
+      : (() {
+          if (!Platform.isWindows) return null;
+          try {
+            final r = Process.runSync('reg', [
+              'query',
+              r'HKCU\Software\AgentMCP',
+              '/v',
+              'InstallDir',
+            ]);
+            if (r.exitCode == 0) {
+              final m = RegExp(
+                r'InstallDir\s+REG_SZ\s+(.+)$',
+                multiLine: true,
+              ).firstMatch(r.stdout.toString());
+              return m?.group(1)?.trim();
+            }
+          } catch (_) {}
+          return null;
+        })();
+  final regCand = _normalizeWindowsInstallCandidate(regDirRaw);
+  if (regCand != null && checkSig(regCand)) {
+    return SixTierInstallDetection(
+      directory: regCand,
+      sourceCode: 'registry_install',
+      sourceLabel: SixTierInstallDetection.labelForCode(
+        'registry_install',
+        isUpgrade: true,
+      ),
+      isUpgrade: true,
+    );
+  }
+
+  // Tier 4: Registry Auto-Start `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\AgentMCP`
+  final autoCmdRaw = readAutoStartCommand != null
+      ? readAutoStartCommand()
+      : (() {
+          if (!Platform.isWindows) return null;
+          try {
+            final r = Process.runSync('reg', [
+              'query',
+              r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+              '/v',
+              'AgentMCP',
+            ]);
+            if (r.exitCode == 0) {
+              final m = RegExp(
+                r'AgentMCP\s+REG_SZ\s+(.+)$',
+                multiLine: true,
+              ).firstMatch(r.stdout.toString());
+              return m?.group(1)?.trim();
+            }
+          } catch (_) {}
+          return null;
+        })();
+  final autoCand = _normalizeWindowsInstallCandidate(
+    _extractFirstExeFromWindowsCommand(autoCmdRaw),
+  );
+  if (autoCand != null && checkSig(autoCand)) {
+    return SixTierInstallDetection(
+      directory: autoCand,
+      sourceCode: 'registry_autostart',
+      sourceLabel: SixTierInstallDetection.labelForCode(
+        'registry_autostart',
+        isUpgrade: true,
+      ),
+      isUpgrade: true,
+    );
+  }
+
+  // Tier 5: Desktop & Start Menu `Agent MCP Console.lnk`
+  final shortcutTargets = readShortcutTargetPaths != null
+      ? readShortcutTargetPaths()
+      : (() {
+          if (!Platform.isWindows) return const <String>[];
+          final out = <String>[];
+          final userProf = Platform.environment['USERPROFILE'] ?? '';
+          final appData = Platform.environment['APPDATA'] ?? '';
+          final lnkFiles = <String>[
+            if (userProf.isNotEmpty)
+              p.join(userProf, 'Desktop', 'Agent MCP Console.lnk'),
+            if (appData.isNotEmpty)
+              p.join(
+                appData,
+                'Microsoft',
+                'Windows',
+                'Start Menu',
+                'Programs',
+                'Agent MCP Console.lnk',
+              ),
+          ];
+          for (final lf in lnkFiles) {
+            try {
+              final f = File(lf);
+              if (f.existsSync()) {
+                final t = _extractExeTargetFromLnkBytes(f.readAsBytesSync());
+                if (t != null) out.add(t);
+              }
+            } catch (_) {}
+          }
+          return out;
+        })();
+  for (final st in shortcutTargets) {
+    final scCand = _normalizeWindowsInstallCandidate(st);
+    if (scCand != null && checkSig(scCand)) {
+      return SixTierInstallDetection(
+        directory: scCand,
+        sourceCode: 'shortcut',
+        sourceLabel: SixTierInstallDetection.labelForCode(
+          'shortcut',
+          isUpgrade: true,
+        ),
+        isUpgrade: true,
+      );
+    }
+  }
+
+  // Tier 6: Default user-mode directory
+  final defDir = defaultInstallDir ??
+      (() {
+        if (Platform.isWindows) {
+          final localApp = Platform.environment['LOCALAPPDATA'] ??
+              p.join(
+                Platform.environment['USERPROFILE'] ?? r'C:\Users\Default',
+                'AppData',
+                'Local',
+              );
+          return p.join(localApp, 'Programs', 'AgentMCP');
+        }
+        final home = Platform.environment['HOME'] ?? Directory.current.path;
+        return p.join(home, '.local', 'share', 'AgentMCP');
+      })();
+  final defUpg = checkSig(defDir);
+  return SixTierInstallDetection(
+    directory: defDir,
+    sourceCode: 'default_dir',
+    sourceLabel: SixTierInstallDetection.labelForCode(
+      'default_dir',
+      isUpgrade: defUpg,
+    ),
+    isUpgrade: defUpg,
+  );
+}
+
+@immutable
 class InstallerLaunchConfig {
   final String payloadDir;
   final String? explicitDir;
+  final String? detectedDir;
+  final String? detectedSource;
   final String afterMode;
   final bool createShortcut;
   final bool autoConfirmClose;
@@ -32,6 +368,8 @@ class InstallerLaunchConfig {
   const InstallerLaunchConfig({
     required this.payloadDir,
     this.explicitDir,
+    this.detectedDir,
+    this.detectedSource,
     this.afterMode = 'gui',
     this.createShortcut = true,
     this.autoConfirmClose = false,
@@ -40,6 +378,8 @@ class InstallerLaunchConfig {
   factory InstallerLaunchConfig.fromArgs(List<String> args) {
     String? payloadDir;
     String? explicitDir;
+    String? detectedDir;
+    String? detectedSource;
     var afterMode = 'gui';
     var createShortcut = true;
     var autoClose = false;
@@ -52,6 +392,10 @@ class InstallerLaunchConfig {
       } else if ((al == '--dir' || al == '-o' || al == '--target') &&
           i + 1 < args.length) {
         explicitDir = args[++i].trim();
+      } else if (al == '--detected-dir' && i + 1 < args.length) {
+        detectedDir = args[++i].trim();
+      } else if (al == '--detected-source' && i + 1 < args.length) {
+        detectedSource = args[++i].trim();
       } else if (al == '--after' && i + 1 < args.length) {
         afterMode = args[++i].trim().toLowerCase();
       } else if (al.startsWith('--after=')) {
@@ -70,6 +414,8 @@ class InstallerLaunchConfig {
     return InstallerLaunchConfig(
       payloadDir: fallbackPayload,
       explicitDir: explicitDir,
+      detectedDir: detectedDir,
+      detectedSource: detectedSource,
       afterMode: afterMode,
       createShortcut: createShortcut,
       autoConfirmClose: autoClose,
@@ -221,6 +567,9 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
   static const MethodChannel _winChannel = MethodChannel('agent_mcp/window');
 
   late final TextEditingController _dirCtrl;
+  late String _initialDetectedDir;
+  String _detectedSourceCode = 'default_dir';
+  String _detectedSourceLabel = '默认用户目录';
   bool _isUpgrade = false;
   bool _createShortcut = true;
   bool _launchAfter = true;
@@ -236,9 +585,16 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
     super.initState();
     _createShortcut = widget.launchConfig.createShortcut;
     _launchAfter = widget.launchConfig.afterMode != 'none';
-    final initialDir = _resolveInitialInstallDir(widget.launchConfig.explicitDir);
-    _dirCtrl = TextEditingController(text: initialDir);
-    _refreshUpgradeFlag(initialDir);
+    final resolved = resolveSixTierInstallLocation(
+      explicitDir: widget.launchConfig.explicitDir,
+      preDetectedDir: widget.launchConfig.detectedDir,
+      preDetectedSource: widget.launchConfig.detectedSource,
+    );
+    _initialDetectedDir = resolved.directory;
+    _detectedSourceCode = resolved.sourceCode;
+    _detectedSourceLabel = resolved.sourceLabel;
+    _isUpgrade = resolved.isUpgrade;
+    _dirCtrl = TextEditingController(text: resolved.directory);
     _dirCtrl.addListener(() => _refreshUpgradeFlag(_dirCtrl.text));
   }
 
@@ -248,52 +604,34 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
     super.dispose();
   }
 
-  String _resolveInitialInstallDir(String? explicitDir) {
-    if (explicitDir != null && explicitDir.trim().isNotEmpty) {
-      return explicitDir.trim();
-    }
-    if (Platform.isWindows) {
-      try {
-        final regRes = Process.runSync('reg', [
-          'query',
-          r'HKCU\Software\AgentMCP',
-          '/v',
-          'InstallDir',
-        ]);
-        if (regRes.exitCode == 0) {
-          final out = regRes.stdout.toString();
-          final m = RegExp(r'InstallDir\s+REG_SZ\s+(.+)$', multiLine: true)
-              .firstMatch(out);
-          if (m != null) {
-            final d = m.group(1)!.trim();
-            if (d.isNotEmpty) return d;
-          }
-        }
-      } catch (_) {}
-      final localApp = Platform.environment['LOCALAPPDATA'] ??
-          p.join(
-            Platform.environment['USERPROFILE'] ?? r'C:\Users\Default',
-            'AppData',
-            'Local',
-          );
-      return p.join(localApp, 'Programs', 'AgentMCP');
-    }
-    final home = Platform.environment['HOME'] ?? Directory.current.path;
-    return p.join(home, '.local', 'share', 'AgentMCP');
-  }
-
   void _refreshUpgradeFlag(String rawDir) {
     final d = rawDir.trim();
     if (d.isEmpty) return;
     bool exists = false;
     try {
       final exeName = Platform.isWindows ? 'agent_mcp_app.exe' : 'agent_mcp_app';
-      exists = File(p.join(d, exeName)).existsSync();
+      final cliName = Platform.isWindows ? 'agent-mcp.exe' : 'agent-mcp';
+      exists = File(p.join(d, exeName)).existsSync() ||
+          File(p.join(d, cliName)).existsSync() ||
+          File(p.join(d, 'bin', cliName)).existsSync();
     } catch (_) {}
-    if (exists != _isUpgrade && mounted) {
-      setState(() => _isUpgrade = exists);
+    final nextLabel = d.toLowerCase() == _initialDetectedDir.toLowerCase()
+        ? SixTierInstallDetection.labelForCode(
+            _detectedSourceCode,
+            isUpgrade: exists,
+          )
+        : SixTierInstallDetection.labelForCode(
+            'manual_edit',
+            isUpgrade: exists,
+          );
+    if ((exists != _isUpgrade || nextLabel != _detectedSourceLabel) && mounted) {
+      setState(() {
+        _isUpgrade = exists;
+        _detectedSourceLabel = nextLabel;
+      });
     } else {
       _isUpgrade = exists;
+      _detectedSourceLabel = nextLabel;
     }
   }
 
@@ -914,10 +1252,15 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
                                             ? '覆盖更新程序文件，现有配置与授权数据自动保留'
                                             : '自动创建目标文件夹，无需管理员权限',
                                         trailing: PrismPill(
-                                          text: _isUpgrade ? '覆盖升级目录' : '自动创建目录',
+                                          key: const ValueKey(
+                                            'installer-source-pill',
+                                          ),
+                                          text: _detectedSourceLabel,
                                           mono: false,
-                                          fg: c.muted,
-                                          bg: c.recessed,
+                                          fg: _isUpgrade ? c.clay : c.muted,
+                                          bg: _isUpgrade
+                                              ? c.purpleBg
+                                              : c.recessed,
                                         ),
                                         bottomChild: Row(
                                           children: [

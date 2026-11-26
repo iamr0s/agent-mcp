@@ -1,6 +1,6 @@
 param(
     [switch]$SkipBuild,
-    [string]$Version = "3.5.1"
+    [string]$Version = "3.5.2"
 )
 
 $ErrorActionPreference = "Stop"
@@ -111,7 +111,7 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Agent MCP Prism Setup")]
 [assembly: AssemblyProduct("Agent MCP Console")]
-[assembly: AssemblyVersion("3.5.1.0")]
+[assembly: AssemblyVersion("3.5.2.0")]
 
 namespace AgentMcpSfx {
     internal sealed class InstallOptions {
@@ -182,11 +182,18 @@ namespace AgentMcpSfx {
                     return RunCliInstall(opts);
                 }
 
+                bool preIsUpgrade;
+                string preSource;
+                string preDir = DetectExistingInstallDirWithSource(opts.ExplicitDir, out preIsUpgrade, out preSource);
+
                 var argBuilder = new StringBuilder();
                 argBuilder.Append("--installer");
                 argBuilder.Append(" --payload-dir \"").Append(tempDir.TrimEnd('\\')).Append("\"");
                 if (!string.IsNullOrEmpty(opts.ExplicitDir)) {
                     argBuilder.Append(" --dir \"").Append(opts.ExplicitDir.TrimEnd('\\')).Append("\"");
+                } else if (!string.IsNullOrEmpty(preDir)) {
+                    argBuilder.Append(" --detected-dir \"").Append(preDir.TrimEnd('\\')).Append("\"");
+                    argBuilder.Append(" --detected-source ").Append(preSource);
                 }
                 if (!string.IsNullOrEmpty(opts.After)) {
                     argBuilder.Append(" --after ").Append(opts.After);
@@ -335,45 +342,154 @@ namespace AgentMcpSfx {
             return list;
         }
 
-        internal static string DetectExistingInstallDir(string explicitDir, out bool isUpgrade) {
-            isUpgrade = false;
-            if (!string.IsNullOrEmpty(explicitDir)) {
-                isUpgrade = File.Exists(Path.Combine(explicitDir, "agent_mcp_app.exe"));
-                return explicitDir;
-            }
-
+        private static string NormalizeInstallRootCandidate(string pathOrExe) {
+            if (string.IsNullOrEmpty(pathOrExe)) return null;
             try {
-                foreach (Process p in Process.GetProcessesByName("agent_mcp_app")) {
-                    string img = GetProcessImagePath(p);
-                    if (!string.IsNullOrEmpty(img) && File.Exists(img)) {
-                        string dir = Path.GetDirectoryName(img);
-                        if (!string.IsNullOrEmpty(dir)) {
-                            isUpgrade = true;
-                            return dir;
+                string clean = pathOrExe.Trim().Trim('"');
+                if (clean.Length == 0) return null;
+                string dir = clean.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? Path.GetDirectoryName(clean)
+                    : clean;
+                if (string.IsNullOrEmpty(dir)) return null;
+                dir = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar);
+                if (string.Equals(Path.GetFileName(dir), "bin", StringComparison.OrdinalIgnoreCase)) {
+                    string parent = Path.GetDirectoryName(dir);
+                    if (!string.IsNullOrEmpty(parent)) dir = parent.TrimEnd(Path.DirectorySeparatorChar);
+                }
+                string tempRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar);
+                if (dir.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase) &&
+                    dir.IndexOf("AgentMCP-Setup-", StringComparison.OrdinalIgnoreCase) >= 0) {
+                    return null;
+                }
+                return dir;
+            } catch {
+                return null;
+            }
+        }
+
+        private static bool HasValidInstallSignature(string dir) {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return false;
+            return File.Exists(Path.Combine(dir, "agent_mcp_app.exe")) ||
+                   File.Exists(Path.Combine(dir, "agent-mcp.exe")) ||
+                   File.Exists(Path.Combine(dir, "bin", "agent-mcp.exe"));
+        }
+
+        private static string ExtractFirstExePathFromCommand(string cmd) {
+            if (string.IsNullOrEmpty(cmd)) return null;
+            string s = cmd.Trim();
+            if (s.StartsWith("\"")) {
+                int endQ = s.IndexOf('"', 1);
+                if (endQ > 1) return s.Substring(1, endQ - 1);
+            }
+            int exeIdx = s.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            if (exeIdx > 0) return s.Substring(0, exeIdx + 4).Trim();
+            return null;
+        }
+
+        private static string TryExtractTargetFromLnkBytes(string lnkPath) {
+            try {
+                if (!File.Exists(lnkPath)) return null;
+                byte[] bytes = File.ReadAllBytes(lnkPath);
+                foreach (Encoding enc in new[] { Encoding.Unicode, Encoding.Default }) {
+                    string text = enc.GetString(bytes);
+                    int idx = text.IndexOf("agent_mcp_app.exe", StringComparison.OrdinalIgnoreCase);
+                    if (idx > 2) {
+                        int start = idx;
+                        while (start > 0 && text[start - 1] >= 32 && text[start - 1] != '"' && text[start - 1] != '\0') {
+                            start--;
+                        }
+                        string cand = text.Substring(start, idx - start + "agent_mcp_app.exe".Length);
+                        int colon = cand.IndexOf(":\\", StringComparison.Ordinal);
+                        if (colon >= 1) {
+                            return cand.Substring(colon - 1);
                         }
                     }
                 }
             } catch { }
+            return null;
+        }
 
+        internal static string DetectExistingInstallDir(string explicitDir, out bool isUpgrade) {
+            string src;
+            return DetectExistingInstallDirWithSource(explicitDir, out isUpgrade, out src);
+        }
+
+        internal static string DetectExistingInstallDirWithSource(string explicitDir, out bool isUpgrade, out string sourceCode) {
+            // Tier 1: Explicit CLI --dir / -o
+            if (!string.IsNullOrEmpty(explicitDir)) {
+                sourceCode = "explicit";
+                isUpgrade = HasValidInstallSignature(explicitDir);
+                return explicitDir;
+            }
+
+            // Tier 2: Live running `agent_mcp_app.exe` or `agent-mcp.exe` (covers portable/custom directories!)
+            int selfPid = Process.GetCurrentProcess().Id;
+            foreach (string procName in new[] { "agent_mcp_app", "agent-mcp" }) {
+                try {
+                    foreach (Process p in Process.GetProcessesByName(procName)) {
+                        if (p.Id == selfPid) continue;
+                        string root = NormalizeInstallRootCandidate(GetProcessImagePath(p));
+                        if (!string.IsNullOrEmpty(root) && HasValidInstallSignature(root)) {
+                            isUpgrade = true;
+                            sourceCode = "running_process";
+                            return root;
+                        }
+                    }
+                } catch { }
+            }
+
+            // Tier 3: HKCU\Software\AgentMCP\InstallDir (verified non-stale!)
             try {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RegSubKey)) {
                     if (key != null) {
-                        object val = key.GetValue("InstallDir");
-                        string regDir = val != null ? val.ToString().Trim() : "";
-                        if (!string.IsNullOrEmpty(regDir) && Directory.Exists(regDir)) {
-                            isUpgrade = File.Exists(Path.Combine(regDir, "agent_mcp_app.exe"));
+                        string regDir = NormalizeInstallRootCandidate((key.GetValue("InstallDir") ?? "").ToString());
+                        if (!string.IsNullOrEmpty(regDir) && HasValidInstallSignature(regDir)) {
+                            isUpgrade = true;
+                            sourceCode = "registry_install";
                             return regDir;
                         }
                     }
                 }
             } catch { }
 
+            // Tier 4: HKCU\Software\Microsoft\Windows\CurrentVersion\Run\AgentMCP
+            try {
+                using (RegistryKey runKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
+                    if (runKey != null) {
+                        string exePath = ExtractFirstExePathFromCommand((runKey.GetValue("AgentMCP") ?? "").ToString());
+                        string runDir = NormalizeInstallRootCandidate(exePath);
+                        if (!string.IsNullOrEmpty(runDir) && HasValidInstallSignature(runDir)) {
+                            isUpgrade = true;
+                            sourceCode = "registry_autostart";
+                            return runDir;
+                        }
+                    }
+                }
+            } catch { }
+
+            // Tier 5: Desktop & Start Menu `Agent MCP Console.lnk`
+            string[] lnkPaths = new[] {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Agent MCP Console.lnk"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Agent MCP Console.lnk")
+            };
+            foreach (string lnk in lnkPaths) {
+                string targetExe = TryExtractTargetFromLnkBytes(lnk);
+                string lnkDir = NormalizeInstallRootCandidate(targetExe);
+                if (!string.IsNullOrEmpty(lnkDir) && HasValidInstallSignature(lnkDir)) {
+                    isUpgrade = true;
+                    sourceCode = "shortcut";
+                    return lnkDir;
+                }
+            }
+
+            // Tier 6: Default `%LOCALAPPDATA%\Programs\AgentMCP`
             string defaultDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Programs",
                 "AgentMCP"
             );
-            isUpgrade = File.Exists(Path.Combine(defaultDir, "agent_mcp_app.exe"));
+            isUpgrade = HasValidInstallSignature(defaultDir);
+            sourceCode = "default_dir";
             return defaultDir;
         }
 
@@ -609,8 +725,8 @@ namespace AgentMcpSfx {
 }
 '@
 
-$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "3.5.1.0" }
-$renderedCs = $csSource.Replace('AssemblyVersion("3.5.1.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
+$asmVer = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } else { "3.5.2.0" }
+$renderedCs = $csSource.Replace('AssemblyVersion("3.5.2.0")', "AssemblyVersion(`"$asmVer`")").Replace('__APP_VERSION__', $Version)
 [System.IO.File]::WriteAllText($csFile, $renderedCs, (New-Object System.Text.UTF8Encoding($true)))
 if (Test-Path $sfxOutPath) { Remove-Item -Force $sfxOutPath }
 

@@ -1188,8 +1188,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.1'), findsOneWidget);
-    await tester.tap(find.text('v3.5.1'));
+    expect(find.text('v3.5.2'), findsOneWidget);
+    await tester.tap(find.text('v3.5.2'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1289,7 +1289,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.1'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.2'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2010,7 +2010,7 @@ void main() {
   });
 
   testWidgets(
-      'v3.5.1 Authentic Prism --installer Wizard (700x568, Zero Raw Material Controls), Wildcard Rule List & Offline Vector QR',
+      'v3.5.2 Authentic Prism --installer Wizard (700x568, Zero Raw Material Controls), Wildcard Rule List & Offline Vector QR',
       (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -2039,8 +2039,60 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
 
+    final validDirs = <String>{
+      r'D:\Portable\OmenMcp',
+      r'C:\AutoStart\AgentMCP',
+      r'E:\Shortcut\AgentMCP',
+    };
+    expect(
+      resolveSixTierInstallLocation(
+        explicitDir: r'D:\CustomExplicit',
+        hasInstallSignature: validDirs.contains,
+      ).sourceCode,
+      equals('explicit'),
+    );
+    final tier2 = resolveSixTierInstallLocation(
+      probeRunningExePaths: () => [r'D:\Portable\OmenMcp\bin\agent-mcp.exe'],
+      readRegistryInstallDir: () => r'C:\DeletedStaleFolder',
+      hasInstallSignature: validDirs.contains,
+    );
+    expect(tier2.directory, equals(r'D:\Portable\OmenMcp'));
+    expect(tier2.sourceCode, equals('running_process'));
+    expect(tier2.isUpgrade, isTrue);
+
+    final tier4 = resolveSixTierInstallLocation(
+      probeRunningExePaths: () => const [],
+      readRegistryInstallDir: () => r'C:\DeletedStaleFolder',
+      readAutoStartCommand: () => r'"C:\AutoStart\AgentMCP\agent_mcp_app.exe" --silent',
+      hasInstallSignature: validDirs.contains,
+    );
+    expect(tier4.directory, equals(r'C:\AutoStart\AgentMCP'));
+    expect(tier4.sourceCode, equals('registry_autostart'));
+
+    final tier5 = resolveSixTierInstallLocation(
+      probeRunningExePaths: () => const [],
+      readRegistryInstallDir: () => null,
+      readAutoStartCommand: () => null,
+      readShortcutTargetPaths: () => [r'E:\Shortcut\AgentMCP\agent_mcp_app.exe'],
+      hasInstallSignature: validDirs.contains,
+    );
+    expect(tier5.directory, equals(r'E:\Shortcut\AgentMCP'));
+    expect(tier5.sourceCode, equals('shortcut'));
+
+    final tier6 = resolveSixTierInstallLocation(
+      probeRunningExePaths: () => const [],
+      readRegistryInstallDir: () => null,
+      readAutoStartCommand: () => null,
+      readShortcutTargetPaths: () => const [],
+      hasInstallSignature: validDirs.contains,
+      defaultInstallDir: r'C:\Users\demo\AppData\Local\Programs\AgentMCP',
+    );
+    expect(tier6.sourceCode, equals('default_dir'));
+    expect(tier6.isUpgrade, isFalse);
+
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.1'), findsOneWidget);
+    expect(find.text('v3.5.2'), findsOneWidget);
+    expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-launch-switch')), findsOneWidget);
@@ -2140,6 +2192,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(allowAllRedirects, isTrue);
     expect(savedRules.length, equals(2));
+    expect(kDefaultOAuthRedirectRules, contains('http://127.0.0.1:*/**'));
+    expect(kDefaultOAuthRedirectRules, contains('https://*.google.com/**'));
+
+    // 3. Desktop Split-Mode Call Stream MUST visibly render event timestamp (`23:40:01`) on both row & inspector!
+    tester.view.physicalSize = const Size(1280, 820);
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: _FakeConsoleBackend()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.textContaining('23:40:01'), findsWidgets);
+    expect(find.byKey(const ValueKey('inspector-timestamp-pill')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

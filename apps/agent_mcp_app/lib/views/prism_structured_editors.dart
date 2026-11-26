@@ -6,6 +6,21 @@ import 'package:flutter/services.dart';
 import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
 
+/// Default OAuth 2.1 callback redirect URI whitelist rules pre-populated when
+/// callback whitelist mode is active by default (`oauth_allow_all_redirects = false`).
+const List<String> kDefaultOAuthRedirectRules = <String>[
+  'http://127.0.0.1:*/**',
+  'http://localhost:*/**',
+  'https://*.google.com/**',
+  'https://vertexaisearch.cloud.google.com/**',
+  'https://*.claude.ai/**',
+  'https://claude.ai/**',
+  'https://chatgpt.com/**',
+  'https://*.openai.com/**',
+  'cursor://**',
+  'vscode://**',
+];
+
 /// Switch-driven row-by-row wildcard rule list editor used for both:
 /// 1. OAuth 2.1 Allowed Callback Redirect URIs (`oauth_allow_all_redirects` + `oauth_redirect_uris`)
 /// 2. Allowed Directory Whitelists (`allow_all_roots` + `roots`)

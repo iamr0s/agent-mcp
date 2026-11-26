@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:shelf/shelf.dart';
@@ -20,7 +21,22 @@ import 'tool_types.dart';
 import 'tunnel.dart';
 import 'version.dart';
 
-const String mcpProtocolVersion = '2025-03-26';
+const String mcpProtocolVersion = '2025-11-25';
+
+const List<String> kSupportedMcpProtocolVersions = <String>[
+  '2024-11-05',
+  '2025-03-26',
+  '2025-06-18',
+  '2025-11-25',
+  '2026-07-28',
+];
+
+String negotiateMcpProtocolVersion(String? clientRequested) {
+  final req = (clientRequested ?? '').trim();
+  if (req.isEmpty) return mcpProtocolVersion;
+  if (kSupportedMcpProtocolVersions.contains(req)) return req;
+  return mcpProtocolVersion;
+}
 
 class _SseSession {
   final String sessionId;
@@ -129,9 +145,28 @@ class McpServerEngine {
     registerClipboardAndScreenTools(registerTool, config);
   }
 
+  Map<String, dynamic> buildServerInfoMetadata({String? effectiveBaseUrl}) => {
+        'name': sanitizeMcpMachineName(config.serverName),
+        'title': config.serverName,
+        'version': agentMcpVersion,
+        'description':
+            'Agent MCP Prism Gateway (${Platform.operatingSystem} · ${_tools.length} built-in tools + Sub-MCP hub)',
+        'websiteUrl': 'https://github.com/iamr0s/agent-mcp',
+        'icons': buildMcpServerIcons(baseUrl: effectiveBaseUrl),
+      };
+
+  Map<String, dynamic> get _serverCapabilities => const {
+        'tools': {'listChanged': false},
+        'resources': {'listChanged': false, 'subscribe': false},
+        'prompts': {'listChanged': false},
+        'logging': <String, dynamic>{},
+      };
+
   Future<Map<String, dynamic>?> handleJsonRpcMessage(
-    Map<String, dynamic> req,
-  ) async {
+    Map<String, dynamic> req, {
+    String? effectiveBaseUrl,
+    String? httpProtocolVersion,
+  }) async {
     final method = req['method']?.toString();
     final hasId = req.containsKey('id') && req['id'] != null;
     final id = req['id'];
@@ -139,16 +174,19 @@ class McpServerEngine {
     final params = rawParams is Map
         ? Map<String, dynamic>.from(rawParams)
         : const <String, dynamic>{};
+    final is2026 = (httpProtocolVersion ?? '').trim() == '2026-07-28';
 
     if (!hasId) {
       // JSON-RPC Notification (e.g. notifications/initialized, notifications/cancelled)
       return null;
     }
 
-    Map<String, dynamic> ok(Map<String, dynamic> result) => {
+    Map<String, dynamic> ok(Map<String, dynamic> result, {bool add2026Envelope = false}) => {
           'jsonrpc': '2.0',
           'id': id,
-          'result': result,
+          'result': (add2026Envelope && is2026)
+              ? <String, dynamic>{'resultType': 'complete', ...result}
+              : result,
         };
 
     Map<String, dynamic> fail(int code, String message) => {
@@ -160,52 +198,135 @@ class McpServerEngine {
     switch (method) {
       case 'initialize':
         final clientProto = params['protocolVersion']?.toString();
-        final negotiatedProto =
-            (clientProto != null && clientProto.isNotEmpty)
-                ? clientProto
-                : mcpProtocolVersion;
+        final negotiatedProto = negotiateMcpProtocolVersion(clientProto);
         return ok({
           'protocolVersion': negotiatedProto,
-          'capabilities': {
-            'tools': {'listChanged': false},
-            'resources': {'listChanged': false},
-            'prompts': {'listChanged': false},
-          },
-          'serverInfo': {
-            'name': config.serverName,
-            'version': agentMcpVersion,
-            'icons': [
-              {'src': appIconDataUri, 'mimeType': 'image/svg+xml'},
-            ],
-          },
+          'capabilities': _serverCapabilities,
+          'serverInfo':
+              buildServerInfoMetadata(effectiveBaseUrl: effectiveBaseUrl),
           'instructions': instructions,
         });
 
+      case 'server/discover':
+        final sInfo =
+            buildServerInfoMetadata(effectiveBaseUrl: effectiveBaseUrl);
+        return ok({
+          'resultType': 'complete',
+          'supportedVersions': kSupportedMcpProtocolVersions,
+          'capabilities': _serverCapabilities,
+          'serverInfo': sInfo,
+          'instructions': instructions,
+          '_meta': {
+            'io.modelcontextprotocol/serverInfo': sInfo,
+          },
+        });
+
       case 'ping':
-        return ok(const <String, dynamic>{});
+      case 'logging/setLevel':
+        return ok(const <String, dynamic>{}, add2026Envelope: true);
+
+      case 'completion/complete':
+        return ok(
+          const {
+            'completion': {
+              'values': <String>[],
+              'total': 0,
+              'hasMore': false,
+            },
+          },
+          add2026Envelope: true,
+        );
 
       case 'resources/list':
-        return ok(const {'resources': <dynamic>[]});
+        final bridged = SubMcpManager.instance.collectBridgedResources();
+        return ok(
+          {
+            'resources': bridged,
+            if (is2026) 'ttlMs': 60000,
+            if (is2026) 'cacheScope': 'session',
+          },
+          add2026Envelope: true,
+        );
+
+      case 'resources/read':
+        final uri = (params['uri'] ?? '').toString().trim();
+        if (uri.isEmpty) return fail(-32602, 'Missing required parameter: uri');
+        final bridgedRes =
+            await SubMcpManager.instance.readBridgedResource(uri);
+        if (bridgedRes == null) {
+          return fail(-32002, 'Resource not found: $uri');
+        }
+        return ok(bridgedRes, add2026Envelope: true);
 
       case 'resources/templates/list':
-        return ok(const {'resourceTemplates': <dynamic>[]});
+        return ok(
+          const {'resourceTemplates': <dynamic>[]},
+          add2026Envelope: true,
+        );
 
       case 'prompts/list':
-        return ok(const {'prompts': <dynamic>[]});
+        final bridgedPrompts = SubMcpManager.instance
+            .collectBridgedPrompts()
+            .map((p) => <String, dynamic>{
+                  'name': p['name'],
+                  if (p['description'] != null) 'description': p['description'],
+                  if (p['arguments'] != null) 'arguments': p['arguments'],
+                })
+            .toList();
+        return ok(
+          {
+            'prompts': bridgedPrompts,
+            if (is2026) 'ttlMs': 60000,
+            if (is2026) 'cacheScope': 'session',
+          },
+          add2026Envelope: true,
+        );
+
+      case 'prompts/get':
+        final pName = (params['name'] ?? '').toString().trim();
+        if (pName.isEmpty) {
+          return fail(-32602, 'Missing required parameter: name');
+        }
+        final pArgs = params['arguments'] is Map
+            ? Map<String, dynamic>.from(params['arguments'] as Map)
+            : const <String, dynamic>{};
+        final promptRes =
+            await SubMcpManager.instance.getBridgedPrompt(pName, pArgs);
+        if (promptRes == null) {
+          return fail(-32602, "Unknown prompt: '$pName'");
+        }
+        return ok(promptRes, add2026Envelope: true);
 
       case 'tools/list':
         final policy = getEffectivePolicy(config);
         final silent = policy.relaxedCommandAnnotations;
+        final builtInIcons = buildMcpServerIcons(baseUrl: effectiveBaseUrl);
         final directSpecs =
             await SubMcpManager.instance.resolveDirectMountedToolSpecs(
           globalPrefix: _prefix,
+          existingToolNames: _tools.keys.toSet(),
         );
-        return ok({
-          'tools': [
-            ..._tools.values.map((t) => t.toMcpJson(silentAnnotations: silent)),
-            ...directSpecs.map((t) => t.toMcpJson(silentAnnotations: silent)),
-          ],
-        });
+        return ok(
+          {
+            'tools': [
+              ..._tools.values.map(
+                (t) => t.toMcpJson(
+                  silentAnnotations: silent,
+                  defaultIcons: builtInIcons,
+                ),
+              ),
+              ...directSpecs.map(
+                (t) => t.toMcpJson(
+                  silentAnnotations: silent,
+                  defaultIcons: builtInIcons,
+                ),
+              ),
+            ],
+            if (is2026) 'ttlMs': 60000,
+            if (is2026) 'cacheScope': 'session',
+          },
+          add2026Envelope: true,
+        );
 
       case 'tools/call':
         final toolName = (params['name'] ?? '').toString();
@@ -218,6 +339,7 @@ class McpServerEngine {
           final directSpecs =
               await SubMcpManager.instance.resolveDirectMountedToolSpecs(
             globalPrefix: _prefix,
+            existingToolNames: _tools.keys.toSet(),
           );
           spec = directSpecs.where((t) => t.name == toolName).firstOrNull;
         }
@@ -225,7 +347,7 @@ class McpServerEngine {
           return fail(-32602, "Unknown tool: '$toolName'");
         }
         final res = await _executeToolAudited(spec, callArgs);
-        return ok(res);
+        return ok(res, add2026Envelope: true);
 
       default:
         return fail(-32601, 'Method not found: $method');
@@ -326,6 +448,40 @@ class McpServerEngine {
             },
           ],
           'isError': false,
+        };
+      }
+      if (resultText.startsWith(kMcpStructuredCallResultPrefix)) {
+        final rawJson =
+            resultText.substring(kMcpStructuredCallResultPrefix.length);
+        final decoded = jsonDecode(rawJson) as Map<String, dynamic>;
+        final blocks = ((decoded['content'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((b) => Map<String, dynamic>.from(b))
+            .toList();
+        final summaryText =
+            'Multimodal Sub-MCP response (${blocks.length} content blocks).';
+        McpLogger.instance.info(
+          '[TOOL OK] [${policy.profileName}] ${spec.name} (${elapsedMs}ms) -> $summaryText',
+        );
+        StructuredEventBus.instance.emit({
+          'call_id': callId,
+          'status': 'done',
+          'kind': 'ok',
+          'badge': '完成',
+          'level': 'INFO',
+          'tool': spec.name,
+          'source': policy.profileName,
+          'source_host': policy.host,
+          'ms': elapsedMs,
+          'args': safeArgs,
+          'result': summaryText,
+          'summary': summaryText,
+        });
+        return <String, dynamic>{
+          'content': blocks,
+          if (decoded['structuredContent'] != null)
+            'structuredContent': decoded['structuredContent'],
+          'isError': decoded['isError'] == true,
         };
       }
       var preview = resultText.replaceAll('\r', '').replaceAll('\n', ' ');
@@ -516,8 +672,8 @@ class McpServerEngine {
             'access-control-allow-origin': '*',
             'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
             'access-control-allow-headers':
-                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID, X-Filename',
-            'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version',
+                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID, X-Filename',
+            'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name',
           },
         );
       }
@@ -576,6 +732,15 @@ class McpServerEngine {
           inferredBase;
       final hostProfile =
           st.hostProfileMap[rawHost] ?? st.hostProfileMap[hostNoPort];
+
+      // 3b. Unauthenticated Same-Origin Brand Icons, Root Favicon Link & MCP Server Cards
+      //     (Per MCP `icons` security guidance: clients fetch icons from same origin WITHOUT credentials!)
+      final unauthDiscoveryResp = _tryServePublicIconOrServerCard(
+        request,
+        path: path,
+        effectiveBaseUrl: effectiveBaseUrl,
+      );
+      if (unauthDiscoveryResp != null) return _withCors(unauthDiscoveryResp);
 
       // 4. OAuth 2.1 Discovery & Authorization routes
       if (oauthProvider.isOAuthRoute(path)) {
@@ -694,7 +859,12 @@ class McpServerEngine {
         final allowSse = config.transport == 'dual' || config.transport == 'sse';
 
         if (allowHttp && path == '/mcp') {
-          return _withCors(await _handleStreamableHttp(request));
+          return _withCors(
+            await _handleStreamableHttp(
+              request,
+              effectiveBaseUrl: effectiveBaseUrl,
+            ),
+          );
         }
 
         if (allowSse && path == '/sse' && request.method == 'GET') {
@@ -728,7 +898,171 @@ class McpServerEngine {
     return 'sess-$digest';
   }
 
-  Future<Response> _handleStreamableHttp(Request request) async {
+  Uint8List _resolveRasterIconBytes(int preferredSize) {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final relCandidates = preferredSize >= 512
+        ? const [
+            'web_dashboard/icons/Icon-512.png',
+            'apps/agent_mcp_app/web/icons/Icon-512.png',
+          ]
+        : (preferredSize >= 192
+            ? const [
+                'web_dashboard/icons/Icon-192.png',
+                'apps/agent_mcp_app/web/icons/Icon-192.png',
+              ]
+            : const [
+                'web_dashboard/favicon.png',
+                'apps/agent_mcp_app/web/favicon.png',
+              ]);
+    for (final base in [exeDir, Directory.current.path]) {
+      for (final rel in relCandidates) {
+        final f = File('$base/$rel');
+        if (f.existsSync()) {
+          try {
+            return f.readAsBytesSync();
+          } catch (_) {}
+        }
+      }
+    }
+    return appIconPng64Bytes;
+  }
+
+  Uint8List? _resolveIcoFileBytes() {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    for (final pth in [
+      '$exeDir/app_icon.ico',
+      '${Directory.current.path}/apps/agent_mcp_app/assets/app_icon.ico',
+    ]) {
+      final f = File(pth);
+      if (f.existsSync()) {
+        try {
+          return f.readAsBytesSync();
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  Response? _tryServePublicIconOrServerCard(
+    Request request, {
+    required String path,
+    required String effectiveBaseUrl,
+  }) {
+    if (request.method != 'GET' && request.method != 'HEAD') return null;
+    final cleanBase = effectiveBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    const cacheHdr = 'public, max-age=86400';
+
+    if (path == '/favicon.ico') {
+      final ico = _resolveIcoFileBytes();
+      if (ico != null) {
+        return Response.ok(
+          ico,
+          headers: const {
+            'content-type': 'image/x-icon',
+            'cache-control': cacheHdr,
+          },
+        );
+      }
+      return Response.ok(
+        appIconPng64Bytes,
+        headers: const {
+          'content-type': 'image/png',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
+
+    if (path == '/favicon.png' || path == '/icon.png' || path == '/icon-64.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(64),
+        headers: const {
+          'content-type': 'image/png',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
+
+    if (path == '/icon-192.png' ||
+        path == '/apple-touch-icon.png' ||
+        path == '/apple-touch-icon-precomposed.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(192),
+        headers: const {
+          'content-type': 'image/png',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
+
+    if (path == '/icon-512.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(512),
+        headers: const {
+          'content-type': 'image/png',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
+
+    if (path == '/icon.svg' || path == '/favicon.svg') {
+      return Response.ok(
+        appIconSvg,
+        headers: const {
+          'content-type': 'image/svg+xml; charset=utf-8',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
+
+    if (path == '/.well-known/mcp.json' ||
+        path == '/.well-known/mcp/server-card.json' ||
+        path == '/mcp/server-card') {
+      final info = buildServerInfoMetadata(effectiveBaseUrl: cleanBase);
+      return Response.ok(
+        jsonEncode({
+          ...info,
+          'supportedVersions': kSupportedMcpProtocolVersions,
+          'endpoints': {
+            'streamableHttp': '$cleanBase/mcp',
+            'sse': '$cleanBase/sse',
+          },
+          'capabilities': _serverCapabilities,
+        }),
+        headers: const {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'public, max-age=300',
+        },
+      );
+    }
+
+    if (path == '/') {
+      final safeTitle = const HtmlEscape().convert(config.serverName);
+      final html = '''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>$safeTitle · Agent MCP v$agentMcpVersion</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon.png">
+<link rel="mcp-server-card" type="application/json" href="/.well-known/mcp.json">
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0A0A0C;color:#FAFAFA;padding:20px}.card{max-width:420px;width:100%;background:#121216;border:1px solid #24242C;border-radius:26px;padding:28px 26px;text-align:center;box-shadow:0 20px 46px -12px rgba(0,0,0,.72)}img{width:56px;height:56px;border-radius:14px}h1{font-size:19px;margin:14px 0 6px}p{margin:0;color:#8E8E98;font-size:13.5px;line-height:1.6}code{background:#1B1B22;padding:2px 7px;border-radius:6px;font-size:12.5px;color:#C7D2FE}</style>
+</head><body><div class="card"><img src="/icon-192.png" alt="$safeTitle"><h1>$safeTitle</h1><p>Agent MCP Gateway v$agentMcpVersion · Streamable HTTP endpoint <code>/mcp</code></p></div></body></html>''';
+      return Response.ok(
+        html,
+        headers: const {'content-type': 'text/html; charset=utf-8'},
+      );
+    }
+
+    return null;
+  }
+
+  Future<Response> _handleStreamableHttp(
+    Request request, {
+    String? effectiveBaseUrl,
+  }) async {
+    final reqProtoHdr = request.headers['mcp-protocol-version']?.trim();
+    final effProto = negotiateMcpProtocolVersion(reqProtoHdr);
+
     if (request.method == 'DELETE') {
       return Response(202);
     }
@@ -751,7 +1085,7 @@ class McpServerEngine {
           'content-type': 'text/event-stream; charset=utf-8',
           'cache-control': 'no-cache',
           'mcp-session-id': sid,
-          'mcp-protocol-version': mcpProtocolVersion,
+          'mcp-protocol-version': effProto,
         },
         context: const {'shelf.io.buffer_output': false},
       );
@@ -782,7 +1116,11 @@ class McpServerEngine {
       final out = <Map<String, dynamic>>[];
       for (final item in decoded) {
         if (item is Map) {
-          final r = await handleJsonRpcMessage(Map<String, dynamic>.from(item));
+          final r = await handleJsonRpcMessage(
+            Map<String, dynamic>.from(item),
+            effectiveBaseUrl: effectiveBaseUrl,
+            httpProtocolVersion: reqProtoHdr,
+          );
           if (r != null) out.add(r);
         }
       }
@@ -794,23 +1132,34 @@ class McpServerEngine {
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'mcp-session-id': sid,
-          'mcp-protocol-version': mcpProtocolVersion,
+          'mcp-protocol-version': effProto,
         },
       );
     }
 
     if (decoded is Map) {
-      final resp =
-          await handleJsonRpcMessage(Map<String, dynamic>.from(decoded));
+      final resp = await handleJsonRpcMessage(
+        Map<String, dynamic>.from(decoded),
+        effectiveBaseUrl: effectiveBaseUrl,
+        httpProtocolVersion: reqProtoHdr,
+      );
       if (resp == null) {
         return Response(202, headers: {'mcp-session-id': sid});
       }
-      return Response.ok(
-        jsonEncode(resp),
+      final negotiatedFromInit = (resp['result'] is Map &&
+              (resp['result'] as Map)['protocolVersion'] is String)
+          ? (resp['result'] as Map)['protocolVersion'] as String
+          : effProto;
+      final isMethodNotFound2026 = reqProtoHdr == '2026-07-28' &&
+          resp['error'] is Map &&
+          (resp['error'] as Map)['code'] == -32601;
+      return Response(
+        isMethodNotFound2026 ? 404 : 200,
+        body: jsonEncode(resp),
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'mcp-session-id': sid,
-          'mcp-protocol-version': mcpProtocolVersion,
+          'mcp-protocol-version': negotiatedFromInit,
         },
       );
     }
@@ -1286,7 +1635,7 @@ Response _withCors(Response r) {
   return r.change(
     headers: const {
       'access-control-allow-origin': '*',
-      'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version',
+      'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name',
     },
   );
 }

@@ -1,5 +1,23 @@
 # Changelog
 
+## [v3.5.2] — Default OAuth Callback Whitelist Mode, Full MCP Protocol Compliance (`icons`, Naming, `2024`–`2026` Dual-Stack, Sub-MCP Multimodal/Pagination, OAuth CIMD/`iss`), Smart 6-Tier Install Detection & Call-Stream Timestamps
+
+- **默认开启 OAuth 2.1 回调地址白名单模式（`oauth_allow_all_redirects = false`）与通配符安全收敛**：
+  - 全局配置、服务入口（Profile）与新建入口弹窗默认启用**指定回调白名单模式**（`oauth_allow_all_redirects: false`），开箱预置本地环回（`http://127.0.0.1:*/**`、`http://localhost:*/**`）与主流官方客户端回调通配符（Gemini `https://*.google.com/**` / `https://vertexaisearch.cloud.google.com/**`、Claude `https://*.claude.ai/**` / `https://claude.ai/**`、ChatGPT `https://chatgpt.com/**` / `https://*.openai.com/**`、Cursor `cursor://**`、VS Code `vscode://**`），拦截陌生第三方钓鱼回调域名的同时保持主流客户端零配置连接。
+  - 单星号 `*` 收敛为单段主机/端口/路径匹配（`[^/?#]*`），阻断跨路径伪造子域绕过；双星号 `**` 匹配任意多级子路径与查询参数。
+- **全链路对齐 MCP 官方图标规范（SEP-973 `icons` + 同源免鉴权图标 + OAuth `logo_uri` + Server Card）**：
+  - **`Implementation.icons` 与 `Tool.icons` 补齐必选 `image/png`**：`scripts/sync_brand_icons.py` 自动将 `64×64` 同心折射棱镜 PNG 字节同步内嵌至 `version.dart`（`appIconPngDataUri`），`initialize` 与 `server/discover` 同时输出同源 `192×192`/`64×64` `image/png`、内嵌 `64×64` `image/png` Data URI（含 `light`/`dark` 主题标记）与矢量 `image/svg+xml`（`sizes: ['any']`），解决严格客户端拒收 SVG 显示字母占位符的问题。
+  - **免鉴权同源图标与预连接发现路由**：遵循 MCP 规范「不带凭证从同源拉取图标」准则，在鉴权拦截器前放行 `/favicon.ico`、`/favicon.png`、`/icon.png`、`/icon-64.png`、`/icon-192.png`、`/icon-512.png`、`/apple-touch-icon.png`、`/icon.svg`、根路径 `/`（含全套 `<link rel="icon">`）与 MCP Server Card（`/.well-known/mcp.json`、`/mcp/server-card`），并在 OAuth `.well-known` 元数据中补齐 `logo_uri`。
+  - **子 MCP 客户端反向图标解析**：自动解析并清洗下游子 MCP 的 `serverInfo.icons`，在桌面与 Web 控制台子 MCP 列表卡片中直接渲染真实上游图标。
+- **MCP 跨版本双栈兼容（`2024-11-05` ↔ `2025-11-25` ↔ `2026-07-28`）、命名安全与子 MCP 深度补齐**：
+  - **严格工具命名与 `Implementation` 字段分离**：`serverInfo` 分离机器标识 `name`（纯 ASCII slug）与人类可读 `title`、`description`、`websiteUrl`；`direct` 直挂子 MCP 工具引入 `buildSafeMcpToolName`（严格收敛至 `[A-Za-z0-9_-]{1,64}`，超 64 字符自动缩写加短哈希防碰撞，调用时无损还原原始工具名）。
+  - **上下版本双向兼容**：服务端显式协商 `2024-11-05` ~ `2026-07-28`（未知未来版本规范回退至 `2025-11-25`），原生新增 `2026-07-28` 无状态 `server/discover`、`resultType: "complete"`、缓存 `ttlMs`/`cacheScope`、`_meta['io.modelcontextprotocol/serverInfo']` 与 CORS `Mcp-Method`/`Mcp-Name`；补齐 `resources/read`、`prompts/get`（桥接已启用子 MCP 资源与提示词模板）及 `logging/setLevel`、`completion/complete`。
+  - **子 MCP 分页、协议头与多模态图片直通**：子 MCP 客户端补齐 `MCP-Protocol-Version` 请求头与纯 `2026-07-28` 服务端自动切换 `server/discover` 容错，支持多页 `nextCursor` 循环拉取，并打通下游 `image` / `audio` / `resource_link` / `structuredContent` 原生多模态内容块无损透传。
+  - **OAuth 2.1 新规范对齐**：登录回调附带 RFC 9207 `iss` 防混淆参数，`.well-known` 补齐路径级子端点匹配、`authorization_response_iss_parameter_supported` 与 SEP-991 `client_id_metadata_document_supported`（原生拉取校验 `https://` CIMD 客户端元数据）。
+- **Windows 安装器 6 级当前安装位置精准识别 + 调用流时间显示修复**：
+  - 统一打通 SFX 零界面引导壳（`package_sfx.ps1`）与原生 Flutter `--installer` 向导（`installer_wizard_io.dart`）的 6 级检测链：`1) 命令行 --dir` → `2) 正在运行的 agent_mcp_app / agent-mcp 进程路径（覆盖免安装绿色版）` → `3) 注册表 HKCU\Software\AgentMCP\InstallDir（自动跳过已删除残留目录）` → `4) 开机自启项 HKCU\...\Run\AgentMCP` → `5) 桌面/开始菜单快捷方式 Agent MCP Console.lnk` → `6) 默认用户态目录`，并以同源 `PrismPill` 展示识别来源。
+  - 修复桌面宽屏分栏模式（`splitMode`）下「活动与调用流」列表行因 `!widget.splitMode` 导致调用时间隐藏的问题，并在右侧详情检查器顶栏新增完整时间戳与来源胶囊展示。
+
 ## [v3.5.1] — 100% Authentic Prism Design System Unification Across Setup Wizard & Structured Editors
 
 - **Windows 原生安装向导（`--installer`）全量对齐主工作台同源 Prism 视觉语言**：

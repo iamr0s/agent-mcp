@@ -199,7 +199,7 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.5.1';
+  String get currentAppVersion => '3.5.2';
   String get initialThemeModeKey => 'system';
   String get initialAccentThemeKey => 'indigo';
   bool get initialDynamicColor => false;
