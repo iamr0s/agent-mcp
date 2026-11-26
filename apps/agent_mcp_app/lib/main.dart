@@ -14,6 +14,7 @@ import 'theme/prism_theme.dart';
 import 'views/activity_page.dart';
 import 'views/exposure_page.dart';
 import 'views/installer_wizard.dart';
+import 'views/onboarding_wizard_dialog.dart';
 import 'views/setup_page.dart';
 import 'views/remote_nodes_dialog.dart';
 import 'views/sub_mcp_page.dart';
@@ -487,6 +488,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     _setupSectionJump.dispose();
     _setupNavHandle.dispose();
     _eventSub?.cancel();
+    _eventFlushTimer?.cancel();
     _pollTimer?.cancel();
     _toastTimer?.cancel();
     _updateStartupTimer?.cancel();
@@ -517,7 +519,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.5.3').toString();
+      _version = (auth['version'] ?? '3.5.4').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;
@@ -713,6 +715,56 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     }
   }
 
+  bool _onboardingDialogOpen = false;
+  bool _onboardingAutoShown = false;
+  final List<Map<String, dynamic>> _pendingEventBatch =
+      <Map<String, dynamic>>[];
+  Timer? _eventFlushTimer;
+
+  Future<void> _openOnboardingWizard({bool manual = false}) async {
+    if (!mounted || _onboardingDialogOpen) return;
+    _onboardingDialogOpen = true;
+    try {
+      await showPrismDialog<bool>(
+        context: context,
+        barrierDismissible: manual,
+        builder: (_) => FirstRunOnboardingDialog(
+          backend: widget.backend,
+          initialConfig: Map<String, dynamic>.from(_config),
+          initialTunnelInfo: Map<String, dynamic>.from(_tunnelInfo),
+          initialExposureSummary: Map<String, dynamic>.from(_exposureSummary),
+          onRefreshStatus: () async {
+            _lastStatusSignature = '';
+            await _refreshStatus();
+          },
+          onToast: _showToast,
+        ),
+      );
+      if (mounted) {
+        _lastStatusSignature = '';
+        await _refreshStatus();
+      }
+    } finally {
+      _onboardingDialogOpen = false;
+    }
+  }
+
+  void _maybeShowFirstRunOnboarding() {
+    if (_onboardingAutoShown || _onboardingDialogOpen || !mounted) return;
+    if (widget.backend.isAndroidPlatform || widget.backend.isRemoteNodeActive) {
+      return;
+    }
+    final explicitlyPending = _config['onboarding_completed'] == false;
+    if (explicitlyPending) {
+      _onboardingAutoShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _authenticated) {
+          unawaited(_openOnboardingWizard(manual: false));
+        }
+      });
+    }
+  }
+
   Future<void> _startAuthenticatedSession() async {
     await Future.wait([
       _refreshStatus(),
@@ -728,37 +780,59 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         _refreshStatus();
       }
     });
+    _maybeShowFirstRunOnboarding();
     unawaited(_initUpdateScheduler());
+  }
+
+  void _applySingleEventInPlace(Map<String, dynamic> rawEv) {
+    final callId = (rawEv['call_id'] ?? '').toString();
+    if (callId.isNotEmpty) {
+      final idx = _events.indexWhere((x) => x['call_id'] == callId);
+      if (idx != -1) {
+        final prev = _events[idx];
+        final merged = <String, dynamic>{
+          ...prev,
+          ...rawEv,
+          '_seq': prev['_seq'],
+          'args': rawEv['args'] ?? prev['args'],
+          'ts': rawEv['ts'] ?? prev['ts'],
+          'ts_full': rawEv['ts_full'] ?? prev['ts_full'],
+        };
+        merged['_search_blob'] = _computeSearchBlob(merged);
+        _events[idx] = merged;
+        return;
+      }
+    }
+    final added = <String, dynamic>{...rawEv, '_seq': ++_evSeq};
+    added['_search_blob'] = _computeSearchBlob(added);
+    _events.add(added);
+    if (_events.length > 3000) {
+      _events.removeAt(0);
+    }
+  }
+
+  void _flushPendingEvents() {
+    _eventFlushTimer = null;
+    if (!mounted || _pendingEventBatch.isEmpty) {
+      _pendingEventBatch.clear();
+      return;
+    }
+    final batch = List<Map<String, dynamic>>.from(_pendingEventBatch);
+    _pendingEventBatch.clear();
+    setState(() {
+      for (final ev in batch) {
+        _applySingleEventInPlace(ev);
+      }
+    });
   }
 
   void _upsertEvent(Map<String, dynamic> rawEv) {
     if (!mounted) return;
-    final callId = (rawEv['call_id'] ?? '').toString();
-    setState(() {
-      if (callId.isNotEmpty) {
-        final idx = _events.indexWhere((x) => x['call_id'] == callId);
-        if (idx != -1) {
-          final prev = _events[idx];
-          final merged = <String, dynamic>{
-            ...prev,
-            ...rawEv,
-            '_seq': prev['_seq'],
-            'args': rawEv['args'] ?? prev['args'],
-            'ts': rawEv['ts'] ?? prev['ts'],
-            'ts_full': rawEv['ts_full'] ?? prev['ts_full'],
-          };
-          merged['_search_blob'] = _computeSearchBlob(merged);
-          _events[idx] = merged;
-          return;
-        }
-      }
-      final added = <String, dynamic>{...rawEv, '_seq': ++_evSeq};
-      added['_search_blob'] = _computeSearchBlob(added);
-      _events.add(added);
-      if (_events.length > 3000) {
-        _events.removeAt(0);
-      }
-    });
+    _pendingEventBatch.add(rawEv);
+    _eventFlushTimer ??= Timer(
+      const Duration(milliseconds: 48),
+      _flushPendingEvents,
+    );
   }
 
   Future<void> _loadInitialLogs() async {
@@ -1926,6 +2000,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
         latestUpdate: _latestUpdate,
         onUpdatePrefsChanged: _handleUpdatePrefsChanged,
         onCheckUpdate: () => _checkForUpdates(manual: true),
+        onOpenOnboardingWizard: () => _openOnboardingWizard(manual: true),
         requestedSectionSignal: _setupSectionJump,
         onConsumeRequestedSection: () => _setupSectionJump.value = null,
         navigationHandle: _setupNavHandle,

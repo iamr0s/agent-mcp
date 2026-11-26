@@ -1188,8 +1188,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.3'), findsOneWidget);
-    await tester.tap(find.text('v3.5.3'));
+    expect(find.text('v3.5.4'), findsOneWidget);
+    await tester.tap(find.text('v3.5.4'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1289,7 +1289,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.3'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.4'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2010,7 +2010,7 @@ void main() {
   });
 
   testWidgets(
-      'v3.5.3 Authentic Prism --installer Wizard (700x568, Zero Raw Material Controls), Wildcard Rule List & Offline Vector QR',
+      'v3.5.4 Authentic Prism --installer Wizard (700x568, Zero Raw Material Controls), Wildcard Rule List & Offline Vector QR',
       (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -2091,7 +2091,7 @@ void main() {
     expect(tier6.isUpgrade, isFalse);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.3'), findsOneWidget);
+    expect(find.text('v3.5.4'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
@@ -2202,6 +2202,65 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.textContaining('23:40:01'), findsWidgets);
     expect(find.byKey(const ValueKey('inspector-timestamp-pill')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('v3.5.4: First-run onboarding modal auto-opens when uninitialized, defaults to Quick tunnel, generates OAuth password & links Tailscale download', (tester) async {
+    tester.view.physicalSize = const Size(1280, 860);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final freshBackend = _FakeConsoleBackend();
+    freshBackend.config = {
+      'server_name': 'Fresh PC MCP',
+      'host': '0.0.0.0',
+      'port': 8000,
+      'auto_start': true,
+      'launch_at_startup': false,
+      'silent_start': false,
+      'has_password': false,
+      'onboarding_completed': false,
+      'tunnel_mode': 'quick',
+      'profiles': [
+        {
+          'id': 'default',
+          'name': '主入口',
+          'enabled': true,
+          'transport': 'dual',
+          'tunnel_mode': 'quick',
+          'auth_mode': 'oauth-local',
+          'oauth_allow_all_redirects': false,
+        },
+      ],
+    };
+
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: freshBackend));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Onboarding wizard modal auto-popped!
+    expect(find.text('欢迎使用 Agent MCP'), findsOneWidget);
+    expect(find.text('Quick 临时隧道（默认）'), findsOneWidget);
+    expect(find.text('前往官网下载 Tailscale'), findsOneWidget);
+
+    // Click Tailscale website download button
+    await tester.tap(find.text('前往官网下载 Tailscale'));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(freshBackend.openedExternalUrl, contains('tailscale.com/download'));
+
+    // Generate strong OAuth password & save
+    await tester.tap(find.text('随机生成'));
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.tap(find.text('保存并完成初始化'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(freshBackend.config['onboarding_completed'], isTrue);
+    expect(
+      (freshBackend.config['oauth_local_password'] ?? '').toString(),
+      isNotEmpty,
+    );
     expect(tester.takeException(), isNull);
   });
 }

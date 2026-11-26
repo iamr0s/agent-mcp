@@ -33,6 +33,8 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+  HWND child_flutter_hwnd_ = nullptr;
+  bool wts_registered_ = false;
   bool start_hidden_ = false;
 };
 

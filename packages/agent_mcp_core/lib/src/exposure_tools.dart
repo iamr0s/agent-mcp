@@ -836,13 +836,24 @@ class ExposureManager {
     return (parsed ?? 120).clamp(0, 10080);
   }
 
+  bool _probingTsInBg = false;
+
   Future<TailscaleRuntimeStatus> probeTailscaleStatus({
     bool forceRefresh = false,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (!forceRefresh &&
-        _cachedTsStatus != null &&
-        (now - _cachedTsAtMs) < 6000) {
+    if (!forceRefresh && _cachedTsStatus != null) {
+      if ((now - _cachedTsAtMs) < 30000) {
+        return _cachedTsStatus!;
+      }
+      if (!_probingTsInBg) {
+        _probingTsInBg = true;
+        unawaited(
+          probeTailscaleStatus(forceRefresh: true).whenComplete(() {
+            _probingTsInBg = false;
+          }),
+        );
+      }
       return _cachedTsStatus!;
     }
 

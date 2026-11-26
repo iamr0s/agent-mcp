@@ -330,20 +330,36 @@ class _IoConsoleBackend extends ConsoleBackend {
     }
   }
 
+  String _lastCrashSignature = '';
+  int _lastCrashAtMs = 0;
+  bool _writingCrashLog = false;
+
   @override
   void recordUnhandledError(Object error, StackTrace stack) {
-    try {
-      StoragePaths.instance.ensureLayout();
-      final crashFile =
-          File(p.join(StoragePaths.instance.logsDir.path, 'crash.log'));
-      crashFile.parent.createSync(recursive: true);
-      final ts = DateTime.now().toIso8601String();
-      crashFile.writeAsStringSync(
-        '[$ts] UNCAUGHT ERROR: $error\n$stack\n\n',
-        mode: FileMode.append,
-        flush: true,
-      );
-    } catch (_) {}
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final sig = '$error';
+    if (sig == _lastCrashSignature && (nowMs - _lastCrashAtMs) < 10000) {
+      return;
+    }
+    _lastCrashSignature = sig;
+    _lastCrashAtMs = nowMs;
+    if (_writingCrashLog) return;
+    _writingCrashLog = true;
+    final ts = DateTime.now().toIso8601String();
+    final entry = '[$ts] UNCAUGHT ERROR: $error\n$stack\n\n';
+    unawaited(
+      Future<void>(() async {
+        try {
+          StoragePaths.instance.ensureLayout();
+          final crashFile =
+              File(p.join(StoragePaths.instance.logsDir.path, 'crash.log'));
+          await crashFile.parent.create(recursive: true);
+          await crashFile.writeAsString(entry, mode: FileMode.append);
+        } catch (_) {} finally {
+          _writingCrashLog = false;
+        }
+      }),
+    );
   }
 
   Future<void> _initAndroidStorageAndChannel() async {
@@ -511,7 +527,26 @@ class _IoConsoleBackend extends ConsoleBackend {
         'auto_start': true,
         'auth_mode': 'none',
         'relaxed_command_annotations': true,
+        'onboarding_completed': true,
       });
+    } else if (!Platform.isAndroid && !_ctrl.configFile.existsSync()) {
+      final hostLabel = Platform.localHostname.trim();
+      final defaultName =
+          hostLabel.isNotEmpty ? '$hostLabel MCP' : 'Agent MCP';
+      final seed = <String, dynamic>{
+        'server_name': defaultName,
+        'host': '0.0.0.0',
+        'hosts': ['0.0.0.0'],
+        'port': 8000,
+        'auto_start': true,
+        'auth_mode': 'oauth-local',
+        'tunnel_mode': 'quick',
+        'oauth_allow_all_redirects': false,
+        'oauth_redirect_uris': List<String>.from(kDefaultOAuthRedirectUris),
+        'onboarding_completed': false,
+      };
+      seed['profiles'] = ensureProfilesInConfig(seed);
+      saveConfigFile(_ctrl.configFile, seed);
     }
 
     _loadSavedNodesFromDisk();
@@ -555,9 +590,11 @@ class _IoConsoleBackend extends ConsoleBackend {
     }
 
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      unawaited(AutoStartManager.refreshOsRegisteredAsync());
       if (saved['launch_at_startup'] == true) {
-        AutoStartManager.syncFromConfigMap(saved);
+        unawaited(AutoStartManager.syncFromConfigMapAsync(saved));
       }
+      unawaited(warmCloudflaredVersionAsync());
     }
     if (saved['auto_start'] != false) {
       try {
@@ -896,6 +933,9 @@ class _IoConsoleBackend extends ConsoleBackend {
       ..['expose_cloudflared_fallback'] = ExposureManager.isCloudflaredFallbackInSaved(saved)
       ..['expose_default_ttl_minutes'] = ExposureManager.defaultTtlMinutesInSaved(saved)
       ..['privilege_status'] = PrivilegedExecutor.instance.publicStatus
+      ..['onboarding_completed'] = saved.containsKey('onboarding_completed')
+          ? saved['onboarding_completed'] == true
+          : true
       ..['has_password'] =
           (saved['oauth_local_password_hash'] ?? '').toString().isNotEmpty
       ..remove('oauth_local_password_hash');
@@ -1540,6 +1580,54 @@ class _IoConsoleBackend extends ConsoleBackend {
     final st =
         await ExposureManager.instance.probeTailscaleStatus(forceRefresh: true);
     return {'ok': true, 'tailscale': st.toJson()};
+  }
+
+  @override
+  Future<Map<String, dynamic>> installTailscaleClient() async {
+    if (!isRemoteNodeActive && Platform.isWindows) {
+      try {
+        final check = await Process.run(
+          'where',
+          const ['winget'],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 3));
+        if (check.exitCode == 0 &&
+            check.stdout.toString().trim().isNotEmpty) {
+          await Process.start(
+            'cmd.exe',
+            const [
+              '/c',
+              'start',
+              '"Tailscale Setup"',
+              'winget',
+              'install',
+              '--id',
+              'Tailscale.Tailscale',
+              '-e',
+              '--accept-package-agreements',
+              '--accept-source-agreements',
+            ],
+            mode: ProcessStartMode.detached,
+            runInShell: false,
+          );
+          return {
+            'ok': true,
+            'mode': 'winget',
+            'message': '已调起 Windows winget 安装 Tailscale，请在弹出的终端窗口确认完成安装。',
+          };
+        }
+      } catch (_) {}
+      const winUrl = 'https://tailscale.com/download/windows';
+      await openExternalUrl(winUrl);
+      return {'ok': true, 'mode': 'browser', 'url': winUrl};
+    }
+    final fallbackUrl = Platform.isMacOS
+        ? 'https://tailscale.com/download/mac'
+        : (Platform.isLinux
+            ? 'https://tailscale.com/download/linux'
+            : 'https://tailscale.com/download');
+    await openExternalUrl(fallbackUrl);
+    return {'ok': true, 'mode': 'browser', 'url': fallbackUrl};
   }
 
   @override

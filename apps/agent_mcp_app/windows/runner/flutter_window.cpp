@@ -1,6 +1,8 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
 #include <flutter/standard_method_codec.h>
+#include <wtsapi32.h>
 
 #include <cstring>
 #include <optional>
@@ -10,6 +12,50 @@
 #include "flutter/generated_plugin_registrant.h"
 
 namespace {
+
+constexpr UINT_PTR kFlutterViewA11yGuardSubclassId = 0xA6E17;
+
+bool IsForceAccessibilityEnabledByEnv() {
+  static int cached = -1;
+  if (cached >= 0) {
+    return cached == 1;
+  }
+  wchar_t buf[16] = {0};
+  DWORD len = ::GetEnvironmentVariableW(L"AGENT_MCP_ENABLE_A11Y", buf, 16);
+  cached = (len > 0 && len < 16 &&
+            (::_wcsicmp(buf, L"1") == 0 || ::_wcsicmp(buf, L"true") == 0))
+               ? 1
+               : 0;
+  return cached == 1;
+}
+
+bool ShouldAllowUiAutomationBridge() {
+  if (IsForceAccessibilityEnabledByEnv()) {
+    return true;
+  }
+  BOOL screen_reader = FALSE;
+  if (::SystemParametersInfoW(SPI_GETSCREENREADER, 0, &screen_reader, 0) &&
+      screen_reader == TRUE) {
+    return true;
+  }
+  return false;
+}
+
+// Guards FLUTTERVIEW against unsolicited WM_GETOBJECT probes from remote-control
+// virtual display / input hooks (UU GameViewer, Oray Sunlogin, ToDesk) and IMEs,
+// which otherwise permanently activate Flutter 3.47's broken Windows AccessibilityBridge
+// (causing per-frame UI-thread AXTree stalls and 0xc0000005 access violations).
+LRESULT CALLBACK FlutterViewA11yGuardSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR uIdSubclass,
+    DWORD_PTR /*dwRefData*/) noexcept {
+  if (msg == WM_GETOBJECT && !ShouldAllowUiAutomationBridge()) {
+    return ::DefWindowProcW(hwnd, msg, wparam, lparam);
+  }
+  if (msg == WM_NCDESTROY) {
+    ::RemoveWindowSubclass(hwnd, FlutterViewA11yGuardSubclassProc, uIdSubclass);
+  }
+  return ::DefSubclassProc(hwnd, msg, wparam, lparam);
+}
 
 std::wstring Utf8ToWide(const std::string& str) {
   if (str.empty()) return L"";
@@ -59,11 +105,19 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetupWindowChannel();
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  child_flutter_hwnd_ = flutter_controller_->view()->GetNativeWindow();
+  if (child_flutter_hwnd_ != nullptr) {
+    ::SetWindowSubclass(child_flutter_hwnd_, FlutterViewA11yGuardSubclassProc,
+                        kFlutterViewA11yGuardSubclassId, 0);
+  }
+  SetChildContent(child_flutter_hwnd_);
 
   // Enable native Win32 drag-and-drop for 1-step file/folder external sharing
   if (GetHandle() != nullptr) {
     ::DragAcceptFiles(GetHandle(), TRUE);
+    wts_registered_ =
+        ::WTSRegisterSessionNotification(GetHandle(), NOTIFY_FOR_THIS_SESSION) !=
+        FALSE;
   }
 
   if (!start_hidden_) {
@@ -267,6 +321,16 @@ void FlutterWindow::OnTrayAction(const char* action) {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (wts_registered_ && GetHandle() != nullptr) {
+    ::WTSUnRegisterSessionNotification(GetHandle());
+    wts_registered_ = false;
+  }
+  if (child_flutter_hwnd_ != nullptr && ::IsWindow(child_flutter_hwnd_)) {
+    ::RemoveWindowSubclass(child_flutter_hwnd_,
+                           FlutterViewA11yGuardSubclassProc,
+                           kFlutterViewA11yGuardSubclassId);
+    child_flutter_hwnd_ = nullptr;
+  }
   if (window_channel_) {
     window_channel_->SetMethodCallHandler(nullptr);
     window_channel_ = nullptr;
@@ -320,6 +384,29 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_SHOWWINDOW:
       OnWindowStateChanged();
       if (wparam == TRUE && flutter_controller_) {
+        flutter_controller_->ForceRedraw();
+      }
+      break;
+    case WM_DISPLAYCHANGE:
+      if (child_flutter_hwnd_ != nullptr && ::IsWindow(child_flutter_hwnd_)) {
+        RECT frame = GetClientArea();
+        ::MoveWindow(child_flutter_hwnd_, frame.left, frame.top,
+                     frame.right - frame.left, frame.bottom - frame.top, TRUE);
+      }
+      if (flutter_controller_) {
+        flutter_controller_->ForceRedraw();
+      }
+      break;
+    case WM_WTSSESSION_CHANGE:
+      if ((wparam == WTS_SESSION_UNLOCK || wparam == WTS_REMOTE_CONNECT ||
+           wparam == WTS_REMOTE_DISCONNECT || wparam == WTS_CONSOLE_CONNECT) &&
+          flutter_controller_) {
+        if (child_flutter_hwnd_ != nullptr && ::IsWindow(child_flutter_hwnd_)) {
+          RECT frame = GetClientArea();
+          ::MoveWindow(child_flutter_hwnd_, frame.left, frame.top,
+                       frame.right - frame.left, frame.bottom - frame.top,
+                       TRUE);
+        }
         flutter_controller_->ForceRedraw();
       }
       break;

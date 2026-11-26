@@ -1009,7 +1009,7 @@ class McpServerEngine {
   }) {
     if (request.method != 'GET' && request.method != 'HEAD') return null;
     final cleanBase = effectiveBaseUrl.replaceAll(RegExp(r'/+$'), '');
-    const cacheHdr = 'public, max-age=86400';
+    const cacheHdr = 'public, max-age=3600, stale-while-revalidate=86400';
 
     if (path == '/robots.txt') {
       return Response.ok(
@@ -1544,16 +1544,16 @@ class _LiveRoutingState {
     for (final p in enabled) {
       final pid = (p['id'] ?? '').toString();
       if (pid.isNotEmpty) pidMap[pid] = p;
-      final tmode = (p['tunnel_mode'] ?? 'none').toString().toLowerCase();
-      if ((tmode == 'quick' || tmode == 'token') &&
-          !activeTunnelIds.contains(pid)) {
-        continue;
-      }
       final cid = (p['oauth_client_id'] ?? '').toString().trim();
       if (cid.isNotEmpty) cidMap[cid] = p;
       if (p['auth_mode'] == 'bearer') {
         final k = (p['api_key'] ?? '').toString().trim();
         if (k.isNotEmpty) keyMap[k] = p;
+      }
+      final tmode = (p['tunnel_mode'] ?? 'none').toString().toLowerCase();
+      if ((tmode == 'quick' || tmode == 'token') &&
+          !activeTunnelIds.contains(pid)) {
+        continue;
       }
       final livePort = int.tryParse('${saved['port'] ?? config.port}') ?? config.port;
       registerBase((p['base_url'] ?? '').toString(), p);

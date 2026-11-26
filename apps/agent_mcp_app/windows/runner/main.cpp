@@ -185,7 +185,31 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   const bool start_hidden =
       !cli_installer && !cli_show && (cli_silent || cfg_flags.silent_start);
 
+  bool enable_impeller = false;
+  wchar_t impeller_env[16] = {0};
+  DWORD impeller_env_len =
+      ::GetEnvironmentVariableW(L"AGENT_MCP_IMPELLER", impeller_env, 16);
+  if (impeller_env_len > 0 && impeller_env_len < 16) {
+    if (::_wcsicmp(impeller_env, L"1") == 0 ||
+        ::_wcsicmp(impeller_env, L"true") == 0) {
+      enable_impeller = true;
+    }
+  }
+  for (const auto& arg : command_line_arguments) {
+    if (arg == "--enable-impeller" || arg == "--enable-impeller=true") {
+      enable_impeller = true;
+    } else if (arg == "--enable-impeller=false") {
+      enable_impeller = false;
+    }
+  }
+
   flutter::DartProject project(L"data");
+  // Default to Skia on Windows unless AGENT_MCP_IMPELLER=1 is set: Flutter 3.47's
+  // default Windows Impeller (OpenGLES/ANGLE) backend can deadlock on multi-GPU +
+  // virtual display driver (UU Remote / Oray / IddCx) adapter resets.
+  project.set_impeller_switch(enable_impeller
+                                  ? flutter::ImpellerSwitch::Enabled
+                                  : flutter::ImpellerSwitch::Disabled);
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);

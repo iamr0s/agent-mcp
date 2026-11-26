@@ -355,6 +355,85 @@ SixTierInstallDetection resolveSixTierInstallLocation({
   );
 }
 
+Future<SixTierInstallDetection> resolveSixTierInstallLocationAsync({
+  String? explicitDir,
+  String? preDetectedDir,
+  String? preDetectedSource,
+}) async {
+  List<String> exePaths = const <String>[];
+  String? regInstallDir;
+  String? autoStartCmd;
+  final shortcutTargets = <String>[];
+
+  if (Platform.isWindows) {
+    try {
+      final selfPid = pid;
+      final res = await Process.run(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          "Get-Process -Name 'agent_mcp_app','agent-mcp' -ErrorAction SilentlyContinue | Where-Object { \$_.Id -ne $selfPid -and \$_.Path } | Select-Object -ExpandProperty Path",
+        ],
+        runInShell: false,
+      ).timeout(const Duration(seconds: 4));
+      if (res.exitCode == 0) {
+        exePaths = res.stdout
+            .toString()
+            .split(RegExp(r'\r?\n'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {}
+
+    try {
+      final r = await Process.run(
+        'reg',
+        ['query', r'HKCU\Software\AgentMCP', '/v', 'InstallDir'],
+        runInShell: false,
+      ).timeout(const Duration(seconds: 3));
+      if (r.exitCode == 0) {
+        regInstallDir = RegExp(
+          r'InstallDir\s+REG_SZ\s+(.+)$',
+          multiLine: true,
+        ).firstMatch(r.stdout.toString())?.group(1)?.trim();
+      }
+    } catch (_) {}
+
+    try {
+      final r = await Process.run(
+        'reg',
+        [
+          'query',
+          r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+          '/v',
+          'AgentMCP',
+        ],
+        runInShell: false,
+      ).timeout(const Duration(seconds: 3));
+      if (r.exitCode == 0) {
+        autoStartCmd = RegExp(
+          r'AgentMCP\s+REG_SZ\s+(.+)$',
+          multiLine: true,
+        ).firstMatch(r.stdout.toString())?.group(1)?.trim();
+      }
+    } catch (_) {}
+  }
+
+  return resolveSixTierInstallLocation(
+    explicitDir: explicitDir,
+    preDetectedDir: preDetectedDir,
+    preDetectedSource: preDetectedSource,
+    probeRunningExePaths: () => exePaths,
+    readRegistryInstallDir: () => regInstallDir,
+    readAutoStartCommand: () => autoStartCmd,
+    readShortcutTargetPaths:
+        shortcutTargets.isNotEmpty ? () => shortcutTargets : null,
+  );
+}
+
 @immutable
 class InstallerLaunchConfig {
   final String payloadDir;
@@ -585,17 +664,58 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
     super.initState();
     _createShortcut = widget.launchConfig.createShortcut;
     _launchAfter = widget.launchConfig.afterMode != 'none';
-    final resolved = resolveSixTierInstallLocation(
-      explicitDir: widget.launchConfig.explicitDir,
-      preDetectedDir: widget.launchConfig.detectedDir,
-      preDetectedSource: widget.launchConfig.detectedSource,
-    );
+    final hasFastPreDetect = (widget.launchConfig.explicitDir != null &&
+            widget.launchConfig.explicitDir!.trim().isNotEmpty) ||
+        (widget.launchConfig.detectedDir != null &&
+            widget.launchConfig.detectedDir!.trim().isNotEmpty &&
+            widget.launchConfig.detectedSource != null &&
+            widget.launchConfig.detectedSource != 'default_dir');
+    final resolved = hasFastPreDetect
+        ? resolveSixTierInstallLocation(
+            explicitDir: widget.launchConfig.explicitDir,
+            preDetectedDir: widget.launchConfig.detectedDir,
+            preDetectedSource: widget.launchConfig.detectedSource,
+          )
+        : resolveSixTierInstallLocation(
+            explicitDir: widget.launchConfig.explicitDir,
+            preDetectedDir: widget.launchConfig.detectedDir,
+            preDetectedSource: widget.launchConfig.detectedSource,
+            probeRunningExePaths: () => const <String>[],
+            readRegistryInstallDir: () => null,
+            readAutoStartCommand: () => null,
+            readShortcutTargetPaths: () => const <String>[],
+          );
     _initialDetectedDir = resolved.directory;
     _detectedSourceCode = resolved.sourceCode;
     _detectedSourceLabel = resolved.sourceLabel;
     _isUpgrade = resolved.isUpgrade;
     _dirCtrl = TextEditingController(text: resolved.directory);
     _dirCtrl.addListener(() => _refreshUpgradeFlag(_dirCtrl.text));
+    if (!hasFastPreDetect) {
+      unawaited(_hydrateAsyncInstallLocation());
+    }
+  }
+
+  Future<void> _hydrateAsyncInstallLocation() async {
+    final asyncResolved = await resolveSixTierInstallLocationAsync(
+      explicitDir: widget.launchConfig.explicitDir,
+      preDetectedDir: widget.launchConfig.detectedDir,
+      preDetectedSource: widget.launchConfig.detectedSource,
+    );
+    if (!mounted || _installing) return;
+    // Only auto-apply if user hasn't typed a custom path yet
+    if (_dirCtrl.text.trim().toLowerCase() ==
+            _initialDetectedDir.toLowerCase() &&
+        asyncResolved.directory.toLowerCase() !=
+            _initialDetectedDir.toLowerCase()) {
+      setState(() {
+        _initialDetectedDir = asyncResolved.directory;
+        _detectedSourceCode = asyncResolved.sourceCode;
+        _detectedSourceLabel = asyncResolved.sourceLabel;
+        _isUpgrade = asyncResolved.isUpgrade;
+        _dirCtrl.text = asyncResolved.directory;
+      });
+    }
   }
 
   @override

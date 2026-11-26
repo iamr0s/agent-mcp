@@ -1,5 +1,31 @@
 # Changelog
 
+## [v3.5.4] — Windows Multi-GPU & Remote-Desktop Anti-Freeze Hardening, Default Quick Tunnel & First-Run Onboarding Wizard
+
+### 中文更新说明
+
+- **Windows 多显卡 / 远程桌面环境防卡死与 `0xc0000005` 闪退深度修复**：
+  - **`FLUTTERVIEW` `WM_GETOBJECT` 无障碍桥接防护（根治 `flutter_windows.dll` `0xc0000005` 闪退）**：针对向日葵（`OrayIddDriver`）、UU远程（`GameViewer`）、ToDesk 及部分中文输入法向子窗口发送 `WM_GETOBJECT` 探测消息、误激活 Flutter 3.47 Windows `AccessibilityBridge` 导致动态列表刷新时偶发访问违例崩溃与逐帧主线程卡顿的问题，在原生 `flutter_window.cpp` 中为 `FLUTTERVIEW` 子窗口挂载子类化守卫，仅在真实屏幕阅读器开启（`SPI_GETSCREENREADER`）或显式设置 `AGENT_MCP_ENABLE_A11Y=1` 时放行 UIA 桥接。
+  - **Windows 默认切换稳态 Skia 渲染后端与虚拟显示器热插拔恢复**：在 `main.cpp` 默认关闭 Windows 端实验性 Impeller OpenGLES/ANGLE 后端（`ImpellerSwitch::Disabled`，可通过 `AGENT_MCP_IMPELLER=1` 或 `--enable-impeller` 显式开启），彻底消除核显 + 独显 + 远控虚拟显示驱动（`IddCx`）热切换时的 DXGI 交换链死锁；同时监听 `WM_DISPLAYCHANGE` 与 `WM_WTSSESSION_CHANGE` 会话重连通知并自动执行视口对齐与强制重绘。
+  - **UI 主线程零同步子进程与高频事件帧合并**：彻底移除每 3 秒状态轮询中 `AutoStartManager` 同步调用 `reg.exe`、`getCloudflaredVersion` 同步调用 `cloudflared --version` 以及安装向导首帧同步调用 PowerShell 的主线程阻塞，全部改为异步缓存刷新；`Tailscale` 状态探测支持 30 秒后台静默续期；桌面日志流引入 `48ms` 帧级合并批处理，`stderr` 与 `crash.log` 增加断路器与去重限流保护。
+- **主入口默认启用 Quick 临时公网隧道（开箱即用公网 HTTPS）**：
+  - 全新部署时桌面端「主入口」（`default`）默认设为 **`Quick 临时隧道`（`tunnel_mode: "quick"`）**，启动后自动拉起 `cloudflared` 生成 `https://*.trycloudflare.com/mcp` 公网加密端点，无需配置域名或端口转发即可直接接入云端 AI 客户端；已有配置文件与自定义入口保持 100% 无损兼容。
+- **首次启动初始化向导弹窗（OAuth 口令 · 公网隧道 · Tailscale 一键安装）**：
+  - 全新安装首次打开控制台时自动弹出同源 **Prism 初始化设置向导**（也可随时从「服务配置 → 初始化向导」手动重新打开）：支持一键随机生成并复制高强度 **OAuth 2.1 授权密码**、切换主入口连接方式（Quick 临时隧道 / Token 固定域名 / 仅局域网与组网）并实时复制已连通公网 MCP 地址、自动检测本机 **Tailscale** 状态并提供 **Windows `winget` 一键安装 / 官网直达下载**，以及配置开机自启与静默驻留托盘。
+- **图标边缘缓存优化**：将公共 Favicon 与图标路由缓存策略优化为 `public, max-age=3600, stale-while-revalidate=86400`，避免 CDN 边缘节点长时间滞留旧版图标缓存。
+
+### English Release Notes
+
+- **Windows Multi-GPU & Remote-Desktop Anti-Freeze / Anti-Crash (`0xc0000005`) Hardening**:
+  - **`FLUTTERVIEW` `WM_GETOBJECT` Accessibility Guard (`flutter_window.cpp`)**: Subclasses the native `FLUTTERVIEW` child HWND to intercept unsolicited `WM_GETOBJECT` probes from remote-desktop virtual display / input hooks (Oray Sunlogin, UU GameViewer, ToDesk) and IMEs unless a real screen reader (`SPI_GETSCREENREADER`) or `AGENT_MCP_ENABLE_A11Y=1` is active — eliminating Flutter 3.47 Windows `AccessibilityBridge` `0xc0000005` access violations and per-frame `AXTree` UI-thread stalls.
+  - **Stable Skia Default Renderer & Display/Session Hot-Swap Recovery (`main.cpp`, `flutter_window.cpp`)**: Defaults Windows rendering to Skia (`ImpellerSwitch::Disabled`, overrideable via `AGENT_MCP_IMPELLER=1` or `--enable-impeller`) to prevent Impeller OpenGLES/ANGLE swapchain deadlocks across hybrid iGPU + dGPU + `IddCx` virtual display setups, and handles `WM_DISPLAYCHANGE` + `WM_WTSSESSION_CHANGE` with automatic child viewport realignment and `ForceRedraw()`.
+  - **Zero UI-Isolate Synchronous Subprocess Stalls & 48ms Event Coalescing**: Eliminates synchronous `Process.runSync('reg', ...)` and `cloudflared --version` calls from the 3-second UI status poll in favor of non-blocking async caches, adds background stale-while-revalidate caching for `tailscale status --json`, coalesces high-frequency MCP call-stream updates into 48ms frame batches, and adds self-healing `stderr` circuit breakers plus rate-limited async `crash.log` writes.
+- **Default Quick Public Tunnel on Primary Entry (`tunnel_mode: "quick"`)**:
+  - Fresh desktop installations now configure the primary entry (`default`) to **Cloudflare Quick Tunnel (`*.trycloudflare.com`)** out of the box for instant zero-config HTTPS MCP connectivity while preserving all existing user profiles and custom domain configs untouched.
+- **First-Run Prism Onboarding Wizard Modal**:
+  - Automatically launches a native **Prism Initial Setup Wizard** on fresh setups (and remains re-openable anytime from **Settings → Onboarding Wizard**) covering **OAuth 2.1 password setup** (with 1-click strong password generator), **primary tunnel mode selection & live MCP URL copy**, **live Tailscale detection + 1-click `winget` install / official download**, and **login auto-start / silent tray residency**.
+- **Public Icon Cache Policy Refinement**: Updates unauthenticated icon & favicon `Cache-Control` headers to `public, max-age=3600, stale-while-revalidate=86400` so CDN edges refresh updated brand icons promptly.
+
 ## [v3.5.3] — Gemini Web & Strict-CSP MCP Icon Compatibility, Hybrid BMP+PNG `.ico`, `*.googleusercontent.com` OAuth Whitelist & Native Tray Flyout Prism Badge
 
 - **Gemini 网页端与严格 CSP 宿主图标全链路修复**：

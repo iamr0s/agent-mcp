@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v3.5.3)'
+        description: 'Release tag to publish (e.g. v3.5.4)'
         required: true
-        default: 'v3.5.3'
+        default: 'v3.5.4'
 
 permissions:
   contents: write
@@ -561,17 +561,23 @@ jobs:
 
           changelog_path = pathlib.Path('CHANGELOG.md')
           if changelog_path.is_file():
-              raw_cl = changelog_path.read_text(encoding='utf-8')
-              pat = re.compile(
-                  rf'^##\s+\[?v?{re.escape(ver)}\]?(?:\s*[—\-:]\s*(.+))?$\n(.*?)(?=^##\s+|\Z)',
-                  re.MULTILINE | re.DOTALL,
-              )
-              m = pat.search(raw_cl)
-              if m:
-                  subtitle = (m.group(1) or '').strip()
-                  if subtitle:
-                      release_title = f'Agent MCP {tag} — {subtitle}'
-                  notes_body = m.group(2).strip()
+              cl_lines = changelog_path.read_text(encoding='utf-8').replace('\r\n', '\n').splitlines()
+              hdr_re = re.compile(rf'^##\s+\[?v?{re.escape(ver)}\]?(?:\s*[—\-:]\s*(.+))?$')
+              body_lines = []
+              in_sec = False
+              for ln in cl_lines:
+                  if not in_sec:
+                      m = hdr_re.match(ln.strip())
+                      if m:
+                          in_sec = True
+                          subtitle = (m.group(1) or '').strip()
+                          if subtitle:
+                              release_title = f'Agent MCP {tag} — {subtitle}'
+                  else:
+                      if re.match(r'^##\s+\[?v?\d', ln.strip()):
+                          break
+                      body_lines.append(ln)
+              notes_body = '\n'.join(body_lines).strip()
 
           if not notes_body:
               try:
@@ -626,19 +632,19 @@ jobs:
           out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
           rows = [
-              ('Windows x64 桌面安装向导 (Prism GUI)', 'windows_sfx'),
-              ('Windows x64 免安装绿色版 (GUI + CLI)', 'windows_portable'),
-              ('macOS Apple Silicon 桌面版 (.dmg)', 'macos_arm64_dmg'),
-              ('macOS Intel 桌面版 (.dmg)', 'macos_x64_dmg'),
-              ('Linux x64 桌面版 (GTK3 GUI + CLI)', 'linux_x64_gui'),
-              ('Linux ARM64 桌面版 (GTK3 GUI + CLI)', 'linux_arm64_gui'),
-              ('Android 手机端推荐版 (arm64-v8a APK)', 'android_arm64'),
-              ('Android 全架构通用版 (Universal APK)', 'android_universal'),
+              ('Windows x64 桌面安装向导 / Setup Wizard (Prism GUI)', 'windows_sfx'),
+              ('Windows x64 免安装绿色版 / Portable ZIP (GUI + CLI)', 'windows_portable'),
+              ('macOS Apple Silicon 桌面版 / Desktop (.dmg)', 'macos_arm64_dmg'),
+              ('macOS Intel 桌面版 / Desktop (.dmg)', 'macos_x64_dmg'),
+              ('Linux x64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_x64_gui'),
+              ('Linux ARM64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_arm64_gui'),
+              ('Android 手机端推荐版 / Recommended (arm64-v8a APK)', 'android_arm64'),
+              ('Android 全架构通用版 / Universal APK', 'android_universal'),
           ]
           table_lines = [
-              '### 全平台安装包速览',
+              '### 全平台安装包速览 / Multi-Platform Downloads',
               '',
-              '| 平台与形态 | 安装包文件 | 大小 |',
+              '| 平台与形态 / Platform | 安装包文件 / Package | 大小 / Size |',
               '| :--- | :--- | :--- |',
           ]
           for label, k in rows:
@@ -648,7 +654,7 @@ jobs:
               mb = a['size'] / (1024 * 1024)
               table_lines.append(f"| {label} | [`{a['name']}`]({a['url']}) | {mb:.2f} MB |")
 
-          full_md = f"## 更新亮点\n\n{notes_body}\n\n" + '\n'.join(table_lines) + '\n'
+          full_md = f"## 更新亮点 / What's New\n\n{notes_body}\n\n" + '\n'.join(table_lines) + '\n'
           pathlib.Path('release_notes.md').write_text(full_md, encoding='utf-8')
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:

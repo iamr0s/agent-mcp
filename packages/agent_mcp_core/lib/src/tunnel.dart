@@ -83,14 +83,22 @@ File? findCloudflared() {
 
 String _cachedCfPath = '';
 String _cachedCfVer = '';
+bool _probingCfVer = false;
 
-String getCloudflaredVersion(File? binary) {
-  if (binary == null || !binary.existsSync()) return '';
-  if (_cachedCfPath == binary.path && _cachedCfVer.isNotEmpty) {
+Future<String> warmCloudflaredVersionAsync([File? binary]) async {
+  final bin = binary ?? findCloudflared();
+  if (bin == null || !bin.existsSync()) return '';
+  if (_cachedCfPath == bin.path && _cachedCfVer.isNotEmpty) {
     return _cachedCfVer;
   }
+  if (_probingCfVer) return _cachedCfVer;
+  _probingCfVer = true;
   try {
-    final res = Process.runSync(binary.path, const ['--version']);
+    final res = await Process.run(
+      bin.path,
+      const ['--version'],
+      runInShell: false,
+    ).timeout(const Duration(seconds: 4));
     final out = '${res.stdout}\n${res.stderr}'.trim();
     final m =
         RegExp(r'version\s+([0-9]+\.[0-9]+\.[0-9]+)', caseSensitive: false)
@@ -98,12 +106,23 @@ String getCloudflaredVersion(File? binary) {
     final ver = m != null
         ? m.group(1)!
         : (out.isNotEmpty ? out.split(RegExp(r'\r?\n')).first : '');
-    _cachedCfPath = binary.path;
+    _cachedCfPath = bin.path;
     _cachedCfVer = ver;
     return ver;
   } catch (_) {
-    return '';
+    return _cachedCfVer;
+  } finally {
+    _probingCfVer = false;
   }
+}
+
+String getCloudflaredVersion(File? binary) {
+  if (binary == null || !binary.existsSync()) return '';
+  if (_cachedCfPath == binary.path && _cachedCfVer.isNotEmpty) {
+    return _cachedCfVer;
+  }
+  unawaited(warmCloudflaredVersionAsync(binary));
+  return _cachedCfVer;
 }
 
 class _TunnelProc {

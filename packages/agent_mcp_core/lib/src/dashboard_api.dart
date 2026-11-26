@@ -335,6 +335,9 @@ class DashboardHandler {
         ..['expose_cloudflared_fallback'] = ExposureManager.isCloudflaredFallbackInSaved(saved)
         ..['expose_default_ttl_minutes'] = ExposureManager.defaultTtlMinutesInSaved(saved)
         ..['privilege_status'] = PrivilegedExecutor.instance.publicStatus
+        ..['onboarding_completed'] = saved.containsKey('onboarding_completed')
+            ? saved['onboarding_completed'] == true
+            : true
         ..['has_password'] =
             (saved['oauth_local_password_hash'] ?? '').toString().isNotEmpty
         ..remove('oauth_local_password_hash');
@@ -1196,7 +1199,7 @@ void saveUpdatedConfigMap(File configFile, Map<String, dynamic> patch) {
       patch.containsKey('silent_start');
   saveConfigFile(configFile, cur);
   if (shouldSyncAutoStart) {
-    AutoStartManager.syncFromConfigMap(cur);
+    unawaited(AutoStartManager.syncFromConfigMapAsync(cur));
   }
 }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -291,7 +292,10 @@ class AutoStartManager {
     };
   }
 
-  /// Checks whether OS-level login auto-start is currently registered.
+  static bool? _cachedOsRegistered;
+  static bool _probingOsRegistered = false;
+
+  /// Checks whether OS-level login auto-start is currently registered (CLI fallback).
   static bool isOsRegistered() {
     try {
       if (Platform.isWindows) {
@@ -300,26 +304,72 @@ class AutoStartManager {
           ['query', _winRegKey, '/v', _winRegValue],
           runInShell: false,
         );
-        return r.exitCode == 0;
+        final ok = r.exitCode == 0;
+        _cachedOsRegistered = ok;
+        return ok;
       }
       if (Platform.isMacOS) {
-        return _macPlistFile().existsSync();
+        final ok = _macPlistFile().existsSync();
+        _cachedOsRegistered = ok;
+        return ok;
       }
       if (Platform.isLinux) {
-        return _linuxDesktopFile().existsSync() ||
+        final ok = _linuxDesktopFile().existsSync() ||
             linuxSystemdUnitFile(systemWide: false).existsSync() ||
             linuxSystemdUnitFile(systemWide: true).existsSync();
+        _cachedOsRegistered = ok;
+        return ok;
       }
     } catch (_) {}
+    _cachedOsRegistered = false;
     return false;
   }
 
-  /// Effective `launch_at_startup` flag merging config preference with OS state.
+  /// Non-blocking async probe so desktop UI status polls never stall on `reg.exe`.
+  static Future<bool> refreshOsRegisteredAsync() async {
+    if (_probingOsRegistered) return _cachedOsRegistered ?? false;
+    _probingOsRegistered = true;
+    try {
+      if (Platform.isWindows) {
+        final r = await Process.run(
+          'reg',
+          ['query', _winRegKey, '/v', _winRegValue],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 3));
+        final ok = r.exitCode == 0;
+        _cachedOsRegistered = ok;
+        return ok;
+      }
+      if (Platform.isMacOS) {
+        final ok = await _macPlistFile().exists();
+        _cachedOsRegistered = ok;
+        return ok;
+      }
+      if (Platform.isLinux) {
+        final ok = await _linuxDesktopFile().exists() ||
+            await linuxSystemdUnitFile(systemWide: false).exists() ||
+            await linuxSystemdUnitFile(systemWide: true).exists();
+        _cachedOsRegistered = ok;
+        return ok;
+      }
+    } catch (_) {} finally {
+      _probingOsRegistered = false;
+    }
+    _cachedOsRegistered ??= false;
+    return _cachedOsRegistered!;
+  }
+
+  /// Effective `launch_at_startup` flag merging config preference with cached OS state.
+  /// Never spawns a synchronous child process on the Flutter UI isolate.
   static bool effectiveLaunchAtStartup(Map<String, dynamic> cfg) {
     if (cfg.containsKey('launch_at_startup')) {
       return cfg['launch_at_startup'] == true;
     }
-    return isOsRegistered();
+    if (_cachedOsRegistered != null) {
+      return _cachedOsRegistered!;
+    }
+    unawaited(refreshOsRegisteredAsync());
+    return false;
   }
 
   /// Applies `launch_at_startup` + `silent_start` to the underlying OS login
@@ -346,6 +396,7 @@ class AutoStartManager {
         McpLogger.instance.info(
           '[AUTOSTART] Disabled OS login auto-start (${Platform.operatingSystem})',
         );
+        _cachedOsRegistered = false;
         return {'ok': true, 'enabled': false};
       }
 
@@ -432,6 +483,7 @@ class AutoStartManager {
       McpLogger.instance.info(
         '[AUTOSTART] Registered OS login auto-start (${Platform.operatingSystem}, silent=$silentStart) -> $exe',
       );
+      _cachedOsRegistered = true;
       return {'ok': true, 'enabled': true, 'exe': exe, 'silent': silentStart};
     } catch (e) {
       McpLogger.instance.warning('[AUTOSTART] Failed to sync OS auto-start: $e');
@@ -443,6 +495,83 @@ class AutoStartManager {
     final enabled = cfg['launch_at_startup'] == true;
     final silent = cfg['silent_start'] == true;
     syncWithOs(enabled: enabled, silentStart: silent);
+  }
+
+  /// Async variant of [syncWithOs] so UI saves and startup never block on `reg.exe`.
+  static Future<Map<String, dynamic>> syncWithOsAsync({
+    required bool enabled,
+    required bool silentStart,
+  }) async {
+    try {
+      if (!enabled) {
+        if (Platform.isWindows) {
+          await Process.run(
+            'reg',
+            ['delete', _winRegKey, '/v', _winRegValue, '/f'],
+            runInShell: false,
+          ).timeout(const Duration(seconds: 4));
+        } else if (Platform.isMacOS) {
+          final f = _macPlistFile();
+          if (await f.exists()) await f.delete();
+        } else if (Platform.isLinux) {
+          final f = _linuxDesktopFile();
+          if (await f.exists()) await f.delete();
+        }
+        _cachedOsRegistered = false;
+        McpLogger.instance.info(
+          '[AUTOSTART] Disabled OS login auto-start (${Platform.operatingSystem})',
+        );
+        return {'ok': true, 'enabled': false};
+      }
+
+      final exe = resolveDesktopExecutablePath();
+      if (exe == null || exe.isEmpty) {
+        return {
+          'ok': false,
+          'enabled': true,
+          'warning': '尚未找到已编译的桌面端可执行文件，配置已保存，打包后生效。',
+        };
+      }
+
+      if (Platform.isWindows) {
+        final cmdValue = silentStart ? '"$exe" --silent' : '"$exe"';
+        final r = await Process.run(
+          'reg',
+          [
+            'add',
+            _winRegKey,
+            '/v',
+            _winRegValue,
+            '/t',
+            'REG_SZ',
+            '/d',
+            cmdValue,
+            '/f',
+          ],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 4));
+        if (r.exitCode != 0) {
+          return {'ok': false, 'error': '${r.stderr}'.trim()};
+        }
+      } else {
+        return syncWithOs(enabled: enabled, silentStart: silentStart);
+      }
+
+      _cachedOsRegistered = true;
+      McpLogger.instance.info(
+        '[AUTOSTART] Registered OS login auto-start (${Platform.operatingSystem}, silent=$silentStart) -> $exe',
+      );
+      return {'ok': true, 'enabled': true, 'exe': exe, 'silent': silentStart};
+    } catch (e) {
+      McpLogger.instance.warning('[AUTOSTART] Failed async OS auto-start sync: $e');
+      return {'ok': false, 'error': '$e'};
+    }
+  }
+
+  static Future<void> syncFromConfigMapAsync(Map<String, dynamic> cfg) async {
+    final enabled = cfg['launch_at_startup'] == true;
+    final silent = cfg['silent_start'] == true;
+    await syncWithOsAsync(enabled: enabled, silentStart: silent);
   }
 
   static String _xmlEscape(String input) {

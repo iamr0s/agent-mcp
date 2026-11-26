@@ -91,6 +91,7 @@ class ServiceSetupPage extends StatefulWidget {
   final UpdateInfo? latestUpdate;
   final Future<void> Function(UpdatePreferences next)? onUpdatePrefsChanged;
   final Future<void> Function()? onCheckUpdate;
+  final Future<void> Function()? onOpenOnboardingWizard;
   final ValueListenable<String?>? requestedSectionSignal;
   final VoidCallback? onConsumeRequestedSection;
   final SetupNavigationHandle? navigationHandle;
@@ -123,6 +124,7 @@ class ServiceSetupPage extends StatefulWidget {
     this.latestUpdate,
     this.onUpdatePrefsChanged,
     this.onCheckUpdate,
+    this.onOpenOnboardingWizard,
     this.requestedSectionSignal,
     this.onConsumeRequestedSection,
     this.navigationHandle,
@@ -902,6 +904,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  if (widget.onOpenOnboardingWizard != null)
+                    PrismButton(
+                      label: '初始化向导',
+                      compact: true,
+                      variant: PrismBtnVariant.neutral,
+                      leading: const Icon(Icons.auto_fix_high_rounded),
+                      onPressed: () => widget.onOpenOnboardingWizard!(),
+                    ),
                   PrismButton(
                     label: 'GitHub Releases',
                     compact: true,

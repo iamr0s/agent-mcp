@@ -16,8 +16,11 @@ class StructuredEventBus {
   final StreamController<Map<String, dynamic>> _controller =
       StreamController<Map<String, dynamic>>.broadcast();
 
-  bool emitStderrJsonEvents =
-      Platform.environment['MCP_JSON_EVENTS'] == '1';
+  bool emitStderrJsonEvents = Platform.environment['MCP_JSON_EVENTS'] == '1' &&
+      !(Platform.isWindows &&
+          Platform.resolvedExecutable
+              .toLowerCase()
+              .endsWith('agent_mcp_app.exe'));
 
   Stream<Map<String, dynamic>> get stream => _controller.stream;
 
@@ -47,7 +50,9 @@ class StructuredEventBus {
     if (emitStderrJsonEvents) {
       try {
         stderr.writeln('$jsonEventPrefix${jsonEncode(payload)}');
-      } catch (_) {}
+      } catch (_) {
+        emitStderrJsonEvents = false;
+      }
     }
   }
 }
@@ -133,7 +138,9 @@ class McpLogger {
     if (!useColor) {
       try {
         stderr.writeln(plain);
-      } catch (_) {}
+      } catch (_) {
+        quietStderr = true;
+      }
       return;
     }
 
@@ -149,7 +156,9 @@ class McpLogger {
         '$msg';
     try {
       stderr.writeln(colored);
-    } catch (_) {}
+    } catch (_) {
+      quietStderr = true;
+    }
   }
 }
 

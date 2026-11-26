@@ -199,7 +199,7 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.5.3';
+  String get currentAppVersion => '3.5.4';
   String get initialThemeModeKey => 'system';
   String get initialAccentThemeKey => 'indigo';
   bool get initialDynamicColor => false;
@@ -399,6 +399,18 @@ abstract class ConsoleBackend {
 
   Future<Map<String, dynamic>> getTailscaleStatus() async =>
       const {'ok': true, 'tailscale': <String, dynamic>{}};
+
+  Future<Map<String, dynamic>> installTailscaleClient() async {
+    final url = isWindowsPlatform
+        ? 'https://tailscale.com/download/windows'
+        : (isMacOSPlatform
+            ? 'https://tailscale.com/download/mac'
+            : (isLinuxPlatform
+                ? 'https://tailscale.com/download/linux'
+                : 'https://tailscale.com/download'));
+    await openExternalUrl(url);
+    return {'ok': true, 'mode': 'browser', 'url': url};
+  }
 
   Future<bool> openExternalUrl(String url) async => false;
 

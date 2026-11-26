@@ -1880,4 +1880,37 @@ void main() {
       await mockUpstream.close(force: true);
     }
   });
+
+  test('v3.5.4: ensureProfilesInConfig defaults primary entry to quick tunnel on desktop while preserving legacy/explicit configs', () {
+    final fresh = ensureProfilesInConfig(<String, dynamic>{});
+    expect(fresh, hasLength(1));
+    expect(fresh.first['id'], equals('default'));
+    expect(fresh.first['name'], equals('主入口'));
+    expect(fresh.first['tunnel_mode'], equals('quick'));
+    expect(fresh.first['oauth_allow_all_redirects'], isFalse);
+
+    final legacyCustomUrl = ensureProfilesInConfig(<String, dynamic>{
+      'oauth_base_url': 'https://mcp.example.com',
+    });
+    expect(legacyCustomUrl.first['tunnel_mode'], equals('none'));
+    expect(legacyCustomUrl.first['base_url'], equals('https://mcp.example.com'));
+
+    final explicitNone = ensureProfilesInConfig(<String, dynamic>{
+      'profiles': [
+        {
+          'id': 'default',
+          'name': '主入口',
+          'tunnel_mode': 'none',
+        },
+      ],
+    });
+    expect(explicitNone.first['tunnel_mode'], equals('none'));
+
+    // Non-blocking AutoStartManager check returns bool without throwing
+    expect(AutoStartManager.effectiveLaunchAtStartup(const {}), isA<bool>());
+    expect(
+      AutoStartManager.effectiveLaunchAtStartup(const {'launch_at_startup': true}),
+      isTrue,
+    );
+  });
 }

@@ -911,8 +911,16 @@ List<Map<String, dynamic>> ensureProfilesInConfig(Map<String, dynamic> data) {
   if (tr != 'dual' && tr != 'http' && tr != 'sse') tr = 'dual';
   final am = (data['auth_mode'] ?? 'oauth-local').toString().toLowerCase();
 
+  final hasLegacyDirect =
+      data.containsKey('direct_ips') || data.containsKey('manual_urls');
   final out = <Map<String, dynamic>>[];
   for (var idx = 0; idx < bases.length; idx++) {
+    final defaultPrimaryTunnelMode = (idx == 0 &&
+            bases[idx].isEmpty &&
+            !hasLegacyDirect)
+        ? (data['tunnel_mode'] ?? (Platform.isAndroid ? 'none' : 'quick'))
+            .toString()
+        : 'none';
     out.add(
       normalizeProfile(
         {
@@ -921,6 +929,11 @@ List<Map<String, dynamic>> ensureProfilesInConfig(Map<String, dynamic> data) {
           'enabled': true,
           'transport': tr,
           'base_url': bases[idx],
+          'tunnel_mode': defaultPrimaryTunnelMode,
+          'tunnel_token': idx == 0 ? data['tunnel_token'] : null,
+          'tunnel_auto_start': data['tunnel_auto_start'] == null
+              ? true
+              : data['tunnel_auto_start'] == true,
           'auth_mode': am,
           'api_key': data['api_key'],
           'oauth_client_id': data['oauth_client_id'],
