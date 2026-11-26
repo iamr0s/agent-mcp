@@ -12,6 +12,7 @@ const List<String> kDefaultOAuthRedirectRules = <String>[
   'http://127.0.0.1:*/**',
   'http://localhost:*/**',
   'https://*.google.com/**',
+  'https://*.googleusercontent.com/**',
   'https://vertexaisearch.cloud.google.com/**',
   'https://*.claude.ai/**',
   'https://claude.ai/**',

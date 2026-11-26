@@ -185,21 +185,90 @@ def render_macos_icon(master_1024: Image.Image, target_size: int) -> Image.Image
     return out
 
 
-def save_multi_ico(master: Image.Image, dst: Path) -> None:
-    """Writes crisp multi-resolution Windows .ico (16, 24, 32, 48, 64, 128, 256)."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    # For tiny sizes (16, 24, 32), render full-canvas squircle (0.485) so tray icon fills pixel grid crisply
-    tiny_master = render_prism_canvas(size=512, squircle_half=0.482, full_bleed=False, symbol_scale=1.04)
-    frames = []
-    for sz in (16, 24, 32, 48, 64, 128, 256):
-        src = tiny_master if sz <= 32 else master
-        frames.append(src.resize((sz, sz), Image.Resampling.LANCZOS))
-    frames[-1].save(
-        dst,
-        format="ICO",
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-        append_images=frames[:-1],
+def _encode_ico_bmp_dib(rgba_img: Image.Image) -> bytes:
+    """Encodes an RGBA image as a Win32/Web-standard 32-bit BGRA BITMAPINFOHEADER DIB + AND mask."""
+    import struct
+
+    w, h = rgba_img.size
+    arr = np.asarray(rgba_img.convert("RGBA"), dtype=np.uint8)
+    # Bottom-up scanlines in BGRA order
+    flipped = arr[::-1, :, :]
+    bgra = np.empty_like(flipped)
+    bgra[..., 0] = flipped[..., 2]
+    bgra[..., 1] = flipped[..., 1]
+    bgra[..., 2] = flipped[..., 0]
+    bgra[..., 3] = flipped[..., 3]
+    xor_bytes = bgra.tobytes()
+
+    # 1-bpp AND mask (1 = transparent where alpha == 0), padded to 32-bit (4-byte) row stride
+    row_bytes = ((w + 31) // 32) * 4
+    and_mask = bytearray(row_bytes * h)
+    alpha = flipped[..., 3]
+    for y in range(h):
+        row_off = y * row_bytes
+        for x in range(w):
+            if alpha[y, x] == 0:
+                and_mask[row_off + (x >> 3)] |= 0x80 >> (x & 7)
+
+    bih = struct.pack(
+        "<IiiHHIIiiII",
+        40,  # biSize
+        w,  # biWidth
+        h * 2,  # biHeight (XOR + AND combined height per ICO spec)
+        1,  # biPlanes
+        32,  # biBitCount
+        0,  # biCompression = BI_RGB
+        len(xor_bytes) + len(and_mask),  # biSizeImage
+        0,
+        0,
+        0,
+        0,
     )
+    return bih + xor_bytes + bytes(and_mask)
+
+
+def save_multi_ico(master: Image.Image, dst: Path) -> None:
+    """Writes standard hybrid Windows/Web .ico: 16..128 BGRA32 BMP/DIB + 256 PNG."""
+    import io
+    import struct
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    # For tiny sizes (16, 24, 32), render full-canvas squircle (0.482) so tray/favicon fills pixel grid crisply
+    tiny_master = render_prism_canvas(size=512, squircle_half=0.482, full_bleed=False, symbol_scale=1.04)
+    sizes = (16, 24, 32, 48, 64, 128, 256)
+    payloads: list[tuple[int, bytes]] = []
+    for sz in sizes:
+        src = tiny_master if sz <= 32 else master
+        frame = src.resize((sz, sz), Image.Resampling.LANCZOS)
+        if sz < 256:
+            payloads.append((sz, _encode_ico_bmp_dib(frame)))
+        else:
+            buf = io.BytesIO()
+            frame.save(buf, format="PNG", optimize=True)
+            payloads.append((sz, buf.getvalue()))
+
+    header = struct.pack("<HHH", 0, 1, len(payloads))
+    dir_entries = bytearray()
+    offset = 6 + 16 * len(payloads)
+    blobs = bytearray()
+    for sz, data in payloads:
+        w_byte = 0 if sz >= 256 else sz
+        h_byte = 0 if sz >= 256 else sz
+        dir_entries += struct.pack(
+            "<BBBBHHII",
+            w_byte,
+            h_byte,
+            0,  # bColorCount
+            0,  # bReserved
+            1,  # wPlanes = 1
+            32,  # wBitCount = 32
+            len(data),
+            offset,
+        )
+        blobs += data
+        offset += len(data)
+
+    dst.write_bytes(header + bytes(dir_entries) + bytes(blobs))
 
 
 def write_android_vectors() -> None:
@@ -278,20 +347,26 @@ def write_android_vectors() -> None:
 
 
 
-def sync_core_version_png(favicon_png_path: Path) -> None:
-    """Syncs the exact 64x64 Concentric Liquid Prism PNG Base64 into `version.dart`."""
+def sync_core_version_png(web_dir: Path, macos_set: Path) -> None:
+    """Syncs the exact 48x48, 64x64 & 128x128 Concentric Liquid Prism PNG Base64s into `version.dart`."""
     version_dart = ROOT / "packages" / "agent_mcp_core" / "lib" / "src" / "version.dart"
     if not version_dart.exists():
         return
-    b64 = base64.b64encode(favicon_png_path.read_bytes()).decode("ascii")
     txt = version_dart.read_text(encoding="utf-8")
-    if "appIconPng64Base64" in txt:
-        updated = re.sub(
-            r"const String appIconPng64Base64 =\s*'[^']*';",
-            f"const String appIconPng64Base64 = '{b64}';",
-            txt,
-        )
-        version_dart.write_text(updated, encoding="utf-8")
+    mapping = {
+        "appIconPng48Base64": web_dir / "favicon-48x48.png",
+        "appIconPng64Base64": web_dir / "favicon.png",
+        "appIconPng128Base64": macos_set / "app_icon_128.png",
+    }
+    for const_name, png_path in mapping.items():
+        if png_path.exists() and const_name in txt:
+            b64 = base64.b64encode(png_path.read_bytes()).decode("ascii")
+            txt = re.sub(
+                rf"const String {const_name} =\s*'[^']*';",
+                f"const String {const_name} = '{b64}';",
+                txt,
+            )
+    version_dart.write_text(txt, encoding="utf-8")
 
 def main() -> None:
     print("[1/5] Rendering 2048px supersampled Concentric Liquid Prism master...")
@@ -310,7 +385,13 @@ def main() -> None:
 
     print("[3/5] Writing Web PWA & favicon assets...")
     web_dir = ROOT / "apps" / "agent_mcp_app" / "web"
+    save_multi_ico(master_1024, web_dir / "favicon.ico")
+    tiny_web = render_prism_canvas(size=512, squircle_half=0.482, full_bleed=False, symbol_scale=1.04)
+    tiny_web.resize((16, 16), Image.Resampling.LANCZOS).save(web_dir / "favicon-16x16.png", format="PNG", optimize=True)
+    tiny_web.resize((32, 32), Image.Resampling.LANCZOS).save(web_dir / "favicon-32x32.png", format="PNG", optimize=True)
+    master_1024.resize((48, 48), Image.Resampling.LANCZOS).save(web_dir / "favicon-48x48.png", format="PNG", optimize=True)
     master_1024.resize((64, 64), Image.Resampling.LANCZOS).save(web_dir / "favicon.png", format="PNG", optimize=True)
+    master_1024.resize((96, 96), Image.Resampling.LANCZOS).save(web_dir / "favicon-96x96.png", format="PNG", optimize=True)
     master_1024.resize((192, 192), Image.Resampling.LANCZOS).save(web_dir / "icons" / "Icon-192.png", format="PNG", optimize=True)
     master_1024.resize((512, 512), Image.Resampling.LANCZOS).save(web_dir / "icons" / "Icon-512.png", format="PNG", optimize=True)
 
@@ -351,7 +432,7 @@ def main() -> None:
             android_res / folder / "ic_launcher.png", format="PNG", optimize=True
         )
     write_android_vectors()
-    sync_core_version_png(web_dir / "favicon.png")
+    sync_core_version_png(web_dir, macos_set)
     print("[OK] All 25 brand icon, vector & MCP protocol surfaces synchronized cleanly!")
 
 

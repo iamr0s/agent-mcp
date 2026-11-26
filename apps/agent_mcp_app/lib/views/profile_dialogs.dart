@@ -819,6 +819,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                                     ('127.0.0.1:*', 'http://127.0.0.1:*/**'),
                                     ('localhost:*', 'http://localhost:*/**'),
                                     ('Gemini', 'https://*.google.com/**'),
+                                    (
+                                      'Gemini OAuth',
+                                      'https://*.googleusercontent.com/**',
+                                    ),
                                     ('Claude', 'https://*.claude.ai/**'),
                                     ('ChatGPT', 'https://chatgpt.com/**'),
                                     ('Cursor', 'cursor://**'),

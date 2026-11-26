@@ -64,7 +64,8 @@ class McpLogger {
   LogLevel minLevel = LogLevel.info;
   bool useColor = true;
   File? logFile;
-  bool quietStderr = false;
+  bool quietStderr = Platform.isWindows &&
+      Platform.resolvedExecutable.toLowerCase().endsWith('agent_mcp_app.exe');
 
   void configure({
     required String name,
@@ -75,7 +76,9 @@ class McpLogger {
   }) {
     serverName = name;
     minLevel = _parseLevel(levelName);
-    quietStderr = quiet;
+    final isWinGuiExe = Platform.isWindows &&
+        Platform.resolvedExecutable.toLowerCase().endsWith('agent_mcp_app.exe');
+    quietStderr = quiet || isWinGuiExe;
     useColor = !noColor && stderr.hasTerminal;
     if (logFilePath != null && logFilePath.trim().isNotEmpty) {
       final resolved = expandAndResolvePath(logFilePath.trim());

@@ -145,15 +145,22 @@ class McpServerEngine {
     registerClipboardAndScreenTools(registerTool, config);
   }
 
-  Map<String, dynamic> buildServerInfoMetadata({String? effectiveBaseUrl}) => {
-        'name': sanitizeMcpMachineName(config.serverName),
-        'title': config.serverName,
-        'version': agentMcpVersion,
-        'description':
-            'Agent MCP Prism Gateway (${Platform.operatingSystem} · ${_tools.length} built-in tools + Sub-MCP hub)',
-        'websiteUrl': 'https://github.com/iamr0s/agent-mcp',
-        'icons': buildMcpServerIcons(baseUrl: effectiveBaseUrl),
-      };
+  Map<String, dynamic> buildServerInfoMetadata({String? effectiveBaseUrl}) {
+    final cleanBase =
+        (effectiveBaseUrl ?? '').trim().replaceAll(RegExp(r'/+$'), '');
+    final websiteUrl = cleanBase.toLowerCase().startsWith('https://')
+        ? cleanBase
+        : 'https://github.com/iamr0s/agent-mcp';
+    return {
+      'name': sanitizeMcpMachineName(config.serverName),
+      'title': config.serverName,
+      'version': agentMcpVersion,
+      'description':
+          'Agent MCP Prism Gateway (${Platform.operatingSystem} · ${_tools.length} built-in tools + Sub-MCP hub)',
+      'websiteUrl': websiteUrl,
+      'icons': buildMcpServerIcons(baseUrl: effectiveBaseUrl),
+    };
+  }
 
   Map<String, dynamic> get _serverCapabilities => const {
         'tools': {'listChanged': false},
@@ -300,7 +307,7 @@ class McpServerEngine {
       case 'tools/list':
         final policy = getEffectivePolicy(config);
         final silent = policy.relaxedCommandAnnotations;
-        final builtInIcons = buildMcpServerIcons(baseUrl: effectiveBaseUrl);
+        final builtInIcons = buildMcpServerIcons(compact: true);
         final directSpecs =
             await SubMcpManager.instance.resolveDirectMountedToolSpecs(
           globalPrefix: _prefix,
@@ -721,9 +728,14 @@ class McpServerEngine {
           .first
           .trim()
           .toLowerCase();
+      final cfVisitor = (request.headers['cf-visitor'] ?? '').toLowerCase();
+      final hasCfProxy = (request.headers['cf-ray'] ?? '').isNotEmpty ||
+          cfVisitor.contains('"https"');
       final scheme = fwdProto.isNotEmpty
           ? fwdProto
-          : (rawHost.endsWith('.trycloudflare.com') ? 'https' : request.requestedUri.scheme);
+          : ((hasCfProxy || _isLikelyPublicTlsDomain(hostNoPort))
+              ? 'https'
+              : request.requestedUri.scheme);
       final inferredBase = rawHost.isNotEmpty
           ? '$scheme://$rawHost'
           : 'http://${config.host}:${config.port}';
@@ -898,23 +910,60 @@ class McpServerEngine {
     return 'sess-$digest';
   }
 
+  bool _isLikelyPublicTlsDomain(String hostNoPort) {
+    final h = hostNoPort.trim().toLowerCase();
+    if (h.isEmpty ||
+        h == 'localhost' ||
+        h.endsWith('.local') ||
+        h.endsWith('.lan') ||
+        h.endsWith('.internal') ||
+        !h.contains('.')) {
+      return false;
+    }
+    if (InternetAddress.tryParse(h) != null) return false;
+    return true;
+  }
+
   Uint8List _resolveRasterIconBytes(int preferredSize) {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final relCandidates = preferredSize >= 512
-        ? const [
-            'web_dashboard/icons/Icon-512.png',
-            'apps/agent_mcp_app/web/icons/Icon-512.png',
-          ]
-        : (preferredSize >= 192
-            ? const [
-                'web_dashboard/icons/Icon-192.png',
-                'apps/agent_mcp_app/web/icons/Icon-192.png',
-              ]
-            : const [
-                'web_dashboard/favicon.png',
-                'apps/agent_mcp_app/web/favicon.png',
-              ]);
-    for (final base in [exeDir, Directory.current.path]) {
+    final relCandidates = switch (preferredSize) {
+      >= 512 => const [
+          'web_dashboard/icons/Icon-512.png',
+          'apps/agent_mcp_app/web/icons/Icon-512.png',
+        ],
+      >= 192 => const [
+          'web_dashboard/icons/Icon-192.png',
+          'apps/agent_mcp_app/web/icons/Icon-192.png',
+        ],
+      >= 128 => const [
+          'apps/agent_mcp_app/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png',
+        ],
+      >= 96 => const [
+          'web_dashboard/favicon-96x96.png',
+          'apps/agent_mcp_app/web/favicon-96x96.png',
+        ],
+      >= 64 => const [
+          'web_dashboard/favicon.png',
+          'apps/agent_mcp_app/web/favicon.png',
+        ],
+      >= 48 => const [
+          'web_dashboard/favicon-48x48.png',
+          'apps/agent_mcp_app/web/favicon-48x48.png',
+        ],
+      >= 32 => const [
+          'web_dashboard/favicon-32x32.png',
+          'apps/agent_mcp_app/web/favicon-32x32.png',
+        ],
+      _ => const [
+          'web_dashboard/favicon-16x16.png',
+          'apps/agent_mcp_app/web/favicon-16x16.png',
+        ],
+    };
+    final rootPath = StoragePaths.instance.rootDir.path;
+    final cwd = Directory.current.path;
+    final parentCwd = Directory.current.parent.path;
+    final grandParentCwd = Directory.current.parent.parent.path;
+    for (final base in [exeDir, rootPath, cwd, parentCwd, grandParentCwd]) {
       for (final rel in relCandidates) {
         final f = File('$base/$rel');
         if (f.existsSync()) {
@@ -924,14 +973,24 @@ class McpServerEngine {
         }
       }
     }
+    if (preferredSize >= 128) return appIconPng128Bytes;
+    if (preferredSize <= 48) return appIconPng48Bytes;
     return appIconPng64Bytes;
   }
 
   Uint8List? _resolveIcoFileBytes() {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final rootPath = StoragePaths.instance.rootDir.path;
+    final cwd = Directory.current.path;
+    final parentCwd = Directory.current.parent.path;
+    final grandParentCwd = Directory.current.parent.parent.path;
     for (final pth in [
       '$exeDir/app_icon.ico',
-      '${Directory.current.path}/apps/agent_mcp_app/assets/app_icon.ico',
+      '$exeDir/web_dashboard/favicon.ico',
+      '$rootPath/apps/agent_mcp_app/assets/app_icon.ico',
+      '$cwd/apps/agent_mcp_app/assets/app_icon.ico',
+      '$parentCwd/apps/agent_mcp_app/assets/app_icon.ico',
+      '$grandParentCwd/apps/agent_mcp_app/assets/app_icon.ico',
     ]) {
       final f = File(pth);
       if (f.existsSync()) {
@@ -951,6 +1010,24 @@ class McpServerEngine {
     if (request.method != 'GET' && request.method != 'HEAD') return null;
     final cleanBase = effectiveBaseUrl.replaceAll(RegExp(r'/+$'), '');
     const cacheHdr = 'public, max-age=86400';
+
+    if (path == '/robots.txt') {
+      return Response.ok(
+        'User-agent: *\n'
+        'Allow: /\n'
+        'Allow: /favicon*\n'
+        'Allow: /icon*\n'
+        'Allow: /apple-touch-icon*\n'
+        'Allow: /.well-known/\n'
+        'Disallow: /dashboard/\n'
+        'Disallow: /mcp\n'
+        'Disallow: /sse\n',
+        headers: const {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': cacheHdr,
+        },
+      );
+    }
 
     if (path == '/favicon.ico') {
       final ico = _resolveIcoFileBytes();
@@ -972,6 +1049,24 @@ class McpServerEngine {
       );
     }
 
+    if (path == '/favicon-16x16.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(16),
+        headers: const {'content-type': 'image/png', 'cache-control': cacheHdr},
+      );
+    }
+    if (path == '/favicon-32x32.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(32),
+        headers: const {'content-type': 'image/png', 'cache-control': cacheHdr},
+      );
+    }
+    if (path == '/favicon-48x48.png' || path == '/icon-48.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(48),
+        headers: const {'content-type': 'image/png', 'cache-control': cacheHdr},
+      );
+    }
     if (path == '/favicon.png' || path == '/icon.png' || path == '/icon-64.png') {
       return Response.ok(
         _resolveRasterIconBytes(64),
@@ -979,6 +1074,18 @@ class McpServerEngine {
           'content-type': 'image/png',
           'cache-control': cacheHdr,
         },
+      );
+    }
+    if (path == '/favicon-96x96.png' || path == '/icon-96.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(96),
+        headers: const {'content-type': 'image/png', 'cache-control': cacheHdr},
+      );
+    }
+    if (path == '/icon-128.png') {
+      return Response.ok(
+        _resolveRasterIconBytes(128),
+        headers: const {'content-type': 'image/png', 'cache-control': cacheHdr},
       );
     }
 
@@ -1040,13 +1147,18 @@ class McpServerEngine {
       final html = '''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>$safeTitle · Agent MCP v$agentMcpVersion</title>
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon.png">
 <link rel="mcp-server-card" type="application/json" href="/.well-known/mcp.json">
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0A0A0C;color:#FAFAFA;padding:20px}.card{max-width:420px;width:100%;background:#121216;border:1px solid #24242C;border-radius:26px;padding:28px 26px;text-align:center;box-shadow:0 20px 46px -12px rgba(0,0,0,.72)}img{width:56px;height:56px;border-radius:14px}h1{font-size:19px;margin:14px 0 6px}p{margin:0;color:#8E8E98;font-size:13.5px;line-height:1.6}code{background:#1B1B22;padding:2px 7px;border-radius:6px;font-size:12.5px;color:#C7D2FE}</style>
-</head><body><div class="card"><img src="/icon-192.png" alt="$safeTitle"><h1>$safeTitle</h1><p>Agent MCP Gateway v$agentMcpVersion · Streamable HTTP endpoint <code>/mcp</code></p></div></body></html>''';
+</head><body><div class="card"><img src="$appIconPngDataUri" alt="$safeTitle"><h1>$safeTitle</h1><p>Agent MCP Gateway v$agentMcpVersion · Streamable HTTP endpoint <code>/mcp</code></p></div></body></html>''';
       return Response.ok(
         html,
         headers: const {'content-type': 'text/html; charset=utf-8'},

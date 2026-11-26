@@ -1009,7 +1009,7 @@ class LocalOAuthProvider {
     final sname = _esc(serverName);
     final ac = resolveServerAccentPalette(_accentThemeKey);
     final page = '''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/png" sizes="64x64" href="/favicon.png"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="shortcut icon" href="/favicon.ico"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png"><link rel="icon" type="image/png" sizes="64x64" href="/favicon.png"><link rel="icon" type="image/svg+xml" href="$appIconDataUri"><title>$sname - 授权确认</title>
 <style>
 :root{--bg:#FAFAFB;--card:#FFFFFF;--elev:#F4F4F6;--border:#E6E6EA;--ink:#111113;--muted:#71717A;--clay:${ac.lightHex};--clay-h:${ac.lightHoverHex};--on-clay:#FFFFFF;--clay-bg:${ac.lightRgba};--dot:rgba(17,17,19,.05);--sh:inset 0 1px 0 rgba(255,255,255,.96),0 18px 42px -12px rgba(9,9,11,.09),0 2px 6px rgba(9,9,11,.035)}
 @media (prefers-color-scheme: dark){:root{--bg:#0A0A0C;--card:#121216;--elev:#0E0E12;--border:#222228;--ink:#FAFAFA;--muted:#8E8E98;--clay:${ac.darkHex};--clay-h:${ac.darkHoverHex};--on-clay:#0A0A0C;--clay-bg:${ac.darkRgba};--dot:rgba(250,250,250,.04);--sh:inset 0 1px 0 rgba(255,255,255,.14),0 22px 48px -10px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.44)}}
@@ -1031,7 +1031,7 @@ input:focus{border-color:var(--clay)}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head><body><div class="card">
-<div class="head-row"><span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><h2 style="margin:0;font-size:17px;font-weight:600">$sname 授权确认</h2></div>
+<div class="head-row"><img src="$appIconPngDataUri" alt="$sname" width="40" height="40" style="border-radius:11px;flex-shrink:0;display:block"><h2 style="margin:0;font-size:17px;font-weight:600">$sname 授权确认</h2></div>
 <p style="margin:0 0 14px;color:var(--muted);font-size:13.2px;line-height:1.58">客户端 <span class="client-pill">$cname</span> 请求接入你的本地 MCP 控制节点。</p>
 $errorMsg
 <form method="post" onsubmit="document.getElementById('authSpin').style.display='inline-block'">

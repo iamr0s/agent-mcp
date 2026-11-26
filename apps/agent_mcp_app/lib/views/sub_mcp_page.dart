@@ -327,16 +327,41 @@ class _SubMcpGatewayPageState extends State<SubMcpGatewayPage> {
         return fallback;
       }
     }
-    if ((lower.startsWith('https://') || lower.startsWith('http://')) &&
-        !lower.endsWith('.svg')) {
+    if (lower.startsWith('https://') || lower.startsWith('http://')) {
+      var effectiveUrl = iconSrc;
+      String? originFaviconFallback;
+      final parsed = Uri.tryParse(iconSrc);
+      if (parsed != null && parsed.hasAuthority) {
+        final origin = '${parsed.scheme}://${parsed.authority}';
+        if (lower.endsWith('.svg')) {
+          effectiveUrl = '$origin/favicon.png';
+          originFaviconFallback = '$origin/favicon.ico';
+        } else {
+          originFaviconFallback = '$origin/favicon.ico';
+        }
+      } else if (lower.endsWith('.svg')) {
+        return fallback;
+      }
       return ClipRSuperellipse(
         borderRadius: BorderRadius.circular(10),
         child: Image.network(
-          iconSrc,
+          effectiveUrl,
           width: 26,
           height: 26,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback,
+          errorBuilder: (_, __, ___) {
+            if (originFaviconFallback != null &&
+                originFaviconFallback != effectiveUrl) {
+              return Image.network(
+                originFaviconFallback,
+                width: 26,
+                height: 26,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => fallback,
+              );
+            }
+            return fallback;
+          },
         ),
       );
     }

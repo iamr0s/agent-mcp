@@ -1701,26 +1701,54 @@ void main() {
 
     try {
       for (final iconRoute in [
+        '/robots.txt',
         '/favicon.ico',
+        '/favicon-16x16.png',
+        '/favicon-32x32.png',
+        '/favicon-48x48.png',
         '/favicon.png',
+        '/favicon-96x96.png',
+        '/icon-128.png',
         '/icon-192.png',
         '/apple-touch-icon.png',
         '/icon.svg',
       ]) {
         final r = await http.get(Uri.parse('$mainBase$iconRoute'));
         expect(r.statusCode, equals(200), reason: 'Expected 200 for $iconRoute');
-        expect(r.bodyBytes.length, greaterThan(100));
+        expect(r.bodyBytes.length, greaterThan(80));
       }
+      // Verify hybrid ICO format: entries 0..5 (16..128) are Win32/Web BMP/DIB (planes=1), entry 6 (256) is PNG
+      final icoResp = await http.get(Uri.parse('$mainBase/favicon.ico'));
+      final icoBytes = icoResp.bodyBytes;
+      final icoCount = icoBytes[4] | (icoBytes[5] << 8);
+      expect(icoCount, equals(7));
+      for (var i = 0; i < icoCount; i++) {
+        final baseOff = 6 + i * 16;
+        final planes = icoBytes[baseOff + 4] | (icoBytes[baseOff + 5] << 8);
+        final offset = icoBytes[baseOff + 12] |
+            (icoBytes[baseOff + 13] << 8) |
+            (icoBytes[baseOff + 14] << 16) |
+            (icoBytes[baseOff + 15] << 24);
+        expect(planes, equals(1));
+        final isPng = icoBytes[offset] == 0x89 && icoBytes[offset + 1] == 0x50;
+        expect(isPng, equals(i == icoCount - 1));
+      }
+      expect(appIconSvg, contains('width="64" height="64"'));
+
       final rootHtml = await http.get(Uri.parse('$mainBase/'));
       expect(rootHtml.statusCode, equals(200));
-      expect(rootHtml.body, contains('rel="icon"'));
+      expect(rootHtml.body, contains('rel="shortcut icon"'));
+      expect(rootHtml.body, contains('sizes="48x48"'));
+      expect(rootHtml.body, contains('sizes="96x96"'));
 
       final cardResp = await http.get(Uri.parse('$mainBase/.well-known/mcp.json'));
       expect(cardResp.statusCode, equals(200));
       final cardJson = jsonDecode(cardResp.body) as Map<String, dynamic>;
       expect(cardJson['title'], equals('Omen Desktop Mcp'));
       expect(cardJson['name'], equals('Omen-Desktop-Mcp'));
-      expect((cardJson['icons'] as List).any((i) => (i as Map)['mimeType'] == 'image/png'), isTrue);
+      final cardIcons = (cardJson['icons'] as List).cast<Map>();
+      expect(cardIcons.first['src'].toString(), startsWith('data:image/png;base64,'));
+      expect(cardIcons.any((i) => i['mimeType'] == 'image/png'), isTrue);
 
       final asMetaResp = await http.get(
         Uri.parse('$mainBase/.well-known/oauth-authorization-server/mcp'),
@@ -1759,6 +1787,8 @@ void main() {
           'client_name': 'Default Whitelisted Clients',
           'redirect_uris': [
             'https://gemini.google.com/oauth/callback',
+            'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-729e18',
+            'https://oauth-redirect-sandbox.googleusercontent.com/a/user_bound_custom-mcp-729e18',
             'http://127.0.0.1:54321',
           ],
         }),

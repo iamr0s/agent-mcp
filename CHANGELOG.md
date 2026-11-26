@@ -1,5 +1,15 @@
 # Changelog
 
+## [v3.5.3] — Gemini Web & Strict-CSP MCP Icon Compatibility, Hybrid BMP+PNG `.ico`, `*.googleusercontent.com` OAuth Whitelist & Native Tray Flyout Prism Badge
+
+- **Gemini 网页端与严格 CSP 宿主图标全链路修复**：
+  - **`serverInfo.icons` 自包含 `data:image/png;base64,...` 置顶**：将 `64×64`、`128×128` 与 `48×48` 内联 PNG Data URI 提升至 `icons[0..2]` 首梯队（外链 `https://.../icon-192.png` 仅在确认为 `https://` 公网域名时置于末尾兜底），彻底避免 `gemini.google.com` / `claude.ai` 浏览器严格 `img-src` CSP 拦截首项第三方域名图片导致图标破损；同时为 `appIconSvg` 补齐显式 `width="64" height="64"` 固有尺寸属性，并对 `tools/list` 采用轻量级双项（`48×48` PNG + SVG）图标包降低载荷体积。
+  - **Google Favicon 爬虫友好路由与反代 `https://` 自动识别**：免鉴权开放 `/robots.txt`、`/favicon-16x16.png`、`/favicon-32x32.png`、`/favicon-48x48.png`、`/favicon-96x96.png`、`/icon-128.png` 及根路径 `<link rel="shortcut icon" href="/favicon.ico">`（对齐 Google Favicon `48px` 整数倍抓取要求）；公网域名经 Cloudflare Tunnel 反代未透传 `X-Forwarded-Proto` 时自动推断为 `https://`，并将 `serverInfo.websiteUrl` 动态指向当前 HTTPS 实例根源以避免误抓 GitHub 图标。
+  - **补齐 Gemini 自定义应用 OAuth 回调白名单**：默认白名单（`kDefaultOAuthRedirectUris`）与快捷预设新增 `https://*.googleusercontent.com/**`，原生放行 `oauth-redirect.googleusercontent.com` 重绑回调。
+- **标准混合编码 Windows `.ico`、原生托盘菜单双环棱镜徽标与桌面 GUI 日志加固**：
+  - **`16..128` `BMP/DIB` + `256` `PNG` 标准混合 `.ico`**：重写 `scripts/sync_brand_icons.py` 的 `.ico` 二进制封装器，小尺寸帧采用标准 32 位 BGRA `BITMAPINFOHEADER` DIB + 1-bpp AND 掩码，`256×256` 采用 PNG 帧，全面兼容 Win32 `LoadImageW`、`.NET csc /win32icon:`、桌面快捷方式与网页 Favicon 解析器。
+  - **Windows 托盘弹出面板（`win32_window.cpp`）换装双环棱镜徽标**：移除托盘右键菜单左上角残留的旧版四角星矢量绘制，统一为高 DPI 抗锯齿双环折射棱镜徽标；子 MCP 列表遇到纯 `.svg` 远程图标时自动回退同源位图 Favicon；修复 Windows GUI 进程无控制台句柄导致 `stderr` 写入触发 `errno = 6` 的异常日志。
+
 ## [v3.5.2] — Default OAuth Callback Whitelist Mode, Full MCP Protocol Compliance (`icons`, Naming, `2024`–`2026` Dual-Stack, Sub-MCP Multimodal/Pagination, OAuth CIMD/`iss`), Smart 6-Tier Install Detection & Call-Stream Timestamps
 
 - **默认开启 OAuth 2.1 回调地址白名单模式（`oauth_allow_all_redirects = false`）与通配符安全收敛**：

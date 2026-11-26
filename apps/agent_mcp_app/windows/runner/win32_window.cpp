@@ -623,37 +623,52 @@ void Win32Window::PaintTrayFlyout(HWND hwnd, HDC hdc) {
   {
     Gdiplus::RectF badgeRect(14.0f * s, 14.0f * s, 38.0f * s, 38.0f * s);
     Gdiplus::GraphicsPath badgePath;
-    AddRoundedRectPath(badgePath, badgeRect, 12.0f * s);
-    const Gdiplus::Color badgeStart =
-        (acR == 0xF4 && acG == 0xF4 && acB == 0xF6)
-            ? Gdiplus::Color(255, 0x3F, 0x3F, 0x46)
-            : accentCol;
-    const Gdiplus::Color badgeEnd =
-        (acR == 0xF4 && acG == 0xF4 && acB == 0xF6)
-            ? Gdiplus::Color(255, 0x18, 0x18, 0x1B)
-            : badgeEndCol;
+    AddRoundedRectPath(badgePath, badgeRect, 11.2f * s);
     Gdiplus::LinearGradientBrush badgeGrad(
-        badgeRect, badgeStart, badgeEnd,
+        badgeRect, Gdiplus::Color(255, 0x16, 0x18, 0x38),
+        Gdiplus::Color(255, 0x09, 0x0A, 0x16),
         Gdiplus::LinearGradientModeForwardDiagonal);
     g.FillPath(&badgeGrad, &badgePath);
 
+    // Subtle accent bloom in lower-right + 1px glass specular rim
+    Gdiplus::SolidBrush auraBrush(Gdiplus::Color(68, acR, acG, acB));
+    g.SetClip(&badgePath);
+    g.FillEllipse(&auraBrush, badgeRect.X + 12.0f * s, badgeRect.Y + 13.0f * s,
+                  26.0f * s, 26.0f * s);
+    g.ResetClip();
+    Gdiplus::Pen badgeRimPen(Gdiplus::Color(72, 0x81, 0x8C, 0xF8), 1.0f);
+    g.DrawPath(&badgeRimPen, &badgePath);
+
+    // Concentric Liquid Prism twin rotated rounded-diamond rings
+    auto drawPrismRing = [&](float rcx, float rcy, float halfOut, float halfIn,
+                             const Gdiplus::Color& fillCol) {
+      const Gdiplus::GraphicsState st = g.Save();
+      g.TranslateTransform(rcx, rcy);
+      g.RotateTransform(45.0f);
+      Gdiplus::GraphicsPath ringPath(Gdiplus::FillModeAlternate);
+      AddRoundedRectPath(
+          ringPath,
+          Gdiplus::RectF(-halfOut, -halfOut, halfOut * 2.0f, halfOut * 2.0f),
+          halfOut * 0.34f);
+      AddRoundedRectPath(
+          ringPath,
+          Gdiplus::RectF(-halfIn, -halfIn, halfIn * 2.0f, halfIn * 2.0f),
+          halfIn * 0.34f);
+      Gdiplus::SolidBrush ringBrush(fillCol);
+      g.FillPath(&ringBrush, &ringPath);
+      g.Restore(st);
+    };
+
     const float cx = badgeRect.X + badgeRect.Width * 0.5f;
     const float cy = badgeRect.Y + badgeRect.Height * 0.5f;
-    const float rOut = 9.5f * s;
-    const float rIn = 2.8f * s;
-    Gdiplus::PointF star[8] = {
-        {cx, cy - rOut}, {cx + rIn, cy - rIn},
-        {cx + rOut, cy}, {cx + rIn, cy + rIn},
-        {cx, cy + rOut}, {cx - rIn, cy + rIn},
-        {cx - rOut, cy}, {cx - rIn, cy - rIn},
-    };
-    Gdiplus::SolidBrush ivoryBrush(Gdiplus::Color(255, 0xFA, 0xF9, 0xF6));
-    g.FillPolygon(&ivoryBrush, star, 8);
-
-    Gdiplus::Pen bridgePen(Gdiplus::Color(200, 0xC7, 0xD2, 0xFE), 1.6f * s);
-    g.DrawLine(&bridgePen, cx - 6.0f * s, cy + 6.0f * s, cx + 6.0f * s, cy - 6.0f * s);
-    g.FillEllipse(&ivoryBrush, cx - 8.0f * s, cy + 4.0f * s, 4.0f * s, 4.0f * s);
-    g.FillEllipse(&ivoryBrush, cx + 4.0f * s, cy - 8.0f * s, 4.0f * s, 4.0f * s);
+    const Gdiplus::Color backPrismCol =
+        (acR == 0xF4 && acG == 0xF4 && acB == 0xF6)
+            ? Gdiplus::Color(235, 0x81, 0x8C, 0xF8)
+            : Gdiplus::Color(238, acR, acG, acB);
+    drawPrismRing(cx + 2.1f * s, cy + 2.1f * s, 8.6f * s, 3.8f * s,
+                  backPrismCol);
+    drawPrismRing(cx - 1.6f * s, cy - 1.6f * s, 9.1f * s, 4.0f * s,
+                  Gdiplus::Color(255, 0xF8, 0xFA, 0xFF));
 
     Gdiplus::SolidBrush inkBrush(inkCol);
     Gdiplus::RectF titleRect(60.0f * s, 13.0f * s, (kFlyoutLogicalW - 72.0f) * s, 19.0f * s);
