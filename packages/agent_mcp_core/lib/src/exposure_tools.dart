@@ -12,6 +12,7 @@ import 'package:stream_channel/stream_channel.dart';
 import 'auth.dart';
 import 'config.dart';
 import 'logging_utils.dart';
+import 'playit_tunnel.dart';
 import 'privileged_exec.dart';
 import 'process_tools.dart';
 import 'qr_svg.dart';
@@ -1060,19 +1061,26 @@ class ExposureManager {
   List<String> _discoverActivePublicGatewayBases(Map<String, dynamic> saved) {
     final out = <String>[];
     final tunnelStatuses = TunnelManager.instance.getStatuses();
+    final tMap = tunnelStatuses['tunnels'] is Map
+        ? Map<String, dynamic>.from(tunnelStatuses['tunnels'] as Map)
+        : tunnelStatuses;
     final profiles = ensureProfilesInConfig(saved);
 
     for (final p in profiles) {
       if (p['enabled'] == false) continue;
       final pid = (p['id'] ?? '').toString();
       final tmode = (p['tunnel_mode'] ?? 'none').toString().toLowerCase();
-      final tst = tunnelStatuses[pid];
+      final tst = tMap[pid];
       final tunnelRunning = tst is Map && tst['running'] == true;
 
-      if (tmode == 'quick' && tunnelRunning) {
-        final liveUrl = (tst['url'] ?? '').toString().trim();
-        if (liveUrl.startsWith('https://') && !out.contains(liveUrl)) {
-          out.add(liveUrl.replaceAll(RegExp(r'/+$'), ''));
+      if ((tmode == 'quick' || tmode == 'playit') && tunnelRunning) {
+        final liveUrl = (tst['live_url'] ?? tst['url'] ?? '')
+            .toString()
+            .trim()
+            .replaceAll(RegExp(r'/+$'), '');
+        if ((liveUrl.startsWith('https://') || liveUrl.startsWith('http://')) &&
+            !out.contains(liveUrl)) {
+          out.add(liveUrl);
         }
       } else if (tmode == 'token' && tunnelRunning) {
         final base = (p['base_url'] ?? '').toString().trim();
@@ -1537,6 +1545,7 @@ class ExposureManager {
       'tailscale_status': ts.toJson(),
       'public_gateway_bases': pubBases,
       'cloudflared_installed': cfInstalled,
+      'playit_installed': findPlayitd() != null,
       'active_local_ports': activePorts,
       'active_count': list.length,
       'items': list,

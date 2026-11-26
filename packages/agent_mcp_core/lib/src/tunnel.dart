@@ -8,6 +8,7 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import 'config.dart';
+import 'playit_tunnel.dart';
 import 'process_tools.dart';
 
 final RegExp _quickUrlRe =
@@ -145,7 +146,9 @@ class _TunnelProc {
 
 class TunnelManager {
   static final TunnelManager instance = TunnelManager._();
-  TunnelManager._();
+  TunnelManager._() {
+    PlayitManager.instance.onStateChanged = _persistState;
+  }
 
   final Map<String, _TunnelProc> _procs = {};
 
@@ -482,6 +485,9 @@ class TunnelManager {
         };
       }
     }
+    for (final e in PlayitManager.instance.getPersistedEntries().entries) {
+      payload[e.key] = e.value;
+    }
     try {
       StoragePaths.instance.tunnelStateFile.writeAsStringSync(
         '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
@@ -490,7 +496,7 @@ class TunnelManager {
     } catch (_) {}
   }
 
-  Map<String, dynamic> getStatuses() {
+  Map<String, dynamic> getStatuses([List<Map<String, dynamic>>? profiles]) {
     final binary = findCloudflared();
     final diskState = loadDiskState();
     final tunnels = <String, dynamic>{};
@@ -506,6 +512,10 @@ class TunnelManager {
         'error': tp.error,
         'pid': running ? tp.proc.pid : null,
       };
+    }
+
+    for (final e in PlayitManager.instance.getActiveTunnelEntries().entries) {
+      tunnels[e.key] = e.value;
     }
 
     for (final e in diskState.entries) {
@@ -541,6 +551,7 @@ class TunnelManager {
       'releases_url': dlInfo['releases_url'],
       'asset': dlInfo['asset'],
       'install': getInstallStatus(),
+      'playit': PlayitManager.instance.getComponentStatus(profiles),
       'tunnels': tunnels,
     };
   }
@@ -551,8 +562,14 @@ class TunnelManager {
   ) async {
     final pid = (profile['id'] ?? 'default').toString();
     final mode = (profile['tunnel_mode'] ?? 'none').toString().toLowerCase();
+    if (mode == 'playit') {
+      await _stopCloudflaredOnly(pid);
+      final res = await PlayitManager.instance.startTunnel(profile, localPort);
+      _persistState();
+      return res;
+    }
     if (mode != 'token' && mode != 'quick') {
-      return {'ok': false, 'error': '该入口未启用 Cloudflared 隧道模式。'};
+      return {'ok': false, 'error': '该入口未启用公网隧道模式。'};
     }
 
     final binary = findCloudflared();
@@ -656,7 +673,7 @@ class TunnelManager {
     }
   }
 
-  Future<Map<String, dynamic>> stopTunnel(String profileId) async {
+  Future<void> _stopCloudflaredOnly(String profileId) async {
     final tp = _procs.remove(profileId);
     if (tp != null) {
       tp.stopped = true;
@@ -675,6 +692,11 @@ class TunnelManager {
         }
       }
     }
+  }
+
+  Future<Map<String, dynamic>> stopTunnel(String profileId) async {
+    await _stopCloudflaredOnly(profileId);
+    await PlayitManager.instance.stopTunnel(profileId);
     _persistState();
     return {'ok': true};
   }
@@ -685,17 +707,29 @@ class TunnelManager {
   ) async {
     for (final prof in profiles) {
       final enabled = prof['enabled'] != false;
-      final mode = (prof['tunnel_mode'] ?? 'none').toString();
+      final mode = (prof['tunnel_mode'] ?? 'none').toString().toLowerCase();
       final autoStart = prof['tunnel_auto_start'] != false;
-      if (enabled && (mode == 'token' || mode == 'quick') && autoStart) {
+      if (!enabled || !autoStart) continue;
+      if (mode == 'token' || mode == 'quick') {
         await startTunnel(prof, localPort);
+      } else if (mode == 'playit') {
+        final pid = (prof['id'] ?? 'default').toString();
+        final secFile = resolvePlayitSecretFile(
+          pid,
+          prof['playit_secret_path']?.toString(),
+        );
+        if (readPlayitSecretKey(secFile) != null && findPlayitd() != null) {
+          await startTunnel(prof, localPort);
+        }
       }
     }
   }
 
   Future<void> stopAll() async {
     for (final pid in _procs.keys.toList()) {
-      await stopTunnel(pid);
+      await _stopCloudflaredOnly(pid);
     }
+    await PlayitManager.instance.stopAll();
+    _persistState();
   }
 }

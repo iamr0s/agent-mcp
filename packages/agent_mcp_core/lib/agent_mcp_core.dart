@@ -10,6 +10,7 @@ export 'src/encoding_utils.dart';
 export 'src/exposure_tools.dart';
 export 'src/file_tools.dart';
 export 'src/logging_utils.dart';
+export 'src/playit_tunnel.dart';
 export 'src/privileged_exec.dart';
 export 'src/process_tools.dart';
 export 'src/qr_svg.dart';

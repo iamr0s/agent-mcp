@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
 import '../theme/qr_code_painter.dart';
+import 'playit_claim_card.dart';
 import 'prism_structured_editors.dart';
 import 'profile_endpoints_helper.dart';
 
@@ -34,10 +35,13 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   final _baseCtrl = TextEditingController();
   final List<TextEditingController> _manualUrlCtrls = [TextEditingController()];
   final _tunTokenCtrl = TextEditingController();
+  final _playitCustomClaimCtrl = TextEditingController();
+  final _playitHostCtrl = TextEditingController();
   final _cidCtrl = TextEditingController();
   final _csecCtrl = TextEditingController();
   final _apiKeyCtrl = TextEditingController();
 
+  late final String _draftProfileId;
   late List<HostIpOption> _allIpOptions;
   final Set<String> _selectedDirectIps = <String>{};
   bool _syncBindHosts = true;
@@ -45,6 +49,8 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
   String _transport = 'dual';
   String _tunnelMode = 'none';
   bool _tunnelAuto = true;
+  String _playitClaimMode = 'random';
+  String _playitDomainMode = 'random';
   String _authMode = 'oauth-local';
   bool _oauthAllowAllRedirects = false;
   List<String> _oauthRedirectRules = List<String>.from(
@@ -70,12 +76,27 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
     final seenIps = baseOpts.map((o) => o.ip).toSet();
 
     final e = widget.existing;
+    _draftProfileId =
+        (e?['id'] ?? generateRandomToken('prof-', 8)).toString();
     if (e != null) {
       _nameCtrl.text = (e['name'] ?? '').toString();
       _transport = (e['transport'] ?? 'dual').toString();
       _tunnelMode = (e['tunnel_mode'] ?? 'none').toString();
       _tunnelAuto = e['tunnel_auto_start'] != false;
       _tunTokenCtrl.text = (e['tunnel_token'] ?? '').toString();
+      _playitClaimMode =
+          (e['playit_claim_mode'] ?? 'random').toString().toLowerCase() ==
+                  'custom'
+              ? 'custom'
+              : 'random';
+      _playitCustomClaimCtrl.text =
+          (e['playit_custom_code'] ?? '').toString();
+      _playitDomainMode =
+          (e['playit_domain_mode'] ?? 'random').toString().toLowerCase() ==
+                  'custom'
+              ? 'custom'
+              : 'random';
+      _playitHostCtrl.text = (e['playit_hostname'] ?? '').toString();
       _baseCtrl.text = (e['base_url'] ?? '').toString();
 
       final savedDirect = ((e['direct_ips'] as List?) ?? const [])
@@ -160,6 +181,8 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       c.dispose();
     }
     _tunTokenCtrl.dispose();
+    _playitCustomClaimCtrl.dispose();
+    _playitHostCtrl.dispose();
     _cidCtrl.dispose();
     _csecCtrl.dispose();
     _apiKeyCtrl.dispose();
@@ -236,6 +259,12 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
     if (_tunnelMode == 'token') {
       primaryBase = normalizeUiDirectBaseUrl(_baseCtrl.text.trim());
       if (primaryBase.isNotEmpty) resolvedBases.add(primaryBase);
+    } else if (_tunnelMode == 'playit') {
+      if (_playitDomainMode == 'custom' &&
+          _playitHostCtrl.text.trim().isNotEmpty) {
+        primaryBase = normalizeUiDirectBaseUrl(_playitHostCtrl.text.trim());
+        if (primaryBase.isNotEmpty) resolvedBases.add(primaryBase);
+      }
     } else if (_tunnelMode == 'none') {
       for (final ip in orderedIps) {
         final u = 'http://$ip:${widget.serverPort}';
@@ -249,7 +278,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
 
     final missingBind = _unboundSelectedIps;
     final out = <String, dynamic>{
-      'id': widget.existing?['id'] ?? generateRandomToken('prof-', 8),
+      'id': _draftProfileId,
       'name':
           _nameCtrl.text.trim().isEmpty ? '新接入入口' : _nameCtrl.text.trim(),
       'enabled': widget.existing?['enabled'] ?? true,
@@ -257,6 +286,12 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       'tunnel_mode': _tunnelMode,
       'tunnel_token': _tunTokenCtrl.text.trim(),
       'tunnel_auto_start': _tunnelAuto,
+      'playit_claim_mode': _playitClaimMode,
+      'playit_custom_code': _playitCustomClaimCtrl.text.trim(),
+      'playit_domain_mode': _playitDomainMode,
+      'playit_hostname': _playitHostCtrl.text.trim(),
+      if (widget.existing?['playit_secret_path'] != null)
+        'playit_secret_path': widget.existing!['playit_secret_path'],
       'base_url': primaryBase,
       'base_urls': resolvedBases,
       'direct_ips': orderedIps,
@@ -364,8 +399,9 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                             value: _tunnelMode,
                             items: const [
                               ('none', '直连 / 反代'),
-                              ('token', 'Token 固定隧道'),
-                              ('quick', 'Quick 临时隧道'),
+                              ('quick', 'Quick 临时'),
+                              ('token', 'CF 固定'),
+                              ('playit', 'Playit 持久'),
                             ],
                             onChanged: (v) => setState(() => _tunnelMode = v),
                           ),
@@ -651,6 +687,29 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                             '启动 Quick 隧道后会自动生成 trycloudflare.com 公网地址并热注入 OAuth 2.1。',
                             style: sansStyle(c, size: 12.5, color: c.muted),
                           ),
+                        ),
+                      ),
+                      PrismCollapsible(
+                        expanded:
+                            _tunnelMode == 'playit' && widget.backend != null,
+                        builder: (_) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: widget.backend == null
+                              ? const SizedBox.shrink()
+                              : PlayitClaimAndDomainCard(
+                                  backend: widget.backend!,
+                                  profileId: _draftProfileId,
+                                  claimMode: _playitClaimMode,
+                                  onClaimModeChanged: (m) =>
+                                      setState(() => _playitClaimMode = m),
+                                  customClaimCtrl: _playitCustomClaimCtrl,
+                                  domainMode: _playitDomainMode,
+                                  onDomainModeChanged: (m) =>
+                                      setState(() => _playitDomainMode = m),
+                                  hostnameCtrl: _playitHostCtrl,
+                                  transportSuffix:
+                                      _transport == 'sse' ? '/sse' : '/mcp',
+                                ),
                         ),
                       ),
                       PrismCollapsible(

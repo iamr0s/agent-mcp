@@ -1271,6 +1271,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final tMap = (ti['tunnels'] as Map?) != null
         ? Map<String, dynamic>.from(ti['tunnels'] as Map)
         : const <String, dynamic>{};
+    final playitInfo = (ti['playit'] as Map?) != null
+        ? Map<String, dynamic>.from(ti['playit'] as Map)
+        : const <String, dynamic>{};
     final isAndroidHost =
         (widget.config['host_os'] ?? '').toString().toLowerCase() == 'android';
 
@@ -2053,6 +2056,8 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
             ),
             const SizedBox(height: 16),
             _buildCloudflaredGroup(c, ti, inst, tMap),
+            const SizedBox(height: 16),
+            _buildPlayitGroup(c, playitInfo, tMap),
           ],
           if (showSecurity) ...[
             if (showBasic || showProfiles || showExpose)
@@ -2872,15 +2877,37 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final pid = (p['id'] ?? 'default').toString();
     final enabled = p['enabled'] != false;
     final tMode = (p['tunnel_mode'] ?? 'none').toString();
-    final hasTun = tMode == 'token' || tMode == 'quick';
+    final hasTun = tMode == 'token' || tMode == 'quick' || tMode == 'playit';
     final tState = tMap[pid] is Map
         ? Map<String, dynamic>.from(tMap[pid] as Map)
         : const <String, dynamic>{};
+    final playitRoot = widget.tunnelInfo['playit'] is Map
+        ? Map<String, dynamic>.from(widget.tunnelInfo['playit'] as Map)
+        : const <String, dynamic>{};
+    final playitProfiles = playitRoot['profiles'] is Map
+        ? Map<String, dynamic>.from(playitRoot['profiles'] as Map)
+        : const <String, dynamic>{};
+    final playitProfState = playitProfiles[pid] is Map
+        ? Map<String, dynamic>.from(playitProfiles[pid] as Map)
+        : const <String, dynamic>{};
+    final playitClaimed =
+        tState['claimed'] == true || playitProfState['claimed'] == true;
+
     final tunRunning = tState['running'] == true;
-    final liveQuick =
-        tMode == 'quick' ? (tState['live_url'] ?? '').toString() : '';
-    final tunReady =
-        !hasTun || (tMode == 'quick' ? liveQuick.isNotEmpty : tunRunning);
+    final liveQuick = tMode == 'quick'
+        ? (tState['live_url'] ?? '').toString()
+        : (tMode == 'playit'
+            ? ((tState['live_url'] ?? playitProfState['live_url'] ?? '')
+                .toString())
+            : '');
+    final tunReady = !hasTun ||
+        (tMode == 'quick'
+            ? liveQuick.isNotEmpty
+            : (tMode == 'playit'
+                ? (tunRunning &&
+                    (liveQuick.isNotEmpty ||
+                        (p['playit_hostname'] ?? '').toString().isNotEmpty))
+                : tunRunning));
 
     final hostCfg = (widget.config['host'] ?? kLoopbackIpv4).toString();
     final localHost =
@@ -2905,6 +2932,20 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
         endpointText = liveQuick.isNotEmpty
             ? '$liveQuick$epSuffix'
             : '隧道未启动（点击「开启隧道」自动分配公网 trycloudflare 地址）';
+      } else if (tMode == 'playit') {
+        if (!playitClaimed) {
+          endpointText =
+              '首次启用需认领节点（点击右侧「认领绑定」生成或复制认领链接，登录后自动落盘 playit.toml）';
+        } else if (liveQuick.isNotEmpty) {
+          endpointText = tunRunning
+              ? '$liveQuick$epSuffix'
+              : '$liveQuick$epSuffix（隧道未启动）';
+        } else {
+          final ph = (p['playit_hostname'] ?? '').toString().trim();
+          endpointText = tunRunning
+              ? (ph.isNotEmpty ? '$ph$epSuffix（正在同步证书/路由...）' : 'Playit 守护运行中，正在同步持久化地址...')
+              : '已保存持久化密钥（点击「开启隧道」连接 Playit.gg）';
+        }
       } else {
         final b = (p['base_url'] ?? '').toString();
         endpointText = tunRunning
@@ -2976,8 +3017,14 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         text: tunRunning
                             ? (tMode == 'quick'
                                 ? (liveQuick.isNotEmpty ? 'Quick 在线' : '分配中...')
-                                : 'Token 在线')
-                            : '隧道未启动',
+                                : (tMode == 'playit'
+                                    ? (liveQuick.isNotEmpty
+                                        ? 'Playit 在线'
+                                        : '同步中...')
+                                    : 'Token 在线'))
+                            : (tMode == 'playit' && !playitClaimed
+                                ? 'Playit 待认领'
+                                : '隧道未启动'),
                         mono: false,
                         bg: c.paper3,
                       ),
@@ -2988,7 +3035,15 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (hasTun)
+                    if (tMode == 'playit' && !playitClaimed)
+                      PrismButton(
+                        label: '认领绑定',
+                        compact: true,
+                        variant: PrismBtnVariant.clay,
+                        leading: const Icon(Icons.vpn_key_outlined),
+                        onPressed: () => _openProfileModal(idx),
+                      ),
+                    if (hasTun && !(tMode == 'playit' && !playitClaimed))
                       PrismButton(
                         label: _togglingTunnels.contains(pid)
                             ? (tunRunning ? '停止中...' : '开启中...')
@@ -3003,6 +3058,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         onPressed: () async {
                           setState(() => _togglingTunnels.add(pid));
                           try {
+                            var openClaimModal = false;
                             await runWithMinDuration(() async {
                               if (tunRunning) {
                                 await widget.backend.stopTunnel(pid);
@@ -3012,6 +3068,11 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                                     await widget.backend.startTunnel(pid);
                                 if (r['ok'] == true) {
                                   widget.onToast('隧道已启动，正在连接...');
+                                } else if (r['needs_claim'] == true) {
+                                  openClaimModal = true;
+                                  widget.onToast(
+                                    '已生成 Playit 认领链接，请打开或复制链接完成登录认领',
+                                  );
                                 } else {
                                   widget.onToast(
                                     r['error']?.toString() ?? '启动失败',
@@ -3020,6 +3081,9 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                               }
                               await widget.onRefreshStatus();
                             });
+                            if (openClaimModal && mounted) {
+                              await _openProfileModal(idx);
+                            }
                           } finally {
                             if (mounted) {
                               setState(() => _togglingTunnels.remove(pid));
@@ -3099,7 +3163,7 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
               builder: (_) => Padding(
                 padding: const EdgeInsets.only(top: 5),
                 child: Text(
-                  'Cloudflared: ${tState['error']}',
+                  '${tMode == 'playit' ? 'Playit' : 'Cloudflared'}: ${tState['error']}',
                   style: monoStyle(c, size: 11.5, color: c.danger),
                 ),
               ),
@@ -3352,6 +3416,242 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: dlUrl));
                           widget.onToast('已复制官方下载地址');
+                        },
+                      ),
+                  ],
+                ),
+              ],
+              PrismCollapsible(
+                expanded: (inst['error'] ?? '').toString().isNotEmpty,
+                builder: (_) => Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    inst['error'].toString(),
+                    style: monoStyle(c, size: 11.5, color: c.danger),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlayitGroup(
+    PrismPalette c,
+    Map<String, dynamic> pi,
+    Map<String, dynamic> tMap,
+  ) {
+    final installed = pi['installed'] == true;
+    final ver = (pi['version'] ?? '').toString();
+    final inst = pi['install'] is Map
+        ? Map<String, dynamic>.from(pi['install'] as Map)
+        : const <String, dynamic>{};
+    final activeDl = inst['active'] == true;
+    final pausedDl = inst['paused'] == true;
+    final pct = ((inst['percent'] as num?)?.toDouble() ?? 0).clamp(0.0, 100.0);
+    final dlUrl = (pi['download_url'] ?? '').toString();
+    final activePlayitCnt = tMap.values
+        .where((x) => x is Map && x['running'] == true && x['mode'] == 'playit')
+        .length;
+    final profMap = pi['profiles'] is Map
+        ? Map<String, dynamic>.from(pi['profiles'] as Map)
+        : const <String, dynamic>{};
+    final claimedCnt = profMap.values
+        .where((x) => x is Map && x['claimed'] == true)
+        .length;
+
+    return PrismListGroup(
+      headerLabel: 'Playit.gg 持久隧道组件',
+      headerTrailing: PrismPill(
+        leading: Icon(
+          installed ? Icons.check_circle_outline_rounded : Icons.cloud_off,
+        ),
+        text: activeDl
+            ? '下载中 ${pct.toInt()}%'
+            : (pausedDl
+                ? '已暂停 ${pct.toInt()}%'
+                : (installed
+                    ? '已安装${ver.isNotEmpty ? ' v$ver' : ''}'
+                    : '未安装')),
+        mono: false,
+        fg: installed ? c.sage : c.clay,
+        bg: installed ? c.sageBg : c.clay.withValues(alpha: 0.12),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (activeDl || pausedDl) ...[
+                Text(
+                  (inst['status'] ?? '正在下载 playitd...').toString(),
+                  style: sansStyle(c, size: 12.5, color: c.muted),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: pct / 100.0),
+                    duration: PrismMotion.duration(context, PrismMotion.base),
+                    curve: PrismMotion.editorialOut,
+                    builder: (ctx, val, _) => LinearProgressIndicator(
+                      value: val,
+                      minHeight: 6,
+                      backgroundColor: c.paper3,
+                      valueColor: AlwaysStoppedAnimation<Color>(c.clay),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (pausedDl)
+                      PrismButton(
+                        label: '继续下载',
+                        compact: true,
+                        leading: const Icon(Icons.play_arrow_rounded),
+                        variant: PrismBtnVariant.clay,
+                        onPressed: () async {
+                          await widget.backend.installPlayit(resume: true);
+                          await widget.onRefreshStatus();
+                        },
+                      )
+                    else
+                      PrismButton(
+                        label: '暂停',
+                        compact: true,
+                        leading: const Icon(Icons.pause_rounded),
+                        onPressed: () async {
+                          await widget.backend.pausePlayit();
+                          await widget.onRefreshStatus();
+                        },
+                      ),
+                    PrismButton(
+                      label: '取消',
+                      compact: true,
+                      leading: const Icon(Icons.close_rounded),
+                      onPressed: () async {
+                        await widget.backend.cancelPlayit();
+                        await widget.onRefreshStatus();
+                      },
+                    ),
+                  ],
+                ),
+              ] else if (installed) ...[
+                SelectableText(
+                  (pi['binary'] ?? 'playitd').toString(),
+                  style: monoStyle(c, size: 12, color: c.inkSoft),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      activePlayitCnt > 0
+                          ? '当前有 $activePlayitCnt 条 Playit 持久隧道运行中（已持久化 $claimedCnt 个密钥）'
+                          : '已就绪${claimedCnt > 0 ? ' · 已保存 $claimedCnt 个持久化 playit.toml' : ''}，可在接入入口选择「Playit 持久」',
+                      style: sansStyle(
+                        c,
+                        size: 12.2,
+                        color: c.muted,
+                        tabular: true,
+                      ),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        PrismButton(
+                          label: '更新到最新版',
+                          compact: true,
+                          leading: const Icon(Icons.refresh_rounded),
+                          onPressed: () async {
+                            await widget.backend.installPlayit(force: true);
+                            await widget.onRefreshStatus();
+                          },
+                        ),
+                        PrismButton(
+                          label: '导入替换',
+                          compact: true,
+                          leading: const Icon(Icons.upload_file_outlined),
+                          onPressed: () async {
+                            final r =
+                                await widget.backend.pickAndImportPlayit();
+                            if (r != null) {
+                              widget.onToast(
+                                (r['message'] ?? r['error'] ?? '').toString(),
+                              );
+                              await widget.onRefreshStatus();
+                            }
+                          },
+                        ),
+                        if (pi['local_managed'] == true)
+                          PrismButton(
+                            label: '移除本地副本',
+                            compact: true,
+                            variant: PrismBtnVariant.ghost,
+                            onPressed: () async {
+                              final r = await widget.backend.uninstallPlayit();
+                              widget.onToast(
+                                (r['message'] ?? r['error'] ?? '').toString(),
+                              );
+                              await widget.onRefreshStatus();
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Text(
+                  '未检测到 playitd 守护进程。支持免自备域名生成持久化认领地址与本地 playit.toml 密钥文件，可一键下载官方签名二进制到项目 bin/ 目录。',
+                  style: sansStyle(c, size: 12.6, color: c.muted, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrismButton(
+                      label: '一键下载 playitd',
+                      compact: true,
+                      leading: const Icon(Icons.download_rounded),
+                      variant: PrismBtnVariant.clay,
+                      onPressed: () async {
+                        await widget.backend.installPlayit();
+                        await widget.onRefreshStatus();
+                      },
+                    ),
+                    PrismButton(
+                      label: '选择文件导入',
+                      compact: true,
+                      leading: const Icon(Icons.upload_file_outlined),
+                      onPressed: () async {
+                        final r = await widget.backend.pickAndImportPlayit();
+                        if (r != null) {
+                          widget.onToast(
+                            (r['message'] ?? r['error'] ?? '').toString(),
+                          );
+                          await widget.onRefreshStatus();
+                        }
+                      },
+                    ),
+                    if (dlUrl.isNotEmpty)
+                      PrismButton(
+                        label: '复制官方直链',
+                        compact: true,
+                        leading: const Icon(Icons.copy_rounded),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: dlUrl));
+                          widget.onToast('已复制 Playit 官方下载地址');
                         },
                       ),
                   ],

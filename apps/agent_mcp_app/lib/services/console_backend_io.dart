@@ -595,6 +595,7 @@ class _IoConsoleBackend extends ConsoleBackend {
         unawaited(AutoStartManager.syncFromConfigMapAsync(saved));
       }
       unawaited(warmCloudflaredVersionAsync());
+      unawaited(warmPlayitVersionAsync());
     }
     if (saved['auto_start'] != false) {
       try {
@@ -941,11 +942,15 @@ class _IoConsoleBackend extends ConsoleBackend {
       ..remove('oauth_local_password_hash');
     unawaited(_syncNativeTrayState());
     unawaited(_syncAndroidForegroundService());
+    final profsForStatus = (saved['profiles'] as List)
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     return {
       'running': _ctrl.isRunning,
       'version': agentMcpVersion,
       'dashboard_mode': false,
-      'tunnels': TunnelManager.instance.getStatuses(),
+      'tunnels': TunnelManager.instance.getStatuses(profsForStatus),
       'exposures': await ExposureManager.instance.getDashboardSummary(_ctrl.loadCurrentServerConfig()),
       'config': sanitized,
     };
@@ -1164,18 +1169,213 @@ class _IoConsoleBackend extends ConsoleBackend {
     );
   }
 
-  Future<String?> _pickFileWindowsPowerShell() async {
+  @override
+  void schedulePostInstallTempCleanup(String tempDir) {
+    if (!Platform.isWindows) return;
+    final trimmed = tempDir.trim();
+    if (trimmed.isEmpty) return;
+    unawaited(() async {
+      try {
+        final norm = p.canonicalize(trimmed).toLowerCase();
+        if (!norm.contains('agentmcp-setup-')) return;
+      } catch (_) {
+        if (!trimmed.toLowerCase().contains('agentmcp-setup-')) return;
+      }
+      for (var attempt = 0; attempt < 5; attempt++) {
+        await Future<void>.delayed(Duration(milliseconds: 2200 + attempt * 1500));
+        try {
+          final dir = Directory(trimmed);
+          if (!dir.existsSync()) return;
+          await dir.delete(recursive: true);
+          return;
+        } catch (_) {}
+      }
+    }());
+  }
+
+  @override
+  Future<Map<String, dynamic>> installPlayit({
+    bool force = false,
+    bool resume = false,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.installPlayit(force: force, resume: resume),
+      );
+    }
+    return PlayitManager.instance.startPlayitDownload(
+      forceUpdate: force,
+      resume: resume,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> pausePlayit() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.pausePlayit());
+    }
+    return PlayitManager.instance.pauseDownload();
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelPlayit() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.cancelPlayit());
+    }
+    return PlayitManager.instance.cancelDownload();
+  }
+
+  @override
+  Future<Map<String, dynamic>> uninstallPlayit() async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.uninstallPlayit());
+    }
+    return PlayitManager.instance.uninstallPlayit();
+  }
+
+  @override
+  Future<Map<String, dynamic>?> pickAndImportPlayit() async {
+    String? path;
+    if (Platform.isWindows) {
+      path = await _pickFileWindowsPowerShell(
+        title: '选择官方下载的 playitd 可执行文件或压缩包',
+      );
+    }
+    if (path == null || path.isEmpty) return null;
+    final f = File(path);
+    if (!f.existsSync()) return null;
+    final bytes = await f.readAsBytes();
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.importPlayitBytes(p.basename(path!), bytes),
+      );
+    }
+    return PlayitManager.instance.importPlayitBytes(
+      p.basename(path),
+      bytes,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> getPlayitStatus([String? profileId]) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote((c) => c.getPlayitStatus(profileId));
+    }
+    final saved = loadSavedConfig(_ctrl.configFile);
+    final profs = ensureProfilesInConfig(saved);
+    if (profileId != null && profileId.isNotEmpty) {
+      final prof = profs.where((p) => p['id'] == profileId).firstOrNull;
+      return {
+        'ok': true,
+        'component': PlayitManager.instance.getComponentStatus(profs),
+        'profile': PlayitManager.instance.getProfilePlayitStatus(
+          profileId,
+          customSecretPath: prof?['playit_secret_path']?.toString(),
+        ),
+      };
+    }
+    return {
+      'ok': true,
+      'component': PlayitManager.instance.getComponentStatus(profs),
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> startPlayitClaim({
+    required String profileId,
+    String claimMode = 'random',
+    String customInput = '',
+    String? secretPath,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.startPlayitClaim(
+          profileId: profileId,
+          claimMode: claimMode,
+          customInput: customInput,
+          secretPath: secretPath,
+        ),
+      );
+    }
+    final saved = loadSavedConfig(_ctrl.configFile);
+    final profs = ensureProfilesInConfig(saved);
+    final prof = profs.where((p) => p['id'] == profileId).firstOrNull;
+    final port = int.tryParse('${saved['port'] ?? 8000}') ?? 8000;
+    return PlayitManager.instance.startClaim(
+      profileId: profileId,
+      claimMode: claimMode,
+      customInput: customInput,
+      customSecretPath: secretPath ?? prof?['playit_secret_path']?.toString(),
+      localPort: port,
+      profile: prof,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetPlayitClaim(
+    String profileId, {
+    String? secretPath,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.resetPlayitClaim(profileId, secretPath: secretPath),
+      );
+    }
+    final saved = loadSavedConfig(_ctrl.configFile);
+    final profs = ensureProfilesInConfig(saved);
+    final prof = profs.where((p) => p['id'] == profileId).firstOrNull;
+    return PlayitManager.instance.resetProfileSecret(
+      profileId,
+      customSecretPath: secretPath ?? prof?['playit_secret_path']?.toString(),
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> syncPlayitEndpoint(
+    String profileId, {
+    bool autoCreate = false,
+  }) async {
+    if (isRemoteNodeActive) {
+      return _guardRemote(
+        (c) => c.syncPlayitEndpoint(profileId, autoCreate: autoCreate),
+      );
+    }
+    final saved = loadSavedConfig(_ctrl.configFile);
+    final profs = ensureProfilesInConfig(saved);
+    final prof = profs.where((p) => p['id'] == profileId).firstOrNull;
+    final secFile = resolvePlayitSecretFile(
+      profileId,
+      prof?['playit_secret_path']?.toString(),
+    );
+    final secKey = readPlayitSecretKey(secFile);
+    if (secKey == null || secKey.isEmpty) {
+      return const {'ok': false, 'error': '该入口尚未完成 Playit 认领'};
+    }
+    final port = int.tryParse('${saved['port'] ?? 8000}') ?? 8000;
+    return PlayitManager.instance.syncProfileEndpointFromApi(
+      profileId: profileId,
+      secretKey: secKey,
+      localPort: port,
+      profile: prof,
+      allowAutoCreate: autoCreate,
+    );
+  }
+
+  Future<String?> _pickFileWindowsPowerShell({
+    String title = '选择官方下载的 cloudflared 可执行文件或压缩包',
+  }) async {
     try {
+      final safeTitle = title.replaceAll("'", "''");
       final r = await Process.run(
         'powershell.exe',
-        const [
+        [
           '-NoProfile',
           '-STA',
           '-Command',
           "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
               "Add-Type -AssemblyName System.Windows.Forms; "
               "\$d = New-Object System.Windows.Forms.OpenFileDialog; "
-              "\$d.Title = '选择官方下载的 cloudflared 可执行文件或压缩包'; "
+              "\$d.Title = '$safeTitle'; "
               "if (\$d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output \$d.FileName }",
         ],
         runInShell: false,

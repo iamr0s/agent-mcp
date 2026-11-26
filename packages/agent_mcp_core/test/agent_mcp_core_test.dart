@@ -1913,4 +1913,199 @@ void main() {
       isTrue,
     );
   });
+
+  test('v3.5.5: PlayitManager random/custom claim flow writes persistent playit.toml secret and provisions random TCP or custom Let\'s Encrypt HTTPS domain', () async {
+    final tmpDir = Directory.systemTemp.createTempSync('agent_mcp_playit_test_');
+    final mgr = PlayitManager.instance;
+    final createdPayloads = <Map<String, dynamic>>[];
+    const fakeSecret =
+        'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    var tunnelCreated = false;
+    var customHttpsCreated = false;
+
+    mgr.apiOverrideForTesting = (path, body, {secretKey}) async {
+      if (path == '/claim/setup') {
+        return {'status': 'success', 'data': 'UserAccepted'};
+      }
+      if (path == '/claim/exchange') {
+        return {
+          'status': 'success',
+          'data': {'secret_key': fakeSecret},
+        };
+      }
+      if (path == '/v1/agents/rundata') {
+        if (secretKey != fakeSecret) {
+          return {'status': 'fail', 'data': 'InvalidAuth'};
+        }
+        return {
+          'status': 'success',
+          'data': {
+            'agent_id': 'agent-uuid-001',
+            'permissions': {
+              'has_premium': true,
+              'account_status': 'verified',
+            },
+            'pending': const [],
+            'tunnels': [
+              if (customHttpsCreated)
+                {
+                  'id': 'tun-https-1',
+                  'display_address': 'mcp.playit.plus',
+                  'tunnel_type': 'https',
+                  'agent_config': {
+                    'fields': [
+                      {'name': 'local_ip', 'value': '127.0.0.1'},
+                      {'name': 'http_port', 'value': '8778'},
+                      {'name': 'tls_termination', 'value': 'letsencrypt'},
+                    ],
+                  },
+                }
+              else if (tunnelCreated)
+                {
+                  'id': 'tun-tcp-1',
+                  'display_address': 'omen-node.gl.at.ply.gg:49152',
+                  'tunnel_type': 'tcp',
+                  'agent_config': {
+                    'fields': [
+                      {'name': 'local_ip', 'value': '127.0.0.1'},
+                      {'name': 'local_port', 'value': '8778'},
+                    ],
+                  },
+                },
+            ],
+          },
+        };
+      }
+      if (path == '/domains/list') {
+        return {
+          'status': 'success',
+          'data': {
+            'domains': [
+              {'id': 'dom-001', 'name': 'mcp.playit.plus'},
+            ],
+          },
+        };
+      }
+      if (path == '/v1/tunnels/create') {
+        createdPayloads.add(body);
+        final ports = body['ports'] as Map?;
+        if (ports?['details'] == 'https') {
+          customHttpsCreated = true;
+        } else {
+          tunnelCreated = true;
+        }
+        return {'status': 'success', 'data': 'tun-created'};
+      }
+      return {'status': 'error', 'data': 'unexpected $path'};
+    };
+
+    try {
+      // 1. Input parser handles claim URL, hex code, and 64-char secret key
+      expect(
+        parsePlayitUserClaimInput('https://playit.gg/claim/deadbeef01').kind,
+        equals('claim_code'),
+      );
+      expect(
+        parsePlayitUserClaimInput('aabbccddeeff').value,
+        equals('aabbccddeeff'),
+      );
+      expect(
+        parsePlayitUserClaimInput(fakeSecret).kind,
+        equals('secret_key'),
+      );
+
+      // 2. Random claim generates URL, exchanges secret_key -> writes persistent TOML -> provisions random persistent TCP endpoint
+      final secretToml = File('${tmpDir.path}/playit_rand.toml');
+      final startRes = await mgr.startClaim(
+        profileId: 'prof-playit-rand',
+        claimMode: 'random',
+        customSecretPath: secretToml.path,
+        localPort: 8778,
+        profile: {
+          'id': 'prof-playit-rand',
+          'tunnel_mode': 'playit',
+          'playit_domain_mode': 'random',
+        },
+      );
+      expect(startRes['ok'], isTrue);
+      expect(
+        startRes['claim_url'].toString(),
+        startsWith('https://playit.gg/claim/'),
+      );
+
+      // Wait briefly for background _pollClaimExchangeLoop
+      for (var i = 0; i < 20 && !secretToml.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      expect(secretToml.existsSync(), isTrue);
+      expect(readPlayitSecretKey(secretToml), equals(fakeSecret));
+
+      // Wait for post-claim syncProfileEndpointFromApi
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      final stRand = mgr.getProfilePlayitStatus(
+        'prof-playit-rand',
+        customSecretPath: secretToml.path,
+      );
+      expect(stRand['claimed'], isTrue);
+      expect(
+        stRand['live_url'],
+        equals('http://omen-node.gl.at.ply.gg:49152'),
+      );
+      expect(createdPayloads, isNotEmpty);
+
+      // 3. Custom secret key + custom specified domain (`mcp.playit.plus`) provisions Let's Encrypt HTTPS tunnel
+      final customToml = File('${tmpDir.path}/playit_custom.toml');
+      final customRes = await mgr.startClaim(
+        profileId: 'prof-playit-custom',
+        claimMode: 'custom',
+        customInput: fakeSecret,
+        customSecretPath: customToml.path,
+        localPort: 8778,
+        profile: {
+          'id': 'prof-playit-custom',
+          'tunnel_mode': 'playit',
+          'playit_domain_mode': 'custom',
+          'playit_hostname': 'mcp.playit.plus',
+        },
+      );
+      expect(customRes['ok'], isTrue);
+      expect(customRes['claimed_immediately'], isTrue);
+      expect(readPlayitSecretKey(customToml), equals(fakeSecret));
+
+      final stCustom = mgr.getProfilePlayitStatus(
+        'prof-playit-custom',
+        customSecretPath: customToml.path,
+      );
+      expect(stCustom['live_url'], equals('https://mcp.playit.plus'));
+      expect(stCustom['domains'], contains('mcp.playit.plus'));
+
+      // 4. normalizeProfile & resolveProfileBaseUrls preserve Playit fields and custom hostname fallback
+      final norm = normalizeProfile({
+        'id': 'p-playit',
+        'name': 'Playit Entry',
+        'tunnel_mode': 'playit',
+        'playit_claim_mode': 'custom',
+        'playit_domain_mode': 'custom',
+        'playit_hostname': 'mcp.playit.plus',
+      });
+      expect(norm['tunnel_mode'], equals('playit'));
+      expect(norm['playit_domain_mode'], equals('custom'));
+      final urls = resolveProfileBaseUrls(norm, port: 8778);
+      expect(urls.first, equals('https://mcp.playit.plus'));
+
+      await mgr.resetProfileSecret(
+        'prof-playit-rand',
+        customSecretPath: secretToml.path,
+      );
+      await mgr.resetProfileSecret(
+        'prof-playit-custom',
+        customSecretPath: customToml.path,
+      );
+    } finally {
+      mgr.apiOverrideForTesting = null;
+      if (tmpDir.existsSync()) {
+        tmpDir.deleteSync(recursive: true);
+      }
+    }
+  });
 }

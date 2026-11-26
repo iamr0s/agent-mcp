@@ -597,6 +597,17 @@ List<String> resolveProfileBaseUrls(
     final q = (liveQuickUrl ?? '').trim().replaceAll(RegExp(r'/+$'), '');
     return q.isNotEmpty ? <String>[q] : const <String>[];
   }
+  if (tmode == 'playit') {
+    final live = (liveQuickUrl ?? '').trim().replaceAll(RegExp(r'/+$'), '');
+    if (live.isNotEmpty) return <String>[live];
+    final customHost = (prof['playit_hostname'] ?? '').toString().trim();
+    if (customHost.isNotEmpty) {
+      final norm = normalizeDirectBaseUrl(customHost);
+      if (norm.isNotEmpty) return <String>[norm];
+    }
+    final b = normalizeDirectBaseUrl((prof['base_url'] ?? '').toString());
+    return b.isNotEmpty ? <String>[b] : const <String>[];
+  }
   if (tmode == 'token') {
     final b = normalizeDirectBaseUrl((prof['base_url'] ?? '').toString());
     return b.isNotEmpty ? <String>[b] : const <String>[];
@@ -771,7 +782,10 @@ Map<String, dynamic> normalizeProfile(
 
   var tunnelMode =
       (raw['tunnel_mode'] ?? 'none').toString().trim().toLowerCase();
-  if (tunnelMode != 'none' && tunnelMode != 'token' && tunnelMode != 'quick') {
+  if (tunnelMode != 'none' &&
+      tunnelMode != 'token' &&
+      tunnelMode != 'quick' &&
+      tunnelMode != 'playit') {
     tunnelMode = 'none';
   }
 
@@ -816,6 +830,19 @@ Map<String, dynamic> normalizeProfile(
 
   if (tunnelMode == 'quick') {
     primaryBaseUrl = '';
+  } else if (tunnelMode == 'playit') {
+    final pDomainMode = (raw['playit_domain_mode'] ?? 'random')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final pHost = (raw['playit_hostname'] ?? '').toString().trim();
+    if (pDomainMode == 'custom' && pHost.isNotEmpty) {
+      primaryBaseUrl = normalizeDirectBaseUrl(pHost);
+      if (primaryBaseUrl.isNotEmpty) baseUrls.add(primaryBaseUrl);
+    } else {
+      primaryBaseUrl = rawBaseUrl.isEmpty ? '' : normalizeDirectBaseUrl(rawBaseUrl);
+      if (primaryBaseUrl.isNotEmpty) baseUrls.add(primaryBaseUrl);
+    }
   } else if (tunnelMode == 'token') {
     primaryBaseUrl = rawBaseUrl.isEmpty ? '' : normalizeDirectBaseUrl(rawBaseUrl);
     if (primaryBaseUrl.isNotEmpty) {
@@ -863,6 +890,21 @@ Map<String, dynamic> normalizeProfile(
     'tunnel_auto_start': raw['tunnel_auto_start'] == null
         ? true
         : raw['tunnel_auto_start'] == true,
+    'playit_claim_mode':
+        (raw['playit_claim_mode'] ?? 'random').toString().trim().toLowerCase() ==
+                'custom'
+            ? 'custom'
+            : 'random',
+    'playit_custom_code': _nonEmptyOrNull(raw['playit_custom_code']),
+    'playit_domain_mode': (raw['playit_domain_mode'] ?? 'random')
+                .toString()
+                .trim()
+                .toLowerCase() ==
+            'custom'
+        ? 'custom'
+        : 'random',
+    'playit_hostname': _nonEmptyOrNull(raw['playit_hostname']),
+    'playit_secret_path': _nonEmptyOrNull(raw['playit_secret_path']),
     'inherit_permissions': raw['inherit_permissions'] == null
         ? true
         : raw['inherit_permissions'] == true,

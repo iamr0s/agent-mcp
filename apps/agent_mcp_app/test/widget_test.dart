@@ -6,6 +6,7 @@ import 'package:agent_mcp_app/theme/prism_theme.dart';
 import 'package:agent_mcp_app/theme/qr_code_painter.dart';
 import 'package:agent_mcp_app/views/installer_wizard.dart';
 import 'package:agent_mcp_app/views/prism_structured_editors.dart';
+import 'package:agent_mcp_app/views/profile_dialogs.dart';
 import 'package:agent_mcp_app/views/profile_endpoints_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -306,6 +307,60 @@ class _FakeConsoleBackend extends ConsoleBackend {
 
   @override
   Future<Map<String, dynamic>?> pickAndImportCloudflared() async => null;
+
+  Map<String, dynamic>? fakePlayitClaim;
+  bool fakePlayitClaimed = false;
+
+  @override
+  Future<Map<String, dynamic>> getPlayitStatus([String? profileId]) async => {
+        'ok': true,
+        'component': {
+          'installed': true,
+          'version': '2.0.2',
+          'local_managed': true,
+          'install': {'active': false, 'percent': 100},
+        },
+        'profile': {
+          'profile_id': profileId ?? 'default',
+          'claimed': fakePlayitClaimed,
+          'secret_path': r'D:\agent_mcp_next\data\playit\playit_default.toml',
+          'secret_exists': fakePlayitClaimed,
+          'running': fakePlayitClaimed,
+          'connected': fakePlayitClaimed,
+          'live_url': fakePlayitClaimed ? 'http://omen.gl.at.ply.gg:49152' : '',
+          'domains': const ['mcp.playit.plus'],
+          'claim': fakePlayitClaim,
+        },
+      };
+
+  @override
+  Future<Map<String, dynamic>> startPlayitClaim({
+    required String profileId,
+    String claimMode = 'random',
+    String customInput = '',
+    String? secretPath,
+  }) async {
+    final code = claimMode == 'custom' && customInput.isNotEmpty
+        ? customInput
+        : 'a1b2c3d4e5';
+    final url = 'https://playit.gg/claim/$code';
+    fakePlayitClaim = {
+      'profile_id': profileId,
+      'claim_code': code,
+      'claim_url': url,
+      'claim_mode': claimMode,
+      'phase': 'waiting_visit',
+      'active': true,
+      'message': '请打开认领链接并在浏览器登录 Playit.gg...',
+      'error': '',
+    };
+    return {
+      'ok': true,
+      'claim_code': code,
+      'claim_url': url,
+      'claim': fakePlayitClaim,
+    };
+  }
 
   @override
   Future<List<Map<String, dynamic>>> listSubMcps() async => [
@@ -1188,8 +1243,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.4'), findsOneWidget);
-    await tester.tap(find.text('v3.5.4'));
+    expect(find.text('v3.5.5'), findsOneWidget);
+    await tester.tap(find.text('v3.5.5'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1289,7 +1344,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.4'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.5'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2091,7 +2146,7 @@ void main() {
     expect(tier6.isUpgrade, isFalse);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.4'), findsOneWidget);
+    expect(find.text('v3.5.5'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
@@ -2241,7 +2296,8 @@ void main() {
 
     // Onboarding wizard modal auto-popped!
     expect(find.text('欢迎使用 Agent MCP'), findsOneWidget);
-    expect(find.text('Quick 临时隧道（默认）'), findsOneWidget);
+    expect(find.text('Quick 临时（默认）'), findsOneWidget);
+    expect(find.text('Playit 持久'), findsOneWidget);
     expect(find.text('前往官网下载 Tailscale'), findsOneWidget);
 
     // Click Tailscale website download button
@@ -2261,6 +2317,89 @@ void main() {
       (freshBackend.config['oauth_local_password'] ?? '').toString(),
       isNotEmpty,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('v3.5.5: ProfileEditDialog supports Playit.gg persistent tunnel, auto-generates claim URL, opens browser & switches random/custom domain', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final backend = _FakeConsoleBackend();
+    Map<String, dynamic>? savedProfile;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPrismTheme(PrismPalette.light),
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => Center(
+              child: PrismButton(
+                label: '打开编辑入口',
+                onPressed: () async {
+                  savedProfile = await showDialog<Map<String, dynamic>>(
+                    context: ctx,
+                    builder: (_) => ProfileEditDialog(
+                      backend: backend,
+                      existing: null,
+                      serverPort: 8778,
+                      ipOptions: const [],
+                      boundHosts: const ['127.0.0.1'],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('打开编辑入口'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Switch tunnel mode to 'Playit 持久'
+    expect(find.text('Playit 持久'), findsOneWidget);
+    await tester.tap(find.text('Playit 持久'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    // Auto-generated random claim link appears immediately!
+    expect(
+      find.text('https://playit.gg/claim/a1b2c3d4e5'),
+      findsOneWidget,
+    );
+    expect(find.text('打开浏览器登录认领'), findsOneWidget);
+    expect(find.text('复制认领链接'), findsOneWidget);
+
+    // Click '打开浏览器登录认领' -> opens claim URL in browser
+    await tester.tap(find.text('打开浏览器登录认领'));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      backend.openedExternalUrl,
+      equals('https://playit.gg/claim/a1b2c3d4e5'),
+    );
+
+    // Switch persistent domain strategy to '指定绑定域名' and select 'mcp.playit.plus' pill
+    await tester.tap(find.text('指定绑定域名'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('mcp.playit.plus'), findsOneWidget);
+    await tester.tap(find.text('mcp.playit.plus'));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    // Save profile and verify Playit fields
+    await tester.tap(find.text('确定保存'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(savedProfile, isNotNull);
+    expect(savedProfile!['tunnel_mode'], equals('playit'));
+    expect(savedProfile!['playit_domain_mode'], equals('custom'));
+    expect(savedProfile!['playit_hostname'], equals('mcp.playit.plus'));
     expect(tester.takeException(), isNull);
   });
 }

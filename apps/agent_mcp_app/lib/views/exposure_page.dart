@@ -94,6 +94,8 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
       (widget.exposureSummary['tailscale_mode'] ?? 'funnel').toString();
   bool get _cfInstalled =>
       widget.exposureSummary['cloudflared_installed'] == true;
+  bool get _playitInstalled =>
+      widget.exposureSummary['playit_installed'] == true;
   int get _defaultTtl =>
       int.tryParse('${widget.exposureSummary['default_ttl_minutes'] ?? 120}') ??
       120;
@@ -254,6 +256,9 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
     final cfSummary = _cfInstalled
         ? 'cloudflared 已安装，按需生成临时 HTTPS 隧道'
         : '未安装 cloudflared（可在服务配置一键下载）';
+    final playitSummary = _playitInstalled
+        ? 'playitd 已安装，支持持久化认领域名与 TCP/HTTPS 隧道'
+        : '未安装 playitd（可在外网与隧道一键下载）';
 
     final channelReady = _enabled && (tsReachable || _pubBases.isNotEmpty);
     final channelPillLabel = !_enabled
@@ -324,6 +329,13 @@ class _ExposureSharePageState extends State<ExposureSharePage> {
                   subtitle: cfSummary,
                   icon: Icons.cloud_outlined,
                   badge: _cfInstalled ? '就绪' : '可选',
+                  onTap: _doRefresh,
+                ),
+                PrismMenuAction(
+                  label: 'Playit.gg 持久隧道',
+                  subtitle: playitSummary,
+                  icon: Icons.public_rounded,
+                  badge: _playitInstalled ? '就绪' : '可选',
                   onTap: _doRefresh,
                 ),
                 PrismMenuAction(

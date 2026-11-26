@@ -199,7 +199,7 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.5.4';
+  String get currentAppVersion => '3.5.5';
   String get initialThemeModeKey => 'system';
   String get initialAccentThemeKey => 'indigo';
   bool get initialDynamicColor => false;
@@ -299,6 +299,40 @@ abstract class ConsoleBackend {
   Future<Map<String, dynamic>> cancelCloudflared();
   Future<Map<String, dynamic>> uninstallCloudflared();
   Future<Map<String, dynamic>?> pickAndImportCloudflared();
+
+  void schedulePostInstallTempCleanup(String tempDir) {}
+
+  Future<Map<String, dynamic>> installPlayit({
+    bool force = false,
+    bool resume = false,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>> pausePlayit() async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>> cancelPlayit() async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>> uninstallPlayit() async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>?> pickAndImportPlayit() async => null;
+  Future<Map<String, dynamic>> getPlayitStatus([String? profileId]) async =>
+      const {'ok': true, 'component': <String, dynamic>{}};
+  Future<Map<String, dynamic>> startPlayitClaim({
+    required String profileId,
+    String claimMode = 'random',
+    String customInput = '',
+    String? secretPath,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>> resetPlayitClaim(
+    String profileId, {
+    String? secretPath,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
+  Future<Map<String, dynamic>> syncPlayitEndpoint(
+    String profileId, {
+    bool autoCreate = false,
+  }) async =>
+      const {'ok': false, 'error': 'Unsupported'};
 
   Future<List<Map<String, dynamic>>> listSubMcps();
   Future<Map<String, dynamic>> upsertSubMcp(

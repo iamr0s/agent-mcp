@@ -367,6 +367,94 @@ class RemoteHttpNodeClient {
         },
       );
 
+  Future<Map<String, dynamic>> installPlayit({
+    bool force = false,
+    bool resume = false,
+  }) =>
+      _requestJson(
+        'POST',
+        '/playit/install',
+        jsonBody: {'force': force, 'resume': resume},
+      );
+
+  Future<Map<String, dynamic>> pausePlayit() =>
+      _requestJson('POST', '/playit/pause');
+
+  Future<Map<String, dynamic>> cancelPlayit() =>
+      _requestJson('POST', '/playit/cancel');
+
+  Future<Map<String, dynamic>> uninstallPlayit() =>
+      _requestJson('POST', '/playit/uninstall');
+
+  Future<Map<String, dynamic>> importPlayitBytes(
+    String filename,
+    Uint8List bytes,
+  ) =>
+      _requestJson(
+        'POST',
+        '/playit/import',
+        query: {'filename': filename},
+        rawBytes: bytes,
+        extraHeaders: {
+          'content-type': 'application/octet-stream',
+          'x-filename': Uri.encodeComponent(filename),
+        },
+      );
+
+  Future<Map<String, dynamic>> getPlayitStatus([String? profileId]) =>
+      _requestJson(
+        'GET',
+        '/playit/status',
+        query: profileId != null && profileId.isNotEmpty
+            ? {'profile_id': profileId}
+            : null,
+      );
+
+  Future<Map<String, dynamic>> startPlayitClaim({
+    required String profileId,
+    String claimMode = 'random',
+    String customInput = '',
+    String? secretPath,
+  }) =>
+      _requestJson(
+        'POST',
+        '/playit/claim/start',
+        jsonBody: {
+          'profile_id': profileId,
+          'claim_mode': claimMode,
+          'custom_input': customInput,
+          if (secretPath != null && secretPath.isNotEmpty)
+            'secret_path': secretPath,
+        },
+      );
+
+  Future<Map<String, dynamic>> resetPlayitClaim(
+    String profileId, {
+    String? secretPath,
+  }) =>
+      _requestJson(
+        'POST',
+        '/playit/claim/reset',
+        jsonBody: {
+          'profile_id': profileId,
+          if (secretPath != null && secretPath.isNotEmpty)
+            'secret_path': secretPath,
+        },
+      );
+
+  Future<Map<String, dynamic>> syncPlayitEndpoint(
+    String profileId, {
+    bool autoCreate = false,
+  }) =>
+      _requestJson(
+        'POST',
+        '/playit/sync',
+        jsonBody: {
+          'profile_id': profileId,
+          'auto_create': autoCreate,
+        },
+      );
+
   Future<List<Map<String, dynamic>>> listSubMcps() async {
     final d = await _requestJson('GET', '/sub-mcps');
     final raw = d['servers'];

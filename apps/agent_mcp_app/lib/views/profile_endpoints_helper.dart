@@ -128,6 +128,17 @@ List<String> resolveUiProfileBaseUrls(
     final q = (liveQuickUrl ?? '').trim().replaceAll(RegExp(r'/+$'), '');
     return q.isNotEmpty ? <String>[q] : const <String>[];
   }
+  if (tMode == 'playit') {
+    final live = (liveQuickUrl ?? '').trim().replaceAll(RegExp(r'/+$'), '');
+    if (live.isNotEmpty) return <String>[live];
+    final pHost = (prof['playit_hostname'] ?? '').toString().trim();
+    if (pHost.isNotEmpty) {
+      final norm = normalizeUiDirectBaseUrl(pHost);
+      if (norm.isNotEmpty) return <String>[norm];
+    }
+    final b = normalizeUiDirectBaseUrl((prof['base_url'] ?? '').toString());
+    return b.isNotEmpty ? <String>[b] : const <String>[];
+  }
   if (tMode == 'token') {
     final b = normalizeUiDirectBaseUrl((prof['base_url'] ?? '').toString());
     return b.isNotEmpty ? <String>[b] : const <String>[];
@@ -223,20 +234,35 @@ List<EndpointCopyOption> buildProfileEndpointCopyOptions(
         RegExp(r'^https?://', caseSensitive: false),
         '',
       );
-      opts.add(
-        EndpointCopyOption(
-          badge: 'HTTPS',
-          url: 'https://$stripped$suffix',
-          isHighlight: true,
-        ),
-      );
-      opts.add(
-        EndpointCopyOption(
-          badge: 'HTTP',
-          url: 'http://$stripped$suffix',
-          isHighlight: false,
-        ),
-      );
+      final isExplicitPlainTcpPort =
+          clean.toLowerCase().startsWith('http://') &&
+              u != null &&
+              u.hasPort &&
+              u.port != 443;
+      if (isExplicitPlainTcpPort) {
+        opts.add(
+          EndpointCopyOption(
+            badge: 'HTTP',
+            url: 'http://$stripped$suffix',
+            isHighlight: true,
+          ),
+        );
+      } else {
+        opts.add(
+          EndpointCopyOption(
+            badge: 'HTTPS',
+            url: 'https://$stripped$suffix',
+            isHighlight: true,
+          ),
+        );
+        opts.add(
+          EndpointCopyOption(
+            badge: 'HTTP',
+            url: 'http://$stripped$suffix',
+            isHighlight: false,
+          ),
+        );
+      }
     }
   }
 

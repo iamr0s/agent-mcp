@@ -1,5 +1,29 @@
 # Changelog
 
+## [v3.5.5] — Playit.gg Persistent Tunnel & Claim Integration, Zero-Ping Startup & Installer Cleanup
+
+### 中文更新说明
+
+- **接入与隧道新增 `Playit.gg` 持久化公网隧道模式（`tunnel_mode: "playit"`）**：
+  - **首次启动自动生成认领链接与登录绑定**：针对尚未绑定的服务入口，支持**随机认领链接**（自动生成 `https://playit.gg/claim/<code>`）与**指定认领码 / 既有密钥**（支持自定义偶数位十六进制认领码、认领 URL 或后台 64 位 `Agent Secret Key`）双模式切换；提供**「打开浏览器登录认领」**与**「复制认领链接」**一键操作，网页端点击 Approve 后后台自动完成 `/claim/setup` → `/claim/exchange` 握手并生成独立持久化密钥文件 `data/playit/playit_<id>.toml`（`secret_key = "..."`），重启电脑或服务无需再次登录。
+  - **持久随机地址与指定域名双策略支持**：
+    - **随机持久地址（`playit_domain_mode: "random"`）**：认领完成后自动通过 `/v1/tunnels/create` 创建或复用指向本机监听端口的持久化隧道（如 `*.gl.at.ply.gg:<port>`），跨重启保持同一固定公网地址，并智能区分非 `443` 端口 `http://` 与 `443` 端口 `https://` 端点方案。
+    - **指定绑定域名（`playit_domain_mode: "custom"`）**：自动拉取账号名下已绑定的 `.playit.plus` 子域或外部自定义域名列表供点选填入，配合 `playitd` v2.0+ 原生 `--cert-dir` 自动签发并续期 Let's Encrypt HTTPS 证书（`tls_termination: "letsencrypt"`）。
+  - **全平台 `playitd` 守护组件托管与同源 Prism 界面**：内置 Windows（`playitd-windows-x86_64-signed.exe`）、macOS Universal 与 Linux（`x64`/`arm64`）官方组件一键断点续传下载、暂停、本地导入与卸载；全面打通「编辑服务入口」弹窗、「服务配置 → 服务入口 / 外网与隧道」、「首次启动初始化向导」与 `manage_expose` 公网分享网关发现。
+- **彻底移除安装向导退出时的 `cmd.exe /c ping 127.0.0.1` 自清理延迟进程**：
+  - 将 `--installer` 安装向导退出并拉起主程序时的临时解压目录回收机制重构为 `--cleanup-temp-dir <path>` 进程内参数交接，由新启动的 `agent_mcp_app` 在自身异步事件循环内静默完成延迟清理，全程**零 `cmd.exe`、零 `ping.exe` 子进程派生**，消除进程树监控与安全软件对 `ping 127.0.0.1` 批处理延迟惯用法的误报。
+
+### English Release Notes
+
+- **Native `Playit.gg` Persistent Tunnel Integration (`tunnel_mode: "playit"`)**:
+  - **First-Run Claim Link Generation & Persistent `playit.toml` Secret**: Supports both **Random Claim** (auto-generating `https://playit.gg/claim/<code>` on first run) and **Custom Claim / Secret Key** (accepting custom even-length hex claim codes, claim URLs, or existing 64-char `Agent Secret Key` credentials). Provides 1-click **Open Browser to Claim** and **Copy Claim Link** actions, polling `/claim/setup` and `/claim/exchange` in the background to persist per-profile `data/playit/playit_<id>.toml` secrets across reboots without re-authenticating.
+  - **Random Persistent Allocation & Custom Domain Modes**:
+    - **Random Persistent Endpoint (`playit_domain_mode: "random"`)**: Automatically provisions or reuses a persistent tunnel (`*.gl.at.ply.gg:<port>`) mapped to `127.0.0.1:<port>`, preserving a stable public address across restarts while accurately resolving `http://` vs `https://` schemes for non-443 TCP ports.
+    - **Specified Custom Hostname (`playit_domain_mode: "custom"`)**: Fetches account domains (`/domains/list` for `.playit.plus` and external domains) as 1-tap selector pills and configures `playitd` v2.0+ native Let's Encrypt TLS termination (`tls_termination: "letsencrypt"` with `--cert-dir`).
+  - **Cross-Platform `playitd` Lifecycle & 100% Authentic Prism UI**: Adds resumable download, pause/cancel, local binary import, and uninstall support for official `playitd` binaries across Windows x64, macOS Universal, and Linux (`amd64`/`aarch64`), integrated seamlessly across **Profile Editor**, **Service Setup**, **First-Run Onboarding Wizard**, and `manage_expose` public gateway auto-discovery.
+- **Zero-Ping Post-Install Temp Directory Cleanup**:
+  - Replaces the legacy `cmd.exe /c ping 127.0.0.1 -n 4` post-install temp cleanup command in `--installer` mode with an in-process `--cleanup-temp-dir` handoff to the launched `agent_mcp_app` instance, achieving **zero `cmd.exe` and zero `ping.exe` child processes** on startup and eliminating AV/EDR behavioral false positives.
+
 ## [v3.5.4] — Windows Multi-GPU & Remote-Desktop Anti-Freeze Hardening, Default Quick Tunnel & First-Run Onboarding Wizard
 
 ### 中文更新说明

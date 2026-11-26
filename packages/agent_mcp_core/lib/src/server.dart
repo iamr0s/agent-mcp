@@ -731,9 +731,13 @@ class McpServerEngine {
       final cfVisitor = (request.headers['cf-visitor'] ?? '').toLowerCase();
       final hasCfProxy = (request.headers['cf-ray'] ?? '').isNotEmpty ||
           cfVisitor.contains('"https"');
+      final hasNonTlsExplicitPort =
+          rawHost.contains(':') && !rawHost.endsWith(':443');
       final scheme = fwdProto.isNotEmpty
           ? fwdProto
-          : ((hasCfProxy || _isLikelyPublicTlsDomain(hostNoPort))
+          : ((hasCfProxy ||
+                  (!hasNonTlsExplicitPort &&
+                      _isLikelyPublicTlsDomain(hostNoPort)))
               ? 'https'
               : request.requestedUri.scheme);
       final inferredBase = rawHost.isNotEmpty
@@ -1551,7 +1555,7 @@ class _LiveRoutingState {
         if (k.isNotEmpty) keyMap[k] = p;
       }
       final tmode = (p['tunnel_mode'] ?? 'none').toString().toLowerCase();
-      if ((tmode == 'quick' || tmode == 'token') &&
+      if ((tmode == 'quick' || tmode == 'token' || tmode == 'playit') &&
           !activeTunnelIds.contains(pid)) {
         continue;
       }

@@ -1027,25 +1027,50 @@ class _InstallerWizardScreenState extends State<InstallerWizardScreen> {
       if (_launchAfter && File(exePath).existsSync()) {
         final launchFlag =
             widget.launchConfig.afterMode == 'tray' ? '--silent' : '--show';
+        final payloadDir = widget.launchConfig.payloadDir;
+        final isTempPayload = _isTempSetupPayloadDir(payloadDir);
         await Process.start(
           exePath,
-          [launchFlag],
+          [
+            launchFlag,
+            if (isTempPayload) ...['--cleanup-temp-dir', payloadDir],
+          ],
           workingDirectory: dstRoot.path,
           mode: ProcessStartMode.detached,
         );
+        if (isTempPayload) {
+          _handedOffTempCleanup = true;
+        }
       }
     }
   }
 
-  void _scheduleTempPayloadCleanupIfTemp(String payloadDir) {
-    if (!Platform.isWindows) return;
+  bool _handedOffTempCleanup = false;
+
+  bool _isTempSetupPayloadDir(String payloadDir) {
+    if (!Platform.isWindows || payloadDir.trim().isEmpty) return false;
     try {
-      final norm = p.canonicalize(payloadDir).toLowerCase();
-      if (!norm.contains('agentmcp-setup-')) return;
-      final safeDir = payloadDir.replaceAll('"', '');
+      return p.canonicalize(payloadDir).toLowerCase().contains('agentmcp-setup-');
+    } catch (_) {
+      return payloadDir.toLowerCase().contains('agentmcp-setup-');
+    }
+  }
+
+  void _scheduleTempPayloadCleanupIfTemp(String payloadDir) {
+    if (!Platform.isWindows || _handedOffTempCleanup) return;
+    try {
+      if (!_isTempSetupPayloadDir(payloadDir)) return;
+      final escapedDir = payloadDir.replaceAll("'", "''");
       Process.start(
-        'cmd.exe',
-        ['/c', 'ping 127.0.0.1 -n 4 >nul & rmdir /s /q "$safeDir"'],
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-WindowStyle',
+          'Hidden',
+          '-Command',
+          "Start-Sleep -Seconds 3; Remove-Item -LiteralPath '$escapedDir' -Recurse -Force -ErrorAction SilentlyContinue",
+        ],
         mode: ProcessStartMode.detached,
       );
     } catch (_) {}

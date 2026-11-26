@@ -26,11 +26,21 @@ void main([List<String> args = const []]) {
     runApp(buildInstallerWizardApp(args));
     return;
   }
+  String? postInstallCleanupDir;
+  for (var i = 0; i < args.length; i++) {
+    if (args[i].trim().toLowerCase() == '--cleanup-temp-dir' &&
+        i + 1 < args.length) {
+      postInstallCleanupDir = args[++i].trim();
+    }
+  }
   late ConsoleBackend backend;
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       backend = createPlatformConsoleBackend();
+      if (postInstallCleanupDir != null && postInstallCleanupDir.isNotEmpty) {
+        backend.schedulePostInstallTempCleanup(postInstallCleanupDir);
+      }
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -519,7 +529,7 @@ class _ConsoleShellScreenState extends State<ConsoleShellScreen>
     try {
       final auth = await widget.backend.checkAuthState();
       _serverName = (auth['server_name'] ?? widget.backend.activeNode.name).toString();
-      _version = (auth['version'] ?? '3.5.4').toString();
+      _version = (auth['version'] ?? '3.5.5').toString();
       _dashboardMode =
           auth['dashboard_mode'] == true || widget.backend.isRemoteNodeActive;
       _authenticated = auth['authenticated'] == true;

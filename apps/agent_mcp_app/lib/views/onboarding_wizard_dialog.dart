@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../services/console_backend.dart';
 import '../theme/prism_theme.dart';
+import 'playit_claim_card.dart';
 
 class FirstRunOnboardingDialog extends StatefulWidget {
   final ConsoleBackend backend;
@@ -35,8 +36,12 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
   final _pwdCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
   final _domainCtrl = TextEditingController();
+  final _playitCustomClaimCtrl = TextEditingController();
+  final _playitHostCtrl = TextEditingController();
 
   String _tunnelMode = 'quick';
+  String _playitClaimMode = 'random';
+  String _playitDomainMode = 'random';
   bool _launchAtStartup = false;
   bool _silentStart = false;
   bool _tsEnabled = true;
@@ -69,15 +74,33 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
     if (rawProfiles is List && rawProfiles.isNotEmpty && rawProfiles.first is Map) {
       final p0 = Map<String, dynamic>.from(rawProfiles.first as Map);
       final m = (p0['tunnel_mode'] ?? 'quick').toString().trim().toLowerCase();
-      _tunnelMode =
-          (m == 'quick' || m == 'token' || m == 'none') ? m : 'quick';
+      _tunnelMode = (m == 'quick' ||
+              m == 'token' ||
+              m == 'playit' ||
+              m == 'none')
+          ? m
+          : 'quick';
       _tokenCtrl.text = (p0['tunnel_token'] ?? '').toString();
       _domainCtrl.text = (p0['base_url'] ?? '').toString();
+      _playitClaimMode =
+          (p0['playit_claim_mode'] ?? 'random').toString().toLowerCase() ==
+                  'custom'
+              ? 'custom'
+              : 'random';
+      _playitCustomClaimCtrl.text =
+          (p0['playit_custom_code'] ?? '').toString();
+      _playitDomainMode =
+          (p0['playit_domain_mode'] ?? 'random').toString().toLowerCase() ==
+                  'custom'
+              ? 'custom'
+              : 'random';
+      _playitHostCtrl.text = (p0['playit_hostname'] ?? '').toString();
     } else {
       final cfgMode =
           (cfg['tunnel_mode'] ?? 'quick').toString().trim().toLowerCase();
       _tunnelMode = (cfgMode == 'quick' ||
               cfgMode == 'token' ||
+              cfgMode == 'playit' ||
               cfgMode == 'none')
           ? cfgMode
           : 'quick';
@@ -103,6 +126,8 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
     _pwdCtrl.dispose();
     _tokenCtrl.dispose();
     _domainCtrl.dispose();
+    _playitCustomClaimCtrl.dispose();
+    _playitHostCtrl.dispose();
     super.dispose();
   }
 
@@ -264,6 +289,14 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
             if (_tunnelMode == 'token') {
               pm['tunnel_token'] = _tokenCtrl.text.trim();
               pm['base_url'] = _domainCtrl.text.trim();
+            } else if (_tunnelMode == 'playit') {
+              pm['playit_claim_mode'] = _playitClaimMode;
+              pm['playit_custom_code'] = _playitCustomClaimCtrl.text.trim();
+              pm['playit_domain_mode'] = _playitDomainMode;
+              pm['playit_hostname'] = _playitHostCtrl.text.trim();
+              pm['base_url'] = _playitDomainMode == 'custom'
+                  ? _playitHostCtrl.text.trim()
+                  : '';
             } else if (_tunnelMode == 'quick') {
               pm['base_url'] = '';
             }
@@ -280,7 +313,15 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
           'tunnel_mode': _tunnelMode,
           'tunnel_token':
               _tunnelMode == 'token' ? _tokenCtrl.text.trim() : null,
-          'base_url': _tunnelMode == 'token' ? _domainCtrl.text.trim() : '',
+          'playit_claim_mode': _playitClaimMode,
+          'playit_custom_code': _playitCustomClaimCtrl.text.trim(),
+          'playit_domain_mode': _playitDomainMode,
+          'playit_hostname': _playitHostCtrl.text.trim(),
+          'base_url': _tunnelMode == 'token'
+              ? _domainCtrl.text.trim()
+              : (_tunnelMode == 'playit' && _playitDomainMode == 'custom'
+                  ? _playitHostCtrl.text.trim()
+                  : ''),
           'tunnel_auto_start': true,
           'oauth_allow_all_redirects': false,
           'inherit_permissions': true,
@@ -310,6 +351,14 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
         final cfInstalled = _tunnelInfo['installed'] == true;
         if (!cfInstalled) {
           await widget.backend.installCloudflared();
+        }
+        await widget.backend.startTunnel('default');
+      } else if (_tunnelMode == 'playit') {
+        final playitMap = _tunnelInfo['playit'] is Map
+            ? Map<String, dynamic>.from(_tunnelInfo['playit'] as Map)
+            : const <String, dynamic>{};
+        if (playitMap['installed'] != true) {
+          await widget.backend.installPlayit();
         }
         await widget.backend.startTunnel('default');
       } else {
@@ -633,9 +682,11 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
                                       ? (liveQuickUrl.isNotEmpty
                                           ? 'Quick 隧道已连通'
                                           : '默认推荐 · 免配置')
-                                      : (_tunnelMode == 'token'
-                                          ? '固定域名隧道'
-                                          : '局域网 / 组网直连'),
+                                      : (_tunnelMode == 'playit'
+                                          ? 'Playit 持久地址'
+                                          : (_tunnelMode == 'token'
+                                              ? '固定域名隧道'
+                                              : '局域网 / 组网直连')),
                                   mono: false,
                                   fg: liveQuickUrl.isNotEmpty &&
                                           _tunnelMode == 'quick'
@@ -661,9 +712,10 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
                                         PrismSegmented<String>(
                                           value: _tunnelMode,
                                           items: const [
-                                            ('quick', 'Quick 临时隧道（默认）'),
-                                            ('token', 'Token 固定域名'),
-                                            ('none', '仅局域网 / 组网'),
+                                            ('quick', 'Quick 临时（默认）'),
+                                            ('playit', 'Playit 持久'),
+                                            ('token', 'CF 固定域名'),
+                                            ('none', '仅局域网'),
                                           ],
                                           onChanged: (v) => setState(() {
                                             _tunnelMode = v;
@@ -769,6 +821,25 @@ class _FirstRunOnboardingDialogState extends State<FirstRunOnboardingDialog> {
                                               ),
                                             ),
                                           ],
+                                        ] else if (_tunnelMode == 'playit') ...[
+                                          PlayitClaimAndDomainCard(
+                                            backend: widget.backend,
+                                            profileId: 'default',
+                                            claimMode: _playitClaimMode,
+                                            onClaimModeChanged: (m) => setState(
+                                              () => _playitClaimMode = m,
+                                            ),
+                                            customClaimCtrl:
+                                                _playitCustomClaimCtrl,
+                                            domainMode: _playitDomainMode,
+                                            onDomainModeChanged: (m) =>
+                                                setState(
+                                              () => _playitDomainMode = m,
+                                            ),
+                                            hostnameCtrl: _playitHostCtrl,
+                                            onToast: widget.onToast,
+                                            onStatusChanged: _pollRuntimeState,
+                                          ),
                                         ] else if (_tunnelMode == 'token') ...[
                                           PrismPasswordField(
                                             controller: _tokenCtrl,

@@ -313,6 +313,137 @@ class _WebConsoleBackend extends ConsoleBackend {
   }
 
   @override
+  Future<Map<String, dynamic>> installPlayit({
+    bool force = false,
+    bool resume = false,
+  }) async {
+    final r = await http.post(
+      _uri('/playit/install'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'force': force, 'resume': resume}),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> pausePlayit() async {
+    final r = await http.post(_uri('/playit/pause'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelPlayit() async {
+    final r = await http.post(_uri('/playit/cancel'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> uninstallPlayit() async {
+    final r = await http.post(_uri('/playit/uninstall'));
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> pickAndImportPlayit() async {
+    final completer = Completer<(String, Uint8List)?>();
+    final input = web.document.createElement('input') as web.HTMLInputElement
+      ..type = 'file';
+
+    input.onchange = ((web.Event _) async {
+      final files = input.files;
+      if (files == null || files.length == 0) {
+        if (!completer.isCompleted) completer.complete(null);
+        return;
+      }
+      final file = files.item(0)!;
+      final ab = await file.arrayBuffer().toDart;
+      final bytes = ab.toDart.asUint8List();
+      if (!completer.isCompleted) completer.complete((file.name, bytes));
+    }).toJS;
+
+    input.click();
+    final picked = await completer.future;
+    if (picked == null) return null;
+
+    final r = await http.post(
+      _uri('/playit/import', {'filename': picked.$1}),
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-filename': Uri.encodeComponent(picked.$1),
+      },
+      body: picked.$2,
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getPlayitStatus([String? profileId]) async {
+    final r = await http.get(
+      _uri(
+        '/playit/status',
+        profileId != null && profileId.isNotEmpty
+            ? {'profile_id': profileId}
+            : null,
+      ),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> startPlayitClaim({
+    required String profileId,
+    String claimMode = 'random',
+    String customInput = '',
+    String? secretPath,
+  }) async {
+    final r = await http.post(
+      _uri('/playit/claim/start'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'profile_id': profileId,
+        'claim_mode': claimMode,
+        'custom_input': customInput,
+        if (secretPath != null && secretPath.isNotEmpty)
+          'secret_path': secretPath,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetPlayitClaim(
+    String profileId, {
+    String? secretPath,
+  }) async {
+    final r = await http.post(
+      _uri('/playit/claim/reset'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'profile_id': profileId,
+        if (secretPath != null && secretPath.isNotEmpty)
+          'secret_path': secretPath,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
+  Future<Map<String, dynamic>> syncPlayitEndpoint(
+    String profileId, {
+    bool autoCreate = false,
+  }) async {
+    final r = await http.post(
+      _uri('/playit/sync'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'profile_id': profileId,
+        'auto_create': autoCreate,
+      }),
+    );
+    return _decodeResp(r);
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> listSubMcps() async {
     final r = await http.get(_uri('/sub-mcps'));
     final d = _decodeResp(r);

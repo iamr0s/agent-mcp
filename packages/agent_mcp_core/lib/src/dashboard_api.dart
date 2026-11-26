@@ -14,6 +14,7 @@ import 'client_onboarding.dart';
 import 'config.dart';
 import 'exposure_tools.dart';
 import 'logging_utils.dart';
+import 'playit_tunnel.dart';
 import 'privileged_exec.dart';
 import 'sub_mcp.dart';
 import 'tunnel.dart';
@@ -347,7 +348,7 @@ class DashboardHandler {
         'dashboard_mode': requirePassword,
         'config_rev': _fileMtimeMs(config.configFile),
         'sub_rev': _fileMtimeMs(SubMcpManager.instance.configFile),
-        'tunnels': TunnelManager.instance.getStatuses(),
+        'tunnels': TunnelManager.instance.getStatuses(ensureProfilesInConfig(saved)),
         'exposures': await ExposureManager.instance.getDashboardSummary(config),
         if (Platform.isAndroid)
           'privilege': PrivilegedExecutor.instance.publicStatus,
@@ -628,6 +629,136 @@ class DashboardHandler {
       final localPort =
           int.tryParse('${saved['port'] ?? config.port}') ?? config.port;
       return _json(await TunnelManager.instance.startTunnel(prof, localPort));
+    }
+
+    if (apiPath == '/playit/install' && req.method == 'POST') {
+      var force = false;
+      var resume = false;
+      try {
+        final body = jsonDecode(await req.readAsString());
+        if (body is Map) {
+          force = body['force'] == true;
+          resume = body['resume'] == true;
+        }
+      } catch (_) {}
+      final res = await PlayitManager.instance.startPlayitDownload(
+        forceUpdate: force,
+        resume: resume,
+      );
+      return _json(res);
+    }
+
+    if (apiPath == '/playit/pause' && req.method == 'POST') {
+      return _json(PlayitManager.instance.pauseDownload());
+    }
+    if (apiPath == '/playit/cancel' && req.method == 'POST') {
+      return _json(PlayitManager.instance.cancelDownload());
+    }
+    if (apiPath == '/playit/uninstall' && req.method == 'POST') {
+      return _json(await PlayitManager.instance.uninstallPlayit());
+    }
+    if (apiPath == '/playit/import' && req.method == 'POST') {
+      final rawName = req.headers['x-filename'] ??
+          req.url.queryParameters['filename'] ??
+          'playitd';
+      final filename = Uri.decodeComponent(rawName);
+      final bytesBuilder = BytesBuilder(copy: false);
+      await for (final chunk in req.read()) {
+        bytesBuilder.add(chunk);
+      }
+      final res = await PlayitManager.instance
+          .importPlayitBytes(filename, bytesBuilder.takeBytes());
+      return _json(res);
+    }
+
+    if (apiPath == '/playit/status' && req.method == 'GET') {
+      final pid = req.url.queryParameters['profile_id']?.trim();
+      final saved = loadSavedConfig(config.configFile);
+      final profs = ensureProfilesInConfig(saved);
+      if (pid != null && pid.isNotEmpty) {
+        final prof = profs.where((p) => p['id'] == pid).firstOrNull;
+        return _json({
+          'ok': true,
+          'component': PlayitManager.instance.getComponentStatus(profs),
+          'profile': PlayitManager.instance.getProfilePlayitStatus(
+            pid,
+            customSecretPath: prof?['playit_secret_path']?.toString(),
+          ),
+        });
+      }
+      return _json({
+        'ok': true,
+        'component': PlayitManager.instance.getComponentStatus(profs),
+      });
+    }
+
+    if (apiPath == '/playit/claim/start' && req.method == 'POST') {
+      final body = Map<String, dynamic>.from(
+        (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+      );
+      final pid = (body['profile_id'] ?? 'default').toString().trim();
+      final claimMode = (body['claim_mode'] ?? 'random').toString().trim();
+      final customInput = (body['custom_input'] ?? '').toString().trim();
+      final secretPath = body['secret_path']?.toString();
+      final saved = loadSavedConfig(config.configFile);
+      final profs = ensureProfilesInConfig(saved);
+      final prof = profs.where((p) => p['id'] == pid).firstOrNull;
+      final localPort =
+          int.tryParse('${saved['port'] ?? config.port}') ?? config.port;
+      final res = await PlayitManager.instance.startClaim(
+        profileId: pid,
+        claimMode: claimMode,
+        customInput: customInput,
+        customSecretPath: secretPath ?? prof?['playit_secret_path']?.toString(),
+        localPort: localPort,
+        profile: prof,
+      );
+      return _json(res);
+    }
+
+    if (apiPath == '/playit/claim/reset' && req.method == 'POST') {
+      final body = Map<String, dynamic>.from(
+        (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+      );
+      final pid = (body['profile_id'] ?? 'default').toString().trim();
+      final secretPath = body['secret_path']?.toString();
+      final saved = loadSavedConfig(config.configFile);
+      final profs = ensureProfilesInConfig(saved);
+      final prof = profs.where((p) => p['id'] == pid).firstOrNull;
+      final res = await PlayitManager.instance.resetProfileSecret(
+        pid,
+        customSecretPath: secretPath ?? prof?['playit_secret_path']?.toString(),
+      );
+      return _json(res);
+    }
+
+    if (apiPath == '/playit/sync' && req.method == 'POST') {
+      final body = Map<String, dynamic>.from(
+        (jsonDecode(await req.readAsString()) as Map?) ?? const {},
+      );
+      final pid = (body['profile_id'] ?? 'default').toString().trim();
+      final saved = loadSavedConfig(config.configFile);
+      final profs = ensureProfilesInConfig(saved);
+      final prof = profs.where((p) => p['id'] == pid).firstOrNull;
+      final secFile = resolvePlayitSecretFile(
+        pid,
+        body['secret_path']?.toString() ??
+            prof?['playit_secret_path']?.toString(),
+      );
+      final secKey = readPlayitSecretKey(secFile);
+      if (secKey == null || secKey.isEmpty) {
+        return _json({'ok': false, 'error': '该入口尚未完成 Playit 认领'});
+      }
+      final localPort =
+          int.tryParse('${saved['port'] ?? config.port}') ?? config.port;
+      final res = await PlayitManager.instance.syncProfileEndpointFromApi(
+        profileId: pid,
+        secretKey: secKey,
+        localPort: localPort,
+        profile: prof,
+        allowAutoCreate: body['auto_create'] == true,
+      );
+      return _json(res);
     }
 
     if (apiPath == '/sub-mcps' && req.method == 'GET') {
