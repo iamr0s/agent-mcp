@@ -1,5 +1,21 @@
 # Changelog
 
+## [v3.5.6] — Cloudflared TUN Fake-IP & QUIC Block Auto-Fallback (`http2`), Self-Healing Tunnel Error State & Transport Selector
+
+### 中文更新说明
+
+- **Cloudflare 隧道（Quick / Token / 外网分享）原生免疫 TUN 代理 Fake-IP 与 UDP `7844` 拦截**：
+  - **启动前智能探测 Fake-IP 自动切换 `HTTP/2`**：启动 `cloudflared` 前自动探测 `region1.v2.argotunnel.com` 解析结果，若落在 Clash Party / FlClash / Mihomo / Sing-box / V2rayN 的 `198.18.0.0/15`、`28.0.0.0/8` 或内网透明劫持地址段，无需用户修改任何代理规则，直接以 `--protocol http2 --edge-ip-version 4` 启动 TCP 加密传输通道，约 2 秒稳定连通。
+  - **运行期 QUIC 握手超时自动热切自愈**：在未使用 Fake-IP 但运营商、校园网或公司防火墙封禁 UDP `:7844` 导致 `failed to dial to edge with quic` 时，网关自动记忆网络特征并无缝重拉为 `HTTP/2` 模式，解决新版 `cloudflared` 默认 `auto` 持续卡死在 QUIC 重试的问题。
+  - **边缘注册成功后自动清空握手期残留告警 + 新增协议切换开关**：一旦捕获到 `Registered tunnel connection` 确认边缘节点就绪，自动清除此前握手重试阶段残留的临时 `ERR` 文本，并在状态胶囊展示 `Quick 在线 · HTTP/2`；同时在「编辑接入入口」新增 `智能自动（防 TUN 拦截） / 强制 HTTP/2 / 强制 QUIC` 三档传输协议开关。
+
+### English Release Notes
+
+- **Zero-Config TUN Fake-IP & UDP `:7844` Block Immunity for Cloudflare Tunnels (`Quick` / `Token` / `manage_expose`)**:
+  - **Pre-Flight Fake-IP Detection (`--protocol http2 --edge-ip-version 4`)**: Automatically probes `region1.v2.argotunnel.com` before spawning `cloudflared`; when DNS resolves into local TUN Fake-IP pools (`198.18.0.0/15`, `28.0.0.0/8`) or transparent local ranges (Clash / Mihomo / FlClash / Sing-box / Surge), launches directly over TCP `http2` without requiring users to edit proxy `fake-ip-filter` rules.
+  - **Runtime QUIC-to-HTTP/2 Auto-Healing Watchdog**: Detects `failed to dial a quic connection` / `failed to dial to edge with quic` timeouts on UDP-blocked ISP, campus, or corporate networks and automatically relaunches the tunnel over `--protocol http2 --edge-ip-version 4`.
+  - **Self-Healing Error Banner & Explicit Protocol Selector**: Automatically clears transient pre-registration `ERR` lines as soon as `Registered tunnel connection` is confirmed, surfaces `HTTP/2` in the live profile status pill, and adds a 3-way `Auto (TUN-Safe) / Force HTTP/2 / Force QUIC` selector in **Profile Editor**.
+
 ## [v3.5.5] — Playit.gg Persistent Tunnel & Claim Integration, Zero-Ping Startup & Installer Cleanup
 
 ### 中文更新说明

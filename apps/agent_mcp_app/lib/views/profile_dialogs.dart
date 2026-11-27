@@ -48,6 +48,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
 
   String _transport = 'dual';
   String _tunnelMode = 'none';
+  String _tunnelProtocol = 'auto';
   bool _tunnelAuto = true;
   String _playitClaimMode = 'random';
   String _playitDomainMode = 'random';
@@ -82,6 +83,10 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       _nameCtrl.text = (e['name'] ?? '').toString();
       _transport = (e['transport'] ?? 'dual').toString();
       _tunnelMode = (e['tunnel_mode'] ?? 'none').toString();
+      final rawProto =
+          (e['tunnel_protocol'] ?? 'auto').toString().trim().toLowerCase();
+      _tunnelProtocol =
+          (rawProto == 'http2' || rawProto == 'quic') ? rawProto : 'auto';
       _tunnelAuto = e['tunnel_auto_start'] != false;
       _tunTokenCtrl.text = (e['tunnel_token'] ?? '').toString();
       _playitClaimMode =
@@ -284,6 +289,7 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
       'enabled': widget.existing?['enabled'] ?? true,
       'transport': _transport,
       'tunnel_mode': _tunnelMode,
+      'tunnel_protocol': _tunnelProtocol,
       'tunnel_token': _tunTokenCtrl.text.trim(),
       'tunnel_auto_start': _tunnelAuto,
       'playit_claim_mode': _playitClaimMode,
@@ -686,6 +692,33 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
                           child: Text(
                             '启动 Quick 隧道后会自动生成 trycloudflare.com 公网地址并热注入 OAuth 2.1。',
                             style: sansStyle(c, size: 12.5, color: c.muted),
+                          ),
+                        ),
+                      ),
+                      PrismCollapsible(
+                        expanded:
+                            _tunnelMode == 'quick' || _tunnelMode == 'token',
+                        builder: (_) => _ModalGridRow(
+                          label: '隧道传输协议',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              PrismSegmented<String>(
+                                value: _tunnelProtocol,
+                                items: const [
+                                  ('auto', '智能自动（防 TUN 拦截）'),
+                                  ('http2', '强制 HTTP/2'),
+                                  ('quic', '强制 QUIC'),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _tunnelProtocol = v),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '自动模式下若检测到 Clash / Mihomo TUN Fake-IP 或 UDP 7844 受阻，将无缝切换至 TCP HTTP/2 稳定连通。',
+                                style: sansStyle(c, size: 11.4, color: c.muted),
+                              ),
+                            ],
                           ),
                         ),
                       ),

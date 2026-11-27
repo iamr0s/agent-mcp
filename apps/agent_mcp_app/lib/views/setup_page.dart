@@ -3016,12 +3016,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                         leading: const Icon(Icons.cloud_outlined),
                         text: tunRunning
                             ? (tMode == 'quick'
-                                ? (liveQuick.isNotEmpty ? 'Quick 在线' : '分配中...')
+                                ? (liveQuick.isNotEmpty
+                                    ? (tState['protocol'] == 'http2'
+                                        ? 'Quick 在线 · HTTP/2'
+                                        : 'Quick 在线')
+                                    : '分配中...')
                                 : (tMode == 'playit'
                                     ? (liveQuick.isNotEmpty
                                         ? 'Playit 在线'
                                         : '同步中...')
-                                    : 'Token 在线'))
+                                    : (tState['protocol'] == 'http2'
+                                        ? 'Token 在线 · HTTP/2'
+                                        : 'Token 在线')))
                             : (tMode == 'playit' && !playitClaimed
                                 ? 'Playit 待认领'
                                 : '隧道未启动'),

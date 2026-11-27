@@ -870,6 +870,14 @@ Map<String, dynamic> normalizeProfile(
       ? raw['allow_all_roots'] == true
       : parsedRoots.isEmpty;
 
+  var tunnelProtocol =
+      (raw['tunnel_protocol'] ?? 'auto').toString().trim().toLowerCase();
+  if (tunnelProtocol != 'auto' &&
+      tunnelProtocol != 'http2' &&
+      tunnelProtocol != 'quic') {
+    tunnelProtocol = 'auto';
+  }
+
   return <String, dynamic>{
     'id': pid,
     'name': name,
@@ -886,6 +894,7 @@ Map<String, dynamic> normalizeProfile(
     'oauth_allow_all_redirects': oauthAllowAllRedirects,
     'oauth_redirect_uris': parsedRedirects,
     'tunnel_mode': tunnelMode,
+    'tunnel_protocol': tunnelProtocol,
     'tunnel_token': _nonEmptyOrNull(raw['tunnel_token']),
     'tunnel_auto_start': raw['tunnel_auto_start'] == null
         ? true

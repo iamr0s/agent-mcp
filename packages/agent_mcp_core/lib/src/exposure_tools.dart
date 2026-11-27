@@ -1016,9 +1016,14 @@ class ExposureManager {
       return (null, '', '未安装 cloudflared，已跳过临时公网域名');
     }
     try {
+      final preferHttp2 = await shouldPreferCloudflaredHttp2();
       final proc = await Process.start(
         cf.path,
-        ['tunnel', '--url', targetLocalUrl, '--no-autoupdate'],
+        buildCloudflaredTunnelArgs(
+          mode: 'quick',
+          preferHttp2: preferHttp2,
+          quickUpstreamUrl: targetLocalUrl,
+        ),
       );
       Win32ProcessJobGuard.instance.attachPid(proc.pid);
 

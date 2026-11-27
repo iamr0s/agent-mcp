@@ -2108,4 +2108,86 @@ void main() {
       }
     }
   });
+
+  test('v3.5.6: Cloudflared Fake-IP detection (198.18.0.0/15, 28.0.0.0/8) & HTTP/2 CLI builder avoid QUIC timeouts under TUN proxies', () async {
+    resetCloudflaredProtocolCacheForTesting();
+    expect(isFakeOrInterceptedTunnelIp('198.18.3.204'), isTrue);
+    expect(isFakeOrInterceptedTunnelIp('198.19.255.1'), isTrue);
+    expect(isFakeOrInterceptedTunnelIp('28.0.0.12'), isTrue);
+    expect(isFakeOrInterceptedTunnelIp('198.41.192.67'), isFalse);
+    expect(isFakeOrInterceptedTunnelIp('198.41.200.113'), isFalse);
+
+    final preferOnFakeIp = await shouldPreferCloudflaredHttp2(
+      requestedProtocol: 'auto',
+      dnsLookupForTesting: (_) async => [InternetAddress('198.18.3.204')],
+    );
+    expect(preferOnFakeIp, isTrue);
+
+    final preferOnRealEdge = await shouldPreferCloudflaredHttp2(
+      requestedProtocol: 'auto',
+      dnsLookupForTesting: (_) async => [InternetAddress('198.41.192.67')],
+    );
+    expect(preferOnRealEdge, isFalse);
+
+    expect(
+      await shouldPreferCloudflaredHttp2(
+        requestedProtocol: 'http2',
+        dnsLookupForTesting: (_) async => [InternetAddress('198.41.192.67')],
+      ),
+      isTrue,
+    );
+    expect(
+      await shouldPreferCloudflaredHttp2(
+        requestedProtocol: 'quic',
+        dnsLookupForTesting: (_) async => [InternetAddress('198.18.3.204')],
+      ),
+      isFalse,
+    );
+
+    final quickHttp2Args = buildCloudflaredTunnelArgs(
+      mode: 'quick',
+      preferHttp2: true,
+      quickUpstreamUrl: 'http://127.0.0.1:8778',
+    );
+    expect(
+      quickHttp2Args,
+      equals([
+        'tunnel',
+        '--no-autoupdate',
+        '--protocol',
+        'http2',
+        '--edge-ip-version',
+        '4',
+        '--url',
+        'http://127.0.0.1:8778',
+      ]),
+    );
+
+    final tokenHttp2Args = buildCloudflaredTunnelArgs(
+      mode: 'token',
+      preferHttp2: true,
+      token: 'eyJ-demo-token',
+    );
+    expect(
+      tokenHttp2Args,
+      equals([
+        'tunnel',
+        '--no-autoupdate',
+        '--protocol',
+        'http2',
+        '--edge-ip-version',
+        '4',
+        'run',
+        '--token',
+        'eyJ-demo-token',
+      ]),
+    );
+
+    final norm = normalizeProfile({
+      'id': 'p-cf',
+      'tunnel_mode': 'quick',
+      'tunnel_protocol': 'http2',
+    });
+    expect(norm['tunnel_protocol'], equals('http2'));
+  });
 }

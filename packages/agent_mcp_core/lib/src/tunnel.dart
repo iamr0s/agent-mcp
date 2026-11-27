@@ -14,6 +14,100 @@ import 'process_tools.dart';
 final RegExp _quickUrlRe =
     RegExp(r'https://[a-z0-9-]+\.trycloudflare\.com', caseSensitive: false);
 
+/// Returns true when an IPv4 address resolved for Cloudflare's `argotunnel.com`
+/// edge belongs to a local TUN proxy Fake-IP pool (`198.18.0.0/15`, `28.0.0.0/8`)
+/// or private/loopback DNS interception range where UDP `:7844` QUIC handshakes
+/// time out (`failed to dial to edge with quic`).
+bool isFakeOrInterceptedTunnelIp(String rawIp) {
+  final ip = rawIp.trim();
+  final parts = ip.split('.');
+  if (parts.length != 4) return false;
+  final p0 = int.tryParse(parts[0]) ?? -1;
+  final p1 = int.tryParse(parts[1]) ?? -1;
+  if (p0 < 0 || p1 < 0) return false;
+  // Mihomo / Clash / FlClash / Sing-box / Surge standard Fake-IP CIDR: 198.18.0.0/15
+  if (p0 == 198 && (p1 == 18 || p1 == 19)) return true;
+  // V2rayN / Nekobox / Hiddify alternative Fake-IP CIDR: 28.0.0.0/8
+  if (p0 == 28) return true;
+  // Loopback, RFC1918, or CGNAT transparent DNS interception
+  if (p0 == 127 || p0 == 10) return true;
+  if (p0 == 172 && p1 >= 16 && p1 <= 31) return true;
+  if (p0 == 192 && p1 == 168) return true;
+  if (p0 == 100 && p1 >= 64 && p1 <= 127) return true;
+  return false;
+}
+
+bool _learnedHttp2Required = false;
+bool? _cachedFakeIpDetected;
+DateTime? _cachedFakeIpAt;
+
+void resetCloudflaredProtocolCacheForTesting() {
+  _learnedHttp2Required = false;
+  _cachedFakeIpDetected = null;
+  _cachedFakeIpAt = null;
+}
+
+/// Determines whether `cloudflared` should launch directly with
+/// `--protocol http2 --edge-ip-version 4` to avoid QUIC UDP `:7844` timeouts
+/// under Clash/Mihomo Fake-IP TUN adapters or UDP-blocked networks.
+Future<bool> shouldPreferCloudflaredHttp2({
+  String? requestedProtocol,
+  Future<List<InternetAddress>> Function(String host)? dnsLookupForTesting,
+}) async {
+  final req = (requestedProtocol ?? 'auto').trim().toLowerCase();
+  if (req == 'http2') return true;
+  if (req == 'quic') return false;
+  if (_learnedHttp2Required) return true;
+
+  final now = DateTime.now();
+  if (dnsLookupForTesting == null &&
+      _cachedFakeIpDetected != null &&
+      _cachedFakeIpAt != null &&
+      now.difference(_cachedFakeIpAt!).inSeconds < 45) {
+    return _cachedFakeIpDetected!;
+  }
+
+  var detected = false;
+  try {
+    final lookupFn = dnsLookupForTesting ??
+        (String host) =>
+            InternetAddress.lookup(host, type: InternetAddressType.IPv4);
+    final addrs = await lookupFn('region1.v2.argotunnel.com')
+        .timeout(const Duration(milliseconds: 1200));
+    for (final a in addrs) {
+      if (isFakeOrInterceptedTunnelIp(a.address)) {
+        detected = true;
+        break;
+      }
+    }
+  } catch (_) {}
+
+  if (dnsLookupForTesting == null) {
+    _cachedFakeIpDetected = detected;
+    _cachedFakeIpAt = now;
+  }
+  return detected;
+}
+
+List<String> buildCloudflaredTunnelArgs({
+  required String mode,
+  required bool preferHttp2,
+  String? token,
+  String? quickUpstreamUrl,
+}) {
+  final args = <String>[
+    'tunnel',
+    '--no-autoupdate',
+    if (preferHttp2) ...['--protocol', 'http2', '--edge-ip-version', '4'],
+  ];
+  if (mode == 'token') {
+    args.addAll(['run', '--token', token ?? '']);
+  } else {
+    args.addAll(['--url', quickUpstreamUrl ?? '']);
+  }
+  return args;
+}
+
 Map<String, dynamic> getCloudflaredDownloadInfo() {
   final binDir = StoragePaths.instance.binDir;
   final arch = Platform.version.toLowerCase();
@@ -129,9 +223,12 @@ String getCloudflaredVersion(File? binary) {
 class _TunnelProc {
   final String profileId;
   final String mode;
+  final String protocol; // 'auto' | 'http2' | 'quic'
   final Process proc;
   String liveUrl = '';
   bool connected = false;
+  bool edgeRegistered = false;
+  bool autoSwitchingProtocol = false;
   String error = '';
   bool stopped = false;
   bool exited = false;
@@ -140,6 +237,7 @@ class _TunnelProc {
   _TunnelProc({
     required this.profileId,
     required this.mode,
+    required this.protocol,
     required this.proc,
   });
 }
@@ -479,8 +577,10 @@ class TunnelManager {
       if (!tp.exited) {
         payload[e.key] = {
           'mode': tp.mode,
+          'protocol': tp.protocol == 'http2' ? 'http2' : 'quic',
           'live_url': tp.liveUrl,
           'connected': tp.connected,
+          'edge_registered': tp.edgeRegistered,
           'pid': tp.proc.pid,
         };
       }
@@ -507,8 +607,10 @@ class TunnelManager {
       tunnels[e.key] = {
         'running': running,
         'mode': tp.mode,
+        'protocol': tp.protocol == 'http2' ? 'http2' : 'quic',
         'live_url': tp.liveUrl,
         'connected': tp.connected && running,
+        'edge_registered': tp.edgeRegistered && running,
         'error': tp.error,
         'pid': running ? tp.proc.pid : null,
       };
@@ -524,8 +626,10 @@ class TunnelManager {
         tunnels[e.key] = {
           'running': true,
           'mode': info['mode'] ?? '',
+          'protocol': info['protocol'] ?? 'quic',
           'live_url': info['live_url'] ?? '',
           'connected': info['connected'] == true,
+          'edge_registered': info['edge_registered'] == true,
           'error': '',
           'pid': info['pid'],
         };
@@ -579,6 +683,14 @@ class TunnelManager {
 
     await stopTunnel(pid);
 
+    final reqProto =
+        (profile['tunnel_protocol'] ?? 'auto').toString().trim().toLowerCase();
+    final preferHttp2 = await shouldPreferCloudflaredHttp2(
+      requestedProtocol: reqProto,
+    );
+    final activeProto =
+        preferHttp2 ? 'http2' : (reqProto == 'quic' ? 'quic' : 'auto');
+
     List<String> args;
     if (mode == 'token') {
       var token = (profile['tunnel_token'] ?? '').toString().trim();
@@ -590,20 +702,33 @@ class TunnelManager {
       }
       final parts = token.split(RegExp(r'\s+'));
       if (parts.length > 1) token = parts.last.trim();
-      args = ['tunnel', '--no-autoupdate', 'run', '--token', token];
+      args = buildCloudflaredTunnelArgs(
+        mode: 'token',
+        preferHttp2: preferHttp2,
+        token: token,
+      );
     } else {
       final upstream = Uri(
         scheme: 'http',
         host: InternetAddress.loopbackIPv4.address,
         port: localPort,
       ).toString();
-      args = ['tunnel', '--no-autoupdate', '--url', upstream];
+      args = buildCloudflaredTunnelArgs(
+        mode: 'quick',
+        preferHttp2: preferHttp2,
+        quickUpstreamUrl: upstream,
+      );
     }
 
     try {
       final proc = await Process.start(binary.path, args);
       Win32ProcessJobGuard.instance.attachPid(proc.pid);
-      final tp = _TunnelProc(profileId: pid, mode: mode, proc: proc);
+      final tp = _TunnelProc(
+        profileId: pid,
+        mode: mode,
+        protocol: activeProto,
+        proc: proc,
+      );
       _procs[pid] = tp;
       _persistState();
 
@@ -623,12 +748,37 @@ class TunnelManager {
         }
         if (line.contains('Registered tunnel connection') ||
             line.contains('Connection registered')) {
-          if (!tp.connected) {
-            tp.connected = true;
-            changed = true;
+          tp.edgeRegistered = true;
+          tp.connected = true;
+          if (tp.error.isNotEmpty) {
+            tp.error = '';
           }
+          changed = true;
         }
         final low = line.toLowerCase();
+        final isQuicDialTimeout = low.contains('failed to dial a quic connection') ||
+            low.contains('failed to dial to edge with quic');
+        if (isQuicDialTimeout) {
+          _learnedHttp2Required = true;
+          // Auto-heal: if running in default/auto QUIC mode and UDP :7844 is blocked
+          // (by TUN Fake-IP, ISP, or firewall), immediately relaunch in HTTP/2 TCP mode!
+          if (tp.protocol == 'auto' &&
+              !tp.edgeRegistered &&
+              !tp.stopped &&
+              !tp.autoSwitchingProtocol) {
+            tp.autoSwitchingProtocol = true;
+            tp.stopped = true;
+            tp.error = '';
+            final retryProfile = Map<String, dynamic>.from(profile)
+              ..['tunnel_protocol'] = 'http2';
+            unawaited(startTunnel(retryProfile, localPort));
+            return;
+          }
+          // Ignore transient QUIC warnings if an edge connection is already registered
+          if (tp.edgeRegistered) {
+            return;
+          }
+        }
         if ((low.contains('err ') ||
                 low.contains('error') ||
                 low.contains('not valid') ||
@@ -667,7 +817,12 @@ class TunnelManager {
         }),
       );
 
-      return {'ok': true, 'pid': proc.pid, 'mode': mode};
+      return {
+        'ok': true,
+        'pid': proc.pid,
+        'mode': mode,
+        'protocol': activeProto == 'http2' ? 'http2' : 'quic',
+      };
     } catch (e) {
       return {'ok': false, 'error': '启动 cloudflared 失败: $e'};
     }

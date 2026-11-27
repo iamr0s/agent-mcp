@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-const String agentMcpVersion = '3.5.5';
+const String agentMcpVersion = '3.5.6';
 
 const String appIconSvg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'

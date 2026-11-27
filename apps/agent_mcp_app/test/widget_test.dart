@@ -1243,8 +1243,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.5'), findsOneWidget);
-    await tester.tap(find.text('v3.5.5'));
+    expect(find.text('v3.5.6'), findsOneWidget);
+    await tester.tap(find.text('v3.5.6'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1344,7 +1344,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.5'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.6'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2146,7 +2146,7 @@ void main() {
     expect(tier6.isUpgrade, isFalse);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.5'), findsOneWidget);
+    expect(find.text('v3.5.6'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
@@ -2320,7 +2320,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('v3.5.5: ProfileEditDialog supports Playit.gg persistent tunnel, auto-generates claim URL, opens browser & switches random/custom domain', (tester) async {
+  testWidgets('v3.5.6: ProfileEditDialog supports Playit.gg persistent tunnel, auto-generates claim URL, opens browser & switches random/custom domain', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
