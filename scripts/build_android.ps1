@@ -1,9 +1,18 @@
 param(
-  [switch]$UniversalOnly
+  [switch]$UniversalOnly,
+  [string]$Version = ""
 )
 $ErrorActionPreference = 'Continue'
 
 $RootDir = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Version)) {
+  $verDart = Get-Content (Join-Path $RootDir 'packages\agent_mcp_core\lib\src\version.dart') -Raw
+  if ($verDart -match "agentMcpVersion\s*=\s*'([^']+)'") {
+    $Version = $Matches[1]
+  } else {
+    $Version = '3.5.7'
+  }
+}
 $AppDir = Join-Path $RootDir 'apps\agent_mcp_app'
 $FlutterBat = Join-Path $RootDir '.sdk\flutter\bin\flutter.bat'
 if (-not (Test-Path $FlutterBat)) {
@@ -76,22 +85,24 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Universal APK build failed ($LASTEXITCODE)" }
 
   $uniSrc = Join-Path $AppDir 'build\app\outputs\flutter-apk\app-release.apk'
-  $uniDst = Join-Path $ReleaseDir 'AgentMCP-v2.5.3-android-universal.apk'
+  $uniDst = Join-Path $ReleaseDir "AgentMCP-v$Version-android-universal.apk"
   Copy-Item -Force $uniSrc $uniDst
 
   if (-not $UniversalOnly) {
-    Write-Host '[2/2] Building Slim arm64-v8a Release APK...'
+    Write-Host '[2/2] Building Split-ABI Release APKs (arm64-v8a / armeabi-v7a / x86_64)...'
     & $FlutterBat build apk --release --split-per-abi
     if ($LASTEXITCODE -ne 0) { throw "Split-ABI APK build failed ($LASTEXITCODE)" }
 
-    $arm64Src = Join-Path $AppDir 'build\app\outputs\flutter-apk\app-arm64-v8a-release.apk'
-    $arm64Dst = Join-Path $ReleaseDir 'AgentMCP-v2.5.3-android-arm64-v8a.apk'
-    if (Test-Path $arm64Src) {
-      Copy-Item -Force $arm64Src $arm64Dst
+    foreach ($abi in @('arm64-v8a', 'armeabi-v7a', 'x86_64')) {
+      $abiSrc = Join-Path $AppDir "build\app\outputs\flutter-apk\app-$abi-release.apk"
+      $abiDst = Join-Path $ReleaseDir "AgentMCP-v$Version-android-$abi.apk"
+      if (Test-Path $abiSrc) {
+        Copy-Item -Force $abiSrc $abiDst
+      }
     }
   }
 
-  Get-ChildItem $ReleaseDir -Filter 'AgentMCP-v2.5.3-android-*.apk' | ForEach-Object {
+  Get-ChildItem $ReleaseDir -Filter "AgentMCP-v$Version-android-*.apk" | ForEach-Object {
     $mb = [Math]::Round($_.Length / 1MB, 2)
     Write-Host "[OK] $($_.FullName) ($mb MB)"
   }

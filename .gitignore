@@ -14,6 +14,7 @@ pubspec.lock
 apps/agent_mcp_app/android/.gradle/
 apps/agent_mcp_app/android/local.properties
 apps/agent_mcp_app/android/key.properties
+apps/agent_mcp_app/android/keystore/
 *.jks
 *.keystore
 *.apk

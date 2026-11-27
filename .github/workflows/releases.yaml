@@ -114,6 +114,54 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Set Signing Config from Secrets (Dhizuku-Compatible)
+        env:
+          SECRET_STORE_FILE: ${{ secrets.STORE_FILE }}
+          SECRET_STORE_PASS: ${{ secrets.STORE_PASS }}
+          SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SECRET_KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          python3 - <<'PYEOF'
+          import base64, os, pathlib, re, sys
+
+          store_b64 = (os.environ.get('SECRET_STORE_FILE') or '').strip()
+          store_pass = (os.environ.get('SECRET_STORE_PASS') or '').strip()
+          key_alias = (os.environ.get('SECRET_KEY_ALIAS') or '').strip()
+          key_pass = (os.environ.get('SECRET_KEY_PASS') or '').strip()
+
+          if not store_b64:
+              print('[Signing] Secret STORE_FILE not configured yet; using fallback debug signing.')
+              sys.exit(0)
+
+          missing = [
+              k for k, v in [
+                  ('STORE_PASS', store_pass),
+                  ('KEY_ALIAS', key_alias),
+                  ('KEY_PASS', key_pass),
+              ] if not v
+          ]
+          if missing:
+              print(f'::error::STORE_FILE is present, but missing required signing secrets: {", ".join(missing)}')
+              sys.exit(1)
+
+          ks_dir = pathlib.Path('apps/agent_mcp_app/android/keystore')
+          ks_dir.mkdir(parents=True, exist_ok=True)
+          jks_bytes = base64.b64decode(re.sub(r'\s+', '', store_b64))
+          (ks_dir / 'r0s.jks').write_bytes(jks_bytes)
+
+          def esc(val: str) -> str:
+              return val.replace('\\', '\\\\').replace('\n', '\\n')
+
+          props = (
+              'storeFile=r0s.jks\n'
+              f'storePassword={esc(store_pass)}\n'
+              f'keyAlias={esc(key_alias)}\n'
+              f'keyPassword={esc(key_pass)}\n'
+          )
+          (ks_dir / 'r0s.properties').write_text(props, encoding='utf-8')
+          print(f'[Signing] Provisioned keystore/r0s.jks ({len(jks_bytes)} bytes) & keystore/r0s.properties.')
+          PYEOF
+
       - name: Build Universal & Split-ABI Release APKs
         run: |
           (cd apps/agent_mcp_app && flutter pub get)
@@ -125,6 +173,15 @@ jobs:
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "../../release/AgentMCP-v${APP_VERSION}-android-arm64-v8a.apk"
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "../../release/AgentMCP-v${APP_VERSION}-android-armeabi-v7a.apk"
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk "../../release/AgentMCP-v${APP_VERSION}-android-x86_64.apk"
+
+      - name: Verify APK Signing Certificate Fingerprint
+        run: |
+          keytool -printcert -jarfile "release/AgentMCP-v${APP_VERSION}-android-arm64-v8a.apk" | grep -E "Owner:|Issuer:|SHA256:" || true
+
+      - name: Wipe Ephemeral Keystore Files
+        if: always()
+        run: |
+          rm -rf apps/agent_mcp_app/android/keystore
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4

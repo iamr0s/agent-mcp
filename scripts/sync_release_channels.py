@@ -351,12 +351,13 @@ def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
     for art in artifacts:
         if art.get("expired"):
             continue
-        art_name = art["name"]
-        dl_url = art["archive_download_url"]
+        art_name = str(art.get("name") or "")
+        if "artifact" not in art_name.lower():
+            continue
         print(f"[DL] Fetching CI artifact '{art_name}'...")
         _, zip_bytes = _gh_request(
             "GET",
-            dl_url,
+            art["archive_download_url"],
             token,
             accept="application/vnd.github+json",
         )
@@ -365,7 +366,7 @@ def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
                 if member.is_dir():
                     continue
                 fname = pathlib.Path(member.filename).name
-                if not fname:
+                if not (fname.startswith("AgentMCP-") or fname == "SHA256SUMS.txt"):
                     continue
                 dest = out_dir / fname
                 with zf.open(member, "r") as src, dest.open("wb") as dst:
