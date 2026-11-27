@@ -13,6 +13,7 @@ import 'exposure_page.dart';
 import 'prism_structured_editors.dart';
 import 'profile_dialogs.dart';
 import 'profile_endpoints_helper.dart';
+import 'update_dialog.dart';
 
 /// Bridges narrow-screen Level-2 subpage & inline-editor back navigation
 /// with the outer shell's PopScope, top Jade Back Pill, Esc key, and tab re-tap.
@@ -809,6 +810,13 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
     final showMirror = _showMirrorConfig || hasMirror;
     final osName =
         (widget.config['host_os'] ?? 'windows').toString().toUpperCase();
+    final matchedChannels = latest?.channelsForPlatform(
+          isWindows: widget.backend.isWindowsPlatform,
+          isAndroid: widget.backend.isAndroidPlatform,
+          isLinux: widget.backend.isLinuxPlatform,
+          isMacOS: widget.backend.isMacOSPlatform,
+        ) ??
+        const <UpdateDownloadChannel>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -921,6 +929,20 @@ class _ServiceSetupPageState extends State<ServiceSetupPage>
                       'https://github.com/iamr0s/agent-mcp/releases',
                     ),
                   ),
+                  if (latest != null && matchedChannels.isNotEmpty)
+                    PrismButton(
+                      label: '下载渠道 (${matchedChannels.length})',
+                      compact: true,
+                      variant: PrismBtnVariant.neutral,
+                      leading: const Icon(Icons.cloud_download_rounded),
+                      onPressed: () => showUpdateChannelsDialog(
+                        context: context,
+                        backend: widget.backend,
+                        latest: latest,
+                        mirrorPrefix: prefs.mirrorPrefix,
+                        onToast: widget.onToast,
+                      ),
+                    ),
                   PrismButton(
                     label: widget.checkingUpdate
                         ? '检查中...'

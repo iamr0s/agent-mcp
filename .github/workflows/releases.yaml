@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to publish (e.g. v3.5.6)'
+        description: 'Release tag to publish (e.g. v3.5.7)'
         required: true
-        default: 'v3.5.6'
+        default: 'v3.5.7'
+      publish_binaries:
+        description: 'Upload binary packages directly to GitHub Releases (default false = index-only)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -498,14 +503,29 @@ jobs:
         env:
           REL_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
           REPO: ${{ github.repository }}
+          FORCE_PUBLISH_BINARIES: ${{ github.event.inputs.publish_binaries || 'false' }}
         run: |
           python3 - <<'PYEOF'
-          import datetime, hashlib, json, os, pathlib, re, subprocess
+          import datetime, hashlib, json, os, pathlib, re, shutil, subprocess
 
           tag = os.environ['REL_TAG'].strip()
           ver = tag.lstrip('vV')
           repo = os.environ['REPO'].strip()
+          force_pub_bin = os.environ.get('FORCE_PUBLISH_BINARIES', '').strip().lower() == 'true'
           dist = pathlib.Path('dist_artifacts')
+          rel_upload = pathlib.Path('release_upload')
+          rel_upload.mkdir(parents=True, exist_ok=True)
+
+          ch_cfg = {}
+          ch_cfg_path = pathlib.Path('release_channels.json')
+          if ch_cfg_path.is_file():
+              try:
+                  ch_cfg = json.loads(ch_cfg_path.read_text(encoding='utf-8'))
+              except Exception as exc:
+                  print(f'Warning: failed to parse release_channels.json: {exc}')
+
+          publish_binaries = force_pub_bin or bool(ch_cfg.get('publish_github_binaries', False))
+          enable_one_click_assets = publish_binaries or bool(ch_cfg.get('enable_one_click_github_assets', False))
 
           suffix_map = {
               '-windows-x64-sfx.exe': 'windows_sfx',
@@ -528,7 +548,7 @@ jobs:
               '-android-universal.apk': 'android_universal',
           }
 
-          assets = {}
+          computed_assets = {}
           for f in sorted(dist.glob('AgentMCP-*')):
               if not f.is_file():
                   continue
@@ -545,17 +565,45 @@ jobs:
               with f.open('rb') as fp:
                   for chunk in iter(lambda: fp.read(65536), b''):
                       h.update(chunk)
-              assets[key] = {
+              computed_assets[key] = {
                   'name': name,
                   'url': f'https://github.com/{repo}/releases/download/{tag}/{name}',
                   'sha256': h.hexdigest(),
                   'size': f.stat().st_size,
               }
 
+          manifest_assets = dict(computed_assets) if enable_one_click_assets else {}
+          custom_assets = ch_cfg.get('custom_assets')
+          if isinstance(custom_assets, dict):
+              for k, v in custom_assets.items():
+                  if isinstance(v, dict) and str(v.get('url') or '').strip():
+                      manifest_assets[str(k)] = v
+
+          channels = []
+          for idx, item in enumerate(ch_cfg.get('channels') or []):
+              if not isinstance(item, dict):
+                  continue
+              cname = str(item.get('name') or item.get('label') or '').strip()
+              curl = str(item.get('url') or item.get('href') or '').strip()
+              if not cname or not curl:
+                  continue
+              cid = str(item.get('id') or f'channel_{idx}').strip()
+              ccode = str(item.get('code') or item.get('extract_code') or '').strip()
+              cbadge = str(item.get('badge') or '').strip()
+              csub = str(item.get('subtitle') or item.get('desc') or '').strip()
+              cplat = item.get('platforms') or ['all']
+              if isinstance(cplat, str):
+                  cplat = [p.strip() for p in cplat.split(',') if p.strip()] or ['all']
+              entry = {'id': cid, 'name': cname, 'url': curl, 'platforms': cplat}
+              if ccode:
+                  entry['code'] = ccode
+              if cbadge:
+                  entry['badge'] = cbadge
+              if csub:
+                  entry['subtitle'] = csub
+              channels.append(entry)
+
           # 1. Extract release title & structured notes dynamically:
-          #    Priority A: CHANGELOG.md section for [vX.Y.Z] / vX.Y.Z
-          #    Priority B: Annotated git tag message
-          #    Priority C: Git commit log since previous v* tag
           release_title = f'Agent MCP {tag}'
           notes_body = ''
 
@@ -596,65 +644,96 @@ jobs:
                   pass
 
           if not notes_body:
-              try:
-                  tags_out = subprocess.check_output(
-                      ['git', 'tag', '--sort=-creatordate', '-l', 'v*'],
-                      text=True,
-                  ).splitlines()
-                  prev_tag = next((t.strip() for t in tags_out if t.strip() and t.strip() != tag), '')
-                  rev_range = f'{prev_tag}..{tag}' if prev_tag else f'{tag}~8..{tag}'
-                  commits = subprocess.check_output(
-                      ['git', 'log', rev_range, '--no-merges', '--pretty=format:- %s (`%h`)'],
-                      text=True,
-                  ).strip()
-                  if commits:
-                      notes_body = commits
-              except Exception:
-                  pass
-
-          if not notes_body:
               notes_body = f'- Agent MCP {tag} 全平台桌面 GUI、移动端与 CLI 正式版更新。'
 
-          # Build clean Markdown Release Body with Download Matrix Table
           ver_parts = [int(p) if p.isdigit() else 0 for p in (ver.split('.') + ['0', '0', '0'])[:3]]
           build_num = ver_parts[0] * 1000 + ver_parts[1] * 100 + ver_parts[2]
+
+          gh_release_url = f'https://github.com/{repo}/releases/tag/{tag}'
+          legacy_target = str(ch_cfg.get('legacy_redirect_target') or 'primary_channel').strip().lower()
+          release_url = channels[0]['url'] if (legacy_target == 'primary_channel' and channels) else gh_release_url
+
+          notes_prefix = []
+          if channels:
+              notes_prefix.append('【多渠道下载说明】')
+              for ch in channels:
+                  code_part = f"（提取码: {ch['code']}）" if ch.get('code') else ''
+                  badge_part = f" [{ch['badge']}]" if ch.get('badge') else ''
+                  notes_prefix.append(f"• {ch['name']}{badge_part}{code_part}：{ch['url']}")
+              notes_prefix.append('')
+
+          combined_notes = (
+              f'{release_title}\n'
+              + ('\n'.join(notes_prefix) + '\n' if notes_prefix else '')
+              + notes_body
+          ).strip()
 
           manifest = {
               'version': ver,
               'tag': tag,
               'build': build_num,
               'published_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-              'release_url': f'https://github.com/{repo}/releases/tag/{tag}',
-              'notes': f'{release_title}\n{notes_body}',
-              'assets': assets,
+              'release_url': release_url,
+              'github_release_url': gh_release_url,
+              'download_channels': channels,
+              'notes': combined_notes,
+              'assets': manifest_assets,
           }
           out = dist / 'version.json'
           out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          shutil.copy2(out, rel_upload / 'version.json')
 
-          rows = [
-              ('Windows x64 桌面安装向导 / Setup Wizard (Prism GUI)', 'windows_sfx'),
-              ('Windows x64 免安装绿色版 / Portable ZIP (GUI + CLI)', 'windows_portable'),
-              ('macOS Apple Silicon 桌面版 / Desktop (.dmg)', 'macos_arm64_dmg'),
-              ('macOS Intel 桌面版 / Desktop (.dmg)', 'macos_x64_dmg'),
-              ('Linux x64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_x64_gui'),
-              ('Linux ARM64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_arm64_gui'),
-              ('Android 手机端推荐版 / Recommended (arm64-v8a APK)', 'android_arm64'),
-              ('Android 全架构通用版 / Universal APK', 'android_universal'),
-          ]
-          table_lines = [
-              '### 全平台安装包速览 / Multi-Platform Downloads',
-              '',
-              '| 平台与形态 / Platform | 安装包文件 / Package | 大小 / Size |',
-              '| :--- | :--- | :--- |',
-          ]
-          for label, k in rows:
-              a = assets.get(k)
-              if not a:
-                  continue
-              mb = a['size'] / (1024 * 1024)
-              table_lines.append(f"| {label} | [`{a['name']}`]({a['url']}) | {mb:.2f} MB |")
+          if publish_binaries:
+              for f in sorted(dist.glob('AgentMCP-*')):
+                  if f.is_file():
+                      shutil.copy2(f, rel_upload / f.name)
+              sha_file = dist / 'SHA256SUMS.txt'
+              if sha_file.is_file():
+                  shutil.copy2(sha_file, rel_upload / 'SHA256SUMS.txt')
 
-          full_md = f"## 更新亮点 / What's New\n\n{notes_body}\n\n" + '\n'.join(table_lines) + '\n'
+          md_sections = [f"## 更新亮点 / What's New\n\n{notes_body}"]
+          if channels:
+              ch_table = [
+                  '### 多渠道下载 / Download Channels',
+                  '',
+                  '| 下载渠道 / Channel | 适用范围 / Scope | 提取码 / Access Code | 获取链接 / Link |',
+                  '| :--- | :--- | :--- | :--- |',
+              ]
+              for ch in channels:
+                  badge_str = f" `{ch['badge']}`" if ch.get('badge') else ''
+                  scope = ch.get('subtitle') or ', '.join(ch.get('platforms') or ['all'])
+                  code_cell = f"`{ch['code']}`" if ch.get('code') else '免提取码 / None'
+                  ch_table.append(
+                      f"| **{ch['name']}**{badge_str} | {scope} | {code_cell} | [立即前往 / Open]({ch['url']}) |"
+                  )
+              md_sections.append('\n'.join(ch_table))
+
+          if publish_binaries and computed_assets:
+              rows = [
+                  ('Windows x64 桌面安装向导 / Setup Wizard (Prism GUI)', 'windows_sfx'),
+                  ('Windows x64 免安装绿色版 / Portable ZIP (GUI + CLI)', 'windows_portable'),
+                  ('macOS Apple Silicon 桌面版 / Desktop (.dmg)', 'macos_arm64_dmg'),
+                  ('macOS Intel 桌面版 / Desktop (.dmg)', 'macos_x64_dmg'),
+                  ('Linux x64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_x64_gui'),
+                  ('Linux ARM64 桌面版 / Desktop (GTK3 GUI + CLI)', 'linux_arm64_gui'),
+                  ('Android 手机端推荐版 / Recommended (arm64-v8a APK)', 'android_arm64'),
+                  ('Android 全架构通用版 / Universal APK', 'android_universal'),
+              ]
+              table_lines = [
+                  '### 全平台安装包速览 / Multi-Platform Downloads',
+                  '',
+                  '| 平台与形态 / Platform | 安装包文件 / Package | 大小 / Size |',
+                  '| :--- | :--- | :--- |',
+              ]
+              for label, k in rows:
+                  a = computed_assets.get(k)
+                  if not a:
+                      continue
+                  mb = a['size'] / (1024 * 1024)
+                  table_lines.append(f"| {label} | [`{a['name']}`]({a['url']}) | {mb:.2f} MB |")
+              md_sections.append('\n'.join(table_lines))
+
+          full_md = '\n\n'.join(md_sections) + '\n'
           pathlib.Path('release_notes.md').write_text(full_md, encoding='utf-8')
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
@@ -663,14 +742,21 @@ jobs:
           print('=== RELEASE NOTES ===\n' + full_md)
           PYEOF
 
-      - name: Publish GitHub Release with Dynamic Changelog & Multi-Platform Assets
+      - name: Archive Checksums & version.json Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata-artifacts
+          path: |
+            dist_artifacts/SHA256SUMS.txt
+            dist_artifacts/version.json
+          if-no-files-found: error
+
+      - name: Publish GitHub Release with Dynamic Changelog & Manifest Index
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           name: ${{ steps.gen_meta.outputs.release_title }}
           body_path: release_notes.md
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
-            dist_artifacts/AgentMCP-*
-            dist_artifacts/SHA256SUMS.txt
-            dist_artifacts/version.json
+            release_upload/*

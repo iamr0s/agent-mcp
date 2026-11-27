@@ -6,6 +6,7 @@ apps/**/build/
 packages/**/build/
 /dist/
 /release/
+/cloud_drive_upload/
 /_legacy/
 pubspec.lock
 

@@ -114,14 +114,128 @@ class UpdateAsset {
 }
 
 @immutable
+class UpdateDownloadChannel {
+  final String id;
+  final String name;
+  final String url;
+  final String code;
+  final String badge;
+  final String subtitle;
+  final List<String> platforms;
+
+  const UpdateDownloadChannel({
+    required this.id,
+    required this.name,
+    required this.url,
+    this.code = '',
+    this.badge = '',
+    this.subtitle = '',
+    this.platforms = const ['all'],
+  });
+
+  bool matchesPlatform({
+    required bool isWindows,
+    required bool isAndroid,
+    required bool isLinux,
+    bool isMacOS = false,
+  }) {
+    if (platforms.isEmpty) return true;
+    final norm = platforms
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    if (norm.isEmpty || norm.contains('all') || norm.contains('*')) {
+      return true;
+    }
+    if (isWindows &&
+        (norm.contains('windows') ||
+            norm.contains('win') ||
+            norm.contains('win64') ||
+            norm.contains('windows_x64') ||
+            norm.contains('desktop'))) {
+      return true;
+    }
+    if (isAndroid &&
+        (norm.contains('android') ||
+            norm.contains('apk') ||
+            norm.contains('mobile'))) {
+      return true;
+    }
+    if (isMacOS &&
+        (norm.contains('macos') ||
+            norm.contains('mac') ||
+            norm.contains('darwin') ||
+            norm.contains('osx') ||
+            norm.contains('desktop'))) {
+      return true;
+    }
+    if (isLinux && (norm.contains('linux') || norm.contains('desktop'))) {
+      return true;
+    }
+    return false;
+  }
+
+  factory UpdateDownloadChannel.fromJson(
+    Map<dynamic, dynamic> raw, {
+    int index = 0,
+  }) {
+    final rawPlatforms = raw['platforms'];
+    final parsedPlatforms = <String>[];
+    if (rawPlatforms is List) {
+      for (final item in rawPlatforms) {
+        final s = (item ?? '').toString().trim();
+        if (s.isNotEmpty) parsedPlatforms.add(s);
+      }
+    } else if (rawPlatforms is String && rawPlatforms.trim().isNotEmpty) {
+      for (final part in rawPlatforms.split(',')) {
+        final s = part.trim();
+        if (s.isNotEmpty) parsedPlatforms.add(s);
+      }
+    }
+    final name =
+        (raw['name'] ?? raw['label'] ?? raw['title'] ?? '').toString().trim();
+    final idRaw = (raw['id'] ?? '').toString().trim();
+    return UpdateDownloadChannel(
+      id: idRaw.isNotEmpty ? idRaw : 'channel_$index',
+      name: name,
+      url: (raw['url'] ?? raw['href'] ?? raw['link'] ?? '').toString().trim(),
+      code: (raw['code'] ??
+              raw['extract_code'] ??
+              raw['pwd'] ??
+              raw['password'] ??
+              '')
+          .toString()
+          .trim(),
+      badge: (raw['badge'] ?? raw['tag'] ?? '').toString().trim(),
+      subtitle: (raw['subtitle'] ?? raw['desc'] ?? raw['description'] ?? '')
+          .toString()
+          .trim(),
+      platforms: parsedPlatforms.isEmpty ? const ['all'] : parsedPlatforms,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'url': url,
+        if (code.isNotEmpty) 'code': code,
+        if (badge.isNotEmpty) 'badge': badge,
+        if (subtitle.isNotEmpty) 'subtitle': subtitle,
+        'platforms': platforms,
+      };
+}
+
+@immutable
 class UpdateInfo {
   final String version;
   final String tag;
   final int build;
   final String publishedAt;
   final String releaseUrl;
+  final String githubReleaseUrl;
   final String notes;
   final Map<String, UpdateAsset> assets;
+  final List<UpdateDownloadChannel> channels;
   final String source; // version_json | github_api
 
   const UpdateInfo({
@@ -130,10 +244,39 @@ class UpdateInfo {
     this.build = 0,
     this.publishedAt = '',
     required this.releaseUrl,
+    this.githubReleaseUrl = '',
     this.notes = '',
     this.assets = const {},
+    this.channels = const [],
     this.source = 'version_json',
   });
+
+  String get effectiveGithubReleaseUrl {
+    final trimmed = githubReleaseUrl.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    return 'https://github.com/$kUpdateRepoOwner/$kUpdateRepoName/releases/tag/$tag';
+  }
+
+  List<UpdateDownloadChannel> channelsForPlatform({
+    required bool isWindows,
+    required bool isAndroid,
+    required bool isLinux,
+    bool isMacOS = false,
+  }) {
+    final valid = channels.where((c) => c.url.trim().isNotEmpty).toList();
+    if (valid.isEmpty) return const [];
+    final matched = valid
+        .where(
+          (c) => c.matchesPlatform(
+            isWindows: isWindows,
+            isAndroid: isAndroid,
+            isLinux: isLinux,
+            isMacOS: isMacOS,
+          ),
+        )
+        .toList();
+    return matched.isNotEmpty ? matched : valid;
+  }
 
   UpdateAsset? preferredAsset({
     required bool isWindows,
@@ -180,10 +323,29 @@ class UpdateInfo {
         ? verRaw.substring(1)
         : verRaw;
     final tag = (raw['tag'] ?? 'v$cleanVer').toString().trim();
-    final releaseUrl = (raw['release_url'] ??
-            'https://github.com/$kUpdateRepoOwner/$kUpdateRepoName/releases/tag/$tag')
-        .toString()
-        .trim();
+    final defaultGhUrl =
+        'https://github.com/$kUpdateRepoOwner/$kUpdateRepoName/releases/tag/$tag';
+    final githubReleaseUrl =
+        (raw['github_release_url'] ?? defaultGhUrl).toString().trim();
+    final parsedChannels = <UpdateDownloadChannel>[];
+    final rawChannels = raw['download_channels'] ?? raw['channels'];
+    if (rawChannels is List) {
+      var idx = 0;
+      for (final item in rawChannels) {
+        if (item is Map) {
+          final ch = UpdateDownloadChannel.fromJson(item, index: idx++);
+          if (ch.url.isNotEmpty && ch.name.isNotEmpty) {
+            parsedChannels.add(ch);
+          }
+        }
+      }
+    }
+    final rawReleaseUrl = (raw['release_url'] ?? '').toString().trim();
+    final releaseUrl = rawReleaseUrl.isNotEmpty
+        ? rawReleaseUrl
+        : (parsedChannels.isNotEmpty
+            ? parsedChannels.first.url
+            : githubReleaseUrl);
     final parsedAssets = <String, UpdateAsset>{};
     final rawAssets = raw['assets'];
     if (rawAssets is Map) {
@@ -205,8 +367,10 @@ class UpdateInfo {
       build: int.tryParse('${raw['build'] ?? 0}') ?? 0,
       publishedAt: (raw['published_at'] ?? '').toString().trim(),
       releaseUrl: releaseUrl,
+      githubReleaseUrl: githubReleaseUrl,
       notes: (raw['notes'] ?? '').toString().trim(),
       assets: parsedAssets,
+      channels: parsedChannels,
       source: 'version_json',
     );
   }
@@ -288,6 +452,7 @@ class UpdateInfo {
       tag: tag,
       publishedAt: (raw['published_at'] ?? '').toString().trim(),
       releaseUrl: releaseUrl,
+      githubReleaseUrl: releaseUrl,
       notes: (raw['body'] ?? '').toString().trim(),
       assets: parsedAssets,
       source: 'github_api',

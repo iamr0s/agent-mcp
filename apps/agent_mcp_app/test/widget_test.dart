@@ -8,9 +8,11 @@ import 'package:agent_mcp_app/views/installer_wizard.dart';
 import 'package:agent_mcp_app/views/prism_structured_editors.dart';
 import 'package:agent_mcp_app/views/profile_dialogs.dart';
 import 'package:agent_mcp_app/views/profile_endpoints_helper.dart';
+import 'package:agent_mcp_app/views/update_dialog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeConsoleBackend extends ConsoleBackend {
@@ -1243,8 +1245,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.6'), findsOneWidget);
-    await tester.tap(find.text('v3.5.6'));
+    expect(find.text('v3.5.7'), findsOneWidget);
+    await tester.tap(find.text('v3.5.7'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1344,7 +1346,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.6'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.7'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2146,7 +2148,7 @@ void main() {
     expect(tier6.isUpgrade, isFalse);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.6'), findsOneWidget);
+    expect(find.text('v3.5.7'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
@@ -2400,6 +2402,186 @@ void main() {
     expect(savedProfile!['tunnel_mode'], equals('playit'));
     expect(savedProfile!['playit_domain_mode'], equals('custom'));
     expect(savedProfile!['playit_hostname'], equals('mcp.playit.plus'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v3.5.7 Multi-Channel Cloud-Drive Updater: download_channels parsing, channel picker modal, clipboard extract code & 1-click coexistence',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    String? copiedClipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          final args = call.arguments as Map?;
+          copiedClipboardText = args?['text']?.toString();
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    // 1. Cloud-drive-only manifest (assets = {}, download_channels populated)
+    final cloudOnlyInfo = UpdateInfo.tryParseVersionJson({
+      'version': '9.9.7',
+      'tag': 'v9.9.7',
+      'build': 9907,
+      'published_at': '2026-11-27T12:00:00Z',
+      'github_release_url': 'https://github.com/iamr0s/agent-mcp/releases/tag/v9.9.7',
+      'download_channels': [
+        {
+          'id': 'quark',
+          'name': '夸克网盘',
+          'badge': '推荐',
+          'url': 'https://pan.quark.cn/s/agentmcp357',
+          'code': '8866',
+          'subtitle': '全平台安装包合集',
+          'platforms': ['all'],
+        },
+        {
+          'id': 'pan123',
+          'name': '123云盘免登录',
+          'badge': '不限速',
+          'url': 'https://www.123pan.com/s/agentmcp357',
+          'platforms': ['windows', 'macos', 'linux'],
+        },
+        {
+          'id': 'apk_only',
+          'name': 'Android 独立镜像',
+          'url': 'https://dl.example.com/android',
+          'platforms': ['android'],
+        },
+      ],
+      'notes': '- 新增多渠道网盘下载支持',
+      'assets': {},
+    });
+
+    expect(cloudOnlyInfo, isNotNull);
+    expect(cloudOnlyInfo!.channels.length, equals(3));
+    expect(
+      cloudOnlyInfo.releaseUrl,
+      equals('https://pan.quark.cn/s/agentmcp357'),
+    );
+    expect(
+      cloudOnlyInfo.effectiveGithubReleaseUrl,
+      equals('https://github.com/iamr0s/agent-mcp/releases/tag/v9.9.7'),
+    );
+
+    final winMatched = cloudOnlyInfo.channelsForPlatform(
+      isWindows: true,
+      isAndroid: false,
+      isLinux: false,
+    );
+    expect(winMatched.map((c) => c.id).toList(), equals(['quark', 'pan123']));
+
+    final backend = _FakeConsoleBackend();
+    String? lastToast;
+    UpdateDialogOutcome? dialogOutcome;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPrismTheme(PrismPalette.light),
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => Center(
+              child: PrismButton(
+                label: '打开更新弹窗',
+                onPressed: () async {
+                  dialogOutcome = await showPrismDialog<UpdateDialogOutcome>(
+                    context: ctx,
+                    builder: (_) => UpdateAvailableDialog(
+                      backend: backend,
+                      currentVersion: '3.5.7',
+                      latest: cloudOnlyInfo,
+                      onToast: (msg) => lastToast = msg,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('打开更新弹窗'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // In cloud-only mode (assets empty), '一键升级' is hidden and '前往下载' is primary
+    expect(find.text('发现新版本'), findsOneWidget);
+    expect(find.text('已就绪 2 个下载渠道'), findsOneWidget);
+    expect(find.text('一键升级'), findsNothing);
+    expect(find.text('前往下载'), findsOneWidget);
+
+    // Tap '前往下载' -> opens '选择下载渠道' multi-channel picker modal
+    await tester.tap(find.text('前往下载'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('选择下载渠道'), findsOneWidget);
+    expect(find.text('夸克网盘'), findsWidgets);
+    expect(find.text('提取码 8866'), findsOneWidget);
+    expect(find.text('123云盘免登录'), findsWidgets);
+    expect(find.text('显示全平台渠道 (3)'), findsOneWidget);
+
+    // Tap primary channel ('复制码并前往') -> copies '8866', opens Quark URL, closes both modals
+    await tester.tap(find.byKey(const ValueKey('update-channel-btn-quark')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(copiedClipboardText, equals('8866'));
+    expect(lastToast, contains('8866'));
+    expect(backend.openedExternalUrl, equals('https://pan.quark.cn/s/agentmcp357'));
+    expect(dialogOutcome, equals(UpdateDialogOutcome.openedDownloadPage));
+
+    // 2. Hybrid mode: when assets ALSO has 'windows_sfx', '一键升级' and '前往下载' coexist!
+    final hybridInfo = UpdateInfo.tryParseVersionJson({
+      'version': '9.9.8',
+      'tag': 'v9.9.8',
+      'download_channels': [
+        {
+          'id': 'quark',
+          'name': '夸克网盘',
+          'url': 'https://pan.quark.cn/s/agentmcp358',
+        },
+      ],
+      'assets': {
+        'windows_sfx': {
+          'name': 'AgentMCP-v9.9.8-windows-x64-sfx.exe',
+          'url': 'https://cdn.example.com/AgentMCP-v9.9.8-windows-x64-sfx.exe',
+          'size': 48000000,
+        },
+      },
+    })!;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPrismTheme(PrismPalette.dark),
+        home: Scaffold(
+          body: UpdateAvailableDialog(
+            backend: backend,
+            currentVersion: '3.5.7',
+            latest: hybridInfo,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('一键升级'), findsOneWidget);
+    expect(find.text('前往下载'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

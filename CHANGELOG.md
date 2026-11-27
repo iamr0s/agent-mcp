@@ -1,5 +1,29 @@
 # Changelog
 
+## [v3.5.7] — Multi-Channel Cloud-Drive Updater (`download_channels`), Index-Only GitHub Releases & Legacy Update Compatibility
+
+### 中文更新说明
+
+- **支持多渠道网盘下载选择列表（`download_channels`）与提取码自动复制**：
+  - **`version.json` 多渠道分发协议**：新增 `download_channels` 多链接数组（支持配置名称、推荐徽标、提取码 `code`、说明与平台过滤）与 `github_release_url` 发布页说明地址。
+  - **同源 Prism 多渠道下载选择弹窗**：点击更新弹窗的 **「前往下载」** 或 **「服务配置 → 关于与更新 → 下载渠道」** 即弹出双层同心光棱多渠道面板；点选任意网盘渠道会自动将提取码复制到系统剪贴板并弹出轻提示，同时调用默认浏览器直达对应网盘或镜像页面，支持按当前设备平台智能筛选与一键展开全平台渠道。
+- **完整保留应用内「一键升级」管线并无缝兼容旧版客户端（`<= v3.5.6`）**：
+  - **一键升级随时可回切启用**：完整保留应用内断点下载、SHA-256 完整性校验与 `--installer` 安装向导热接管逻辑；当 `version.json` 中未挂载直链二进制（纯网盘分发模式）时自动聚焦「前往下载」，一旦后续在 `release_channels.json` 开启直链或自定义 `custom_assets` 即自动恢复「一键升级」按钮共存。
+  - **旧版本客户端无感降级跳转**：针对 `<= v3.5.6` 旧版客户端，通过 `release_url` 主渠道重定向与更新说明顶部提取码透传，无论点击「一键升级」还是「前往下载」均可平稳跳转至网盘下载页或 GitHub Release 多渠道说明页。
+- **纯索引化 GitHub Releases 工作流与一键多渠道同步脚本**：
+  - `.github/workflows/releases.yaml` 默认仅向公开 GitHub Releases 发布 `version.json` 更新索引与中英双语更新日志（不公开挂载二进制安装包），同时新增 `scripts/sync_release_channels.py` 支持一键拉取全平台 CI 编译产物至本地待上传目录及秒级回写网盘链接。
+
+### English Release Notes
+
+- **Multi-Channel Cloud-Drive Updater (`download_channels`) & Auto-Copied Access Codes**:
+  - **Multi-Mirror Manifest Schema**: Extends `version.json` with `download_channels` (`id`, `name`, `badge`, `url`, optional `code`, `subtitle`, and `platforms` filter) alongside `github_release_url`.
+  - **Concentric Liquid Prism Channel Picker Modal**: Clicking **Download (`前往下载`)** in the update dialog or **Download Channels (`下载渠道`)** in **Service Setup → About & Updates** opens a native Prism multi-channel selector that automatically copies extract/access codes to the clipboard, shows a confirmation toast, and launches the chosen mirror in the browser.
+- **Preserved 1-Click In-App Upgrade Pipeline & Legacy (`<= v3.5.6`) Client Compatibility**:
+  - **Toggleable 1-Click Upgrade Coexistence**: Retains the full in-app downloader, SHA-256 verifier, and `--installer` handoff pipeline intact—automatically surfacing **1-Click Upgrade (`一键升级`)** whenever `assets` is populated while highlighting **Download (`前往下载`)** in cloud-drive-only mode.
+  - **Seamless Legacy Client Fallback**: Configures `release_url` and inline access-code notes so `<= v3.5.6` clients cleanly redirect to the primary cloud-drive mirror or the GitHub Release channel directory without crashes.
+- **Index-Only GitHub Releases Workflow & Channel Sync Utility**:
+  - Updates `.github/workflows/releases.yaml` (`release_channels.json`) to publish only `version.json` and bilingual changelogs on public GitHub Releases by default, paired with `scripts/sync_release_channels.py` for 1-command local CI bundle staging and instant live channel updates.
+
 ## [v3.5.6] — Cloudflared TUN Fake-IP & QUIC Block Auto-Fallback (`http2`), Self-Healing Tunnel Error State & Transport Selector
 
 ### 中文更新说明

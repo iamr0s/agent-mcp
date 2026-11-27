@@ -1,0 +1,7 @@
+{
+  "publish_github_binaries": false,
+  "enable_one_click_github_assets": false,
+  "legacy_redirect_target": "primary_channel",
+  "channels": [],
+  "custom_assets": {}
+}

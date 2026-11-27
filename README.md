@@ -1,4 +1,4 @@
-# Agent MCP v3.5.6
+# Agent MCP v3.5.7
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,15 +12,15 @@
 >
 > 眼前的开发电脑早已不缺本地编程助手；但当你的代码、算力、容器或测试环境位于**远端 Linux 云服务器、内网 GPU 主机、NAS 或手头的 Android 手机**上时，本地 `stdio` 工具便触碰到了物理边界。
 >
-> **Agent MCP v3.5.6** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**把远端刚生成的视频或网站端口一键映射成外部预览链接**。
+> **Agent MCP v3.5.7** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**把远端刚生成的视频或网站端口一键映射成外部预览链接**。
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.6 跨设备远程执行节点总览">
+  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.7 跨设备远程执行节点总览">
 </p>
 
 ## 为什么选择 Agent MCP？（典型跨设备场景）
 
-| 常见痛点场景 | 传统做法的局限 | Agent MCP v3.5.6 的解决方式 |
+| 常见痛点场景 | 传统做法的局限 | Agent MCP v3.5.7 的解决方式 |
 | :--- | :--- | :--- |
 | **电脑端 AI 调试远端 Linux 云服务器 / GPU 机** | 需在服务器配复杂 Python/Node 环境，或靠粗粒度 SSH 命令整文件覆盖，内网数据库不敢开公网 | 单文件解压 + `agent-mcp init` 10 秒上线（自带 `/dashboard/` 网页管理台与 `systemd` 守护），支持行级精准补丁、`undo_edit` 秒撤回与后台进程托管 |
 | **自研 Python / TS Agent 程序调度多台机器** | 需自己封装一套私有 RPC 接口、鉴权、命令超时回收与文件编码处理 | 原生兼容官方 MCP SDK（`streamablehttp_client` / `StreamableHTTPClientTransport`），几行代码即可安全调用远端主机与手机上的 22 项标准工具 |
@@ -34,8 +34,8 @@
 无需安装 Python、Node 或 Docker，下载解压即可同时获得原生服务端与可视化 Web 管理面板：
 
 ```bash
-# 1. 下载并解压（内置 agent-mcp 单文件与 web_dashboard 网页前端）
-curl -L https://github.com/iamr0s/agent-mcp/releases/download/v3.5.6/AgentMCP-v3.5.6-linux-x64-cli.tar.gz | tar -xzf -
+# 1. 从 GitHub Releases 发布页提供的下载渠道获取对应发行包并解压（内置 agent-mcp 单文件与 web_dashboard 网页前端）
+tar -xzf AgentMCP-v3.5.7-linux-x64-cli.tar.gz
 
 # 2. 一行初始化：监听全网卡、自动识别局域网与 Tailscale IP、生成高强 Bearer Key
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
@@ -158,18 +158,18 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 
 ## 快速下载与安装
 
-前往 [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases) 获取对应平台发行包：
+前往 [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases) 查看最新版本说明与多渠道网盘下载链接：
 
 | 目标设备平台 | 发行包文件名 | 适用场景说明 |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 桌面安装版 (x64)** | `AgentMCP-v3.5.6-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
-| **Windows 10 / 11 免安装绿色版 (x64)** | `AgentMCP-v3.5.6-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
-| **macOS 桌面端 (Apple Silicon M 系列)** | `AgentMCP-v3.5.6-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（内置 `web_dashboard/` 与 `agent-mcp` CLI），拖拽入 Applications 即用 |
-| **macOS 桌面端 (Intel x64)** | `AgentMCP-v3.5.6-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像 |
-| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `AgentMCP-v3.5.6-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh` 启动器一键注册（同提供 `arm64-gui`） |
-| **Linux 服务器 / GPU 机 / NAS (CLI)** | `AgentMCP-v3.5.6-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `systemd` 常驻 |
-| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v3.5.6-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
-| **Android 全架构通用版** | `AgentMCP-v3.5.6-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
+| **Windows 10 / 11 桌面安装版 (x64)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
+| **Windows 10 / 11 免安装绿色版 (x64)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
+| **macOS 桌面端 (Apple Silicon M 系列)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（内置 `web_dashboard/` 与 `agent-mcp` CLI），拖拽入 Applications 即用 |
+| **macOS 桌面端 (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像 |
+| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh` 启动器一键注册（同提供 `arm64-gui`） |
+| **Linux 服务器 / GPU 机 / NAS (CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `systemd` 常驻 |
+| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
+| **Android 全架构通用版** | `AgentMCP-v3.5.7-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
 
 ## 内置工具矩阵（22 项）
 
