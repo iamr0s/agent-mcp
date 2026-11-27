@@ -242,12 +242,14 @@ def build_manifest_and_notes(
         "assets": manifest_assets,
     }
 
-    md_parts = [f"## 更新亮点 / What's New\n\n{notes_body}"]
+    md_parts: list[str] = []
     if channels:
         table = [
-            "### 多渠道下载 / Download Channels",
+            "## 快速下载与获取 / Downloads & Mirrors",
             "",
-            "| 下载渠道 / Channel | 适用范围 / Scope | 提取码 / Access Code | 获取链接 / Link |",
+            f"> 可通过下方网盘永久分享目录（`Agent MCP`）直接下载全平台安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/{REPO}/actions) 在对应版本工作流底部的 `Artifacts` 中获取：",
+            "",
+            "| 下载渠道 / Channel | 说明 / Notes | 提取码 / Access Code | 获取链接 / Link |",
             "| :--- | :--- | :--- | :--- |",
         ]
         for ch in channels:
@@ -258,6 +260,24 @@ def build_manifest_and_notes(
                 f"| **{ch['name']}**{badge_str} | {scope} | {code_cell} | [立即前往 / Open]({ch['url']}) |"
             )
         md_parts.append("\n".join(table))
+
+    donation_block = "\n".join(
+        [
+            "## 赞赏支持 / Sponsor & Support",
+            "",
+            "如果 Agent MCP 帮到了你的跨设备开发与自动化工作流，欢迎自愿赞赏支持：",
+            "",
+            '<p align="center">',
+            f'  <img src="https://raw.githubusercontent.com/{REPO}/main/assets/donation/alipay.jpg" width="190" alt="支付宝 Alipay">',
+            f'  <img src="https://raw.githubusercontent.com/{REPO}/main/assets/donation/wxpay.jpg" width="190" alt="微信支付 WeChat Pay">',
+            f'  <img src="https://raw.githubusercontent.com/{REPO}/main/assets/donation/binance.jpg" width="190" alt="Binance Pay">',
+            "</p>",
+            "",
+            '<p align="center"><sub>支付宝 · 微信支付 · Binance Pay</sub></p>',
+        ]
+    )
+    md_parts.append(donation_block)
+    md_parts.append(f"## 更新亮点 / What's New\n\n{notes_body}")
 
     return release_title, manifest, "\n\n".join(md_parts) + "\n"
 

@@ -18,6 +18,48 @@
   <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.7 Cross-Device Execution Node Overview">
 </p>
 
+## Downloads & Installation
+
+Public [GitHub Releases](https://github.com/iamr0s/agent-mcp/releases) publish release changelogs and the `version.json` update index only. Download prebuilt multi-platform installers from any of the **four cloud-drive mirrors (`Agent MCP` folder)** below, or sign in to GitHub and download build artifacts directly from [**GitHub Actions**](https://github.com/iamr0s/agent-mcp/actions):
+
+| Download Channel | Mirror Link | Access Code | Notes |
+| :--- | :--- | :--- | :--- |
+| **Quark Drive (夸克网盘)** | [Open `pan.quark.cn`](https://pan.quark.cn/s/ddb857fbeed4) | `6ERK` | Permanent `Agent MCP` folder with all platform packages |
+| **UC Drive (UC网盘)** | [Open `drive.uc.cn`](https://drive.uc.cn/s/5a71a271af734) | `3azb` | Permanent `Agent MCP` folder, unthrottled download |
+| **China Mobile Cloud (移动云盘)** | [Open `yun.139.com`](https://yun.139.com/shareweb/#/w/i/2yA8NTUbbXcav) | None | Password-free permanent `Agent MCP` folder |
+| **Baidu Netdisk (百度网盘)** | [Open `pan.baidu.com`](https://pan.baidu.com/s/1_M-n0m-lnR8ddHMEakcfvw?pwd=j2zq) | `j2zq` | Permanent `Agent MCP` folder (code pre-filled in URL) |
+| **GitHub Actions** | [Open Actions Artifacts](https://github.com/iamr0s/agent-mcp/actions) | GitHub Login | Download directly from the latest `Build & Publish Releases` workflow run |
+
+<details>
+<summary><b>View Multi-Platform Package Filename Matrix (Windows / macOS / Linux / Android)</b></summary>
+
+<br>
+
+| Target Platform | Release Asset | Description |
+| :--- | :--- | :--- |
+| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | Native Dart/Flutter `--installer` Prism setup wizard + Desktop Console + Web UI + `agent-mcp.exe` CLI |
+| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | Portable archive storing config & logs locally |
+| **macOS Desktop (Apple Silicon)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | Native macOS desktop `.dmg` (`Agent MCP.app` + embedded `web_dashboard/` & CLI) |
+| **macOS Desktop (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | Native Intel Mac desktop `.dmg` installer |
+| **Linux Desktop (x64 / ARM64 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | Native GTK3 desktop GUI + `agent-mcp` CLI + `install-desktop.sh` (`arm64-gui` also included) |
+| **Linux Server / NAS (Headless CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
+| **Android (ARM64 Recommended)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | Release-signed dual-mode remote multi-node controller + 3-tier local MCP server |
+| **Android (Universal)** | `AgentMCP-v3.5.7-android-universal.apk` | Release-signed multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+
+</details>
+
+## Sponsor & Support
+
+If Agent MCP helps your cross-device engineering and AI workflows, optional tips are warmly appreciated!
+
+<p align="center">
+  <img src="assets/donation/alipay.jpg" width="200" alt="Alipay">
+  <img src="assets/donation/wxpay.jpg" width="200" alt="WeChat Pay">
+  <img src="assets/donation/binance.jpg" width="200" alt="Binance Pay">
+</p>
+
+<p align="center">Alipay · WeChat Pay · Binance Pay</p>
+
 ## 60-Second Cross-Device Quickstart
 
 ### 1. Deploy on a Headless Linux Server / GPU Host / NAS
@@ -86,21 +128,6 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-YOUR_KEY
 - **Switch-Driven Wildcard Whitelists & 1-Click Client Onboarding**: Master allow-all toggles (default ON) with row-by-row `*`/`**`/`?` glob editors for both OAuth redirect URIs and directory root whitelists, offline zero-leak vector QR codes, persistent + bi-directional upload folder shares, PBKDF2 encrypted config snapshots, and 1-click config injection into Claude Desktop, Cursor, VS Code, Windsurf, and Claude Code CLI.
 - **Multi-NIC IP Picker & Per-Profile Isolation**: Multi-select LAN and Tailscale `100.x` IPs plus custom reverse-proxy URLs per profile, each with independent OAuth 2.1 / Bearer auth, read-only flags, and root whitelists.
 - **Android Dual-Mode APK**: Control multiple remote Linux/Windows servers on the go, OR run an on-device wireless MCP server with 3 switchable privilege tiers (**App Sandbox**, **Shizuku ADB/Root**, and **Persistent Root SU Daemon** for KernelSU / APatch / Magisk) and foreground lock-screen keep-alive.
-
-## Downloads & Installation
-
-Check [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases) for the latest release notes and multi-channel download links:
-
-| Target Platform | Release Asset | Description |
-| :--- | :--- | :--- |
-| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | Native Dart/Flutter `--installer` Prism setup wizard + Desktop Console + Web UI + `agent-mcp.exe` CLI |
-| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | Portable archive storing config & logs locally |
-| **macOS Desktop (Apple Silicon)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | Native macOS desktop `.dmg` (`Agent MCP.app` + embedded `web_dashboard/` & CLI) |
-| **macOS Desktop (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | Native Intel Mac desktop `.dmg` installer |
-| **Linux Desktop (x64 / ARM64 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | Native GTK3 desktop GUI + `agent-mcp` CLI + `install-desktop.sh` (`arm64-gui` also included) |
-| **Linux Server / NAS (Headless CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
-| **Android (ARM64 Recommended)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | Dual-mode remote multi-node controller + 3-tier local MCP server |
-| **Android (Universal)** | `AgentMCP-v3.5.7-android-universal.apk` | Multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
 
 ## License
 

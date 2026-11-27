@@ -1,7 +1,51 @@
 {
   "publish_github_binaries": false,
   "enable_one_click_github_assets": false,
-  "legacy_redirect_target": "primary_channel",
-  "channels": [],
+  "legacy_redirect_target": "release_page",
+  "channels": [
+    {
+      "id": "quark",
+      "name": "夸克网盘",
+      "badge": "高速推荐",
+      "url": "https://pan.quark.cn/s/ddb857fbeed4",
+      "code": "6ERK",
+      "subtitle": "永久目录「Agent MCP」· 点击自动复制提取码",
+      "platforms": ["all"]
+    },
+    {
+      "id": "uc",
+      "name": "UC网盘",
+      "badge": "不限速",
+      "url": "https://drive.uc.cn/s/5a71a271af734",
+      "code": "3azb",
+      "subtitle": "永久目录「Agent MCP」· 点击自动复制提取码",
+      "platforms": ["all"]
+    },
+    {
+      "id": "mobile139",
+      "name": "中国移动云盘",
+      "badge": "免提取码 · 不限速",
+      "url": "https://yun.139.com/shareweb/#/w/i/2yA8NTUbbXcav",
+      "subtitle": "永久目录「Agent MCP」· 免填提取码直达",
+      "platforms": ["all"]
+    },
+    {
+      "id": "baidu",
+      "name": "百度网盘",
+      "badge": "全量备份",
+      "url": "https://pan.baidu.com/s/1_M-n0m-lnR8ddHMEakcfvw?pwd=j2zq",
+      "code": "j2zq",
+      "subtitle": "永久目录「Agent MCP」· 链接已附带提取码",
+      "platforms": ["all"]
+    },
+    {
+      "id": "github_actions",
+      "name": "GitHub Actions 构建产物",
+      "badge": "官方 CI",
+      "url": "https://github.com/iamr0s/agent-mcp/actions",
+      "subtitle": "登录 GitHub 后可在对应版本 Workflow Artifacts 中下载",
+      "platforms": ["all"]
+    }
+  ],
   "custom_assets": {}
 }

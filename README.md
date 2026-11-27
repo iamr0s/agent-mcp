@@ -18,6 +18,48 @@
   <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.7 跨设备远程执行节点总览">
 </p>
 
+## 快速下载与安装
+
+公开 [GitHub Releases](https://github.com/iamr0s/agent-mcp/releases) 仅保留版本更新说明与自动检测索引（`version.json`）。请通过以下**四家网盘永久分享目录（`Agent MCP`）**获取全平台安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/iamr0s/agent-mcp/actions) 在对应版本工作流底部的 `Artifacts` 中直接下载：
+
+| 下载渠道 | 获取地址 | 提取码 | 渠道说明 |
+| :--- | :--- | :--- | :--- |
+| **夸克网盘** | [点击打开 `pan.quark.cn`](https://pan.quark.cn/s/ddb857fbeed4) | `6ERK` | 永久更新目录「Agent MCP」，全平台安装包合集 |
+| **UC网盘** | [点击打开 `drive.uc.cn`](https://drive.uc.cn/s/5a71a271af734) | `3azb` | 永久更新目录「Agent MCP」，上传下载不限速 |
+| **中国移动云盘** | [点击打开 `yun.139.com`](https://yun.139.com/shareweb/#/w/i/2yA8NTUbbXcav) | 免提取码 | 永久更新目录「Agent MCP」，免密不限速直下 |
+| **百度网盘** | [点击打开 `pan.baidu.com`](https://pan.baidu.com/s/1_M-n0m-lnR8ddHMEakcfvw?pwd=j2zq) | `j2zq` | 永久更新目录「Agent MCP」（链接已自动附带提取码） |
+| **GitHub Actions** | [前往 Actions Artifacts 下载](https://github.com/iamr0s/agent-mcp/actions) | 需登录 GitHub | 点进最新 `Build & Publish Releases` 构建记录底部下载对应系统产物 |
+
+<details>
+<summary><b>展开查看全平台发行包文件名与适用场景对照表（Windows / macOS / Linux / Android）</b></summary>
+
+<br>
+
+| 目标设备平台 | 发行包文件名 | 适用场景说明 |
+| :--- | :--- | :--- |
+| **Windows 10 / 11 桌面安装版 (x64)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
+| **Windows 10 / 11 免安装绿色版 (x64)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
+| **macOS 桌面端 (Apple Silicon M 系列)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（内置 `web_dashboard/` 与 `agent-mcp` CLI），拖拽入 Applications 即用 |
+| **macOS 桌面端 (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像 |
+| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh` 启动器一键注册（同提供 `arm64-gui`） |
+| **Linux 服务器 / GPU 机 / NAS (CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `systemd` 常驻 |
+| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | 固定签名正式版，适用于主流 64 位真机，含远控多节点 + 本机三档权限引擎 |
+| **Android 全架构通用版** | `AgentMCP-v3.5.7-android-universal.apk` | 固定签名正式版，同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64` |
+
+</details>
+
+## 赞赏支持
+
+如果 Agent MCP 帮到了你的跨设备开发与自动化工作流，欢迎自愿赞赏支持。
+
+<p align="center">
+  <img src="assets/donation/alipay.jpg" width="200" alt="支付宝">
+  <img src="assets/donation/wxpay.jpg" width="200" alt="微信支付">
+  <img src="assets/donation/binance.jpg" width="200" alt="Binance Pay">
+</p>
+
+<p align="center">支付宝 · 微信支付 · Binance Pay</p>
+
 ## 为什么选择 Agent MCP？（典型跨设备场景）
 
 | 常见痛点场景 | 传统做法的局限 | Agent MCP v3.5.7 的解决方式 |
@@ -156,21 +198,6 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 - **智能编码与一键反悔**：读写自动识别 `UTF-8` / `GBK` 并保留原文件换行符；`edit_file` 与 `apply_patch` 每次修改前自动压入内存快照，`undo_edit` 秒级无损回滚。
 - **长进程守护防孤儿残留**：`start_process` + `manage_process` 托管远端训练、编译或开发服务器，超时或关闭时自动清理整棵子进程树。
 
-## 快速下载与安装
-
-前往 [**GitHub Releases**](https://github.com/iamr0s/agent-mcp/releases) 查看最新版本说明与多渠道网盘下载链接：
-
-| 目标设备平台 | 发行包文件名 | 适用场景说明 |
-| :--- | :--- | :--- |
-| **Windows 10 / 11 桌面安装版 (x64)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
-| **Windows 10 / 11 免安装绿色版 (x64)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
-| **macOS 桌面端 (Apple Silicon M 系列)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（内置 `web_dashboard/` 与 `agent-mcp` CLI），拖拽入 Applications 即用 |
-| **macOS 桌面端 (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像 |
-| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh` 启动器一键注册（同提供 `arm64-gui`） |
-| **Linux 服务器 / GPU 机 / NAS (CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `systemd` 常驻 |
-| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | 适用于主流 64 位骁龙 / 天玑 / Tensor 真机，含远控多节点 + 本机三档权限引擎 |
-| **Android 全架构通用版** | `AgentMCP-v3.5.7-android-universal.apk` | 同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`（兼容模拟器与旧设备） |
-
 ## 内置工具矩阵（22 项）
 
 | 分类 | 工具名 | 用途说明 |
@@ -239,18 +266,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_android.ps1
 - **默认拦截敏感凭据**：默认自动保护 `.env`、私钥证书（`*.pem`、`*.key`、`*.jks`）、`.ssh` 以及节点自身的鉴权配置文件，防止远程排障时误读泄露。
 - **跨网访问务必开启鉴权**：监听 `0.0.0.0`、组网网卡或开启公网隧道时，请保持 `Bearer` 高强度密钥或 `OAuth 2.1` 密码验证开启，并按入口限定 `-r` 目录白名单或 `--read-only` 只读策略。
 - **临时分享及时收回**：通过 `manage_expose` 对外分享预览文件或端口时，建议保留默认自动到期时间（2 小时），预览完毕点击「全部关闭」。
-
-## 赞赏支持
-
-如果 Agent MCP 帮到了你的跨设备开发与自动化工作流，欢迎自愿赞赏支持。
-
-<p align="center">
-  <img src="assets/donation/alipay.jpg" width="200" alt="支付宝">
-  <img src="assets/donation/wxpay.jpg" width="200" alt="微信支付">
-  <img src="assets/donation/binance.jpg" width="200" alt="Binance Pay">
-</p>
-
-<p align="center">支付宝 · 微信支付 · Binance Pay</p>
 
 ## 开源许可
 
