@@ -14,6 +14,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime
 import hashlib
 import io
@@ -22,8 +23,10 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -383,8 +386,96 @@ def organize_structured_tree(flat_dir: pathlib.Path) -> pathlib.Path:
     return structured_root
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _detect_local_socks_hostport() -> str:
+    for port in (7890, 7897, 10808):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return f"127.0.0.1:{port}"
+        except OSError:
+            pass
+    return ""
+
+
+_SIGNED_URL_CACHE: dict[int, tuple[float, str]] = {}
+_SIGNED_URL_LOCK = threading.Lock()
+
+
+def _get_fresh_signed_url(art: dict, token: str, socks_hp: str, force: bool = False) -> str:
+    art_id = int(art["id"])
+    now = time.monotonic()
+    if not force:
+        with _SIGNED_URL_LOCK:
+            cached = _SIGNED_URL_CACHE.get(art_id)
+            if cached and (now - cached[0]) < 150.0:
+                return cached[1]
+    fresh = _resolve_signed_artifact_url(art, token, socks_hp)
+    with _SIGNED_URL_LOCK:
+        _SIGNED_URL_CACHE[art_id] = (time.monotonic(), fresh)
+    return fresh
+
+
+def _download_range_slice(art: dict, token: str, start: int, end: int, dest_part: pathlib.Path, socks_hp: str) -> int:
+    expected = end - start + 1
+    if dest_part.is_file() and dest_part.stat().st_size == expected:
+        return expected
+    last_err = ""
+    for attempt in range(1, 5):
+        signed_url = _get_fresh_signed_url(art, token, socks_hp, force=(attempt > 1))
+        tmp_part = dest_part.with_suffix(dest_part.suffix + ".dl")
+        cmd = [
+            "curl.exe", "-fsSL",
+            "--connect-timeout", "12", "--max-time", "90",
+            "-r", f"{start}-{end}",
+            "-o", str(tmp_part),
+        ]
+        if socks_hp:
+            cmd.extend(["--socks5-hostname", socks_hp])
+        else:
+            cmd.extend(["--noproxy", "*"])
+        cmd.append(signed_url)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=100, check=False)
+        if proc.returncode == 0 and tmp_part.is_file() and tmp_part.stat().st_size == expected:
+            tmp_part.replace(dest_part)
+            return expected
+        last_err = f"rc={proc.returncode} {proc.stderr[:160]}"
+        tmp_part.unlink(missing_ok=True)
+        time.sleep(0.8 * attempt)
+    raise RuntimeError(f"Range {start}-{end} on {art.get('name')} failed: {last_err}")
+
+
+def _resolve_signed_artifact_url(art: dict, token: str, socks_hp: str) -> str:
+    url = art["archive_download_url"]
+    last_out = ""
+    for attempt in range(1, 6):
+        cmd = [
+            "curl.exe", "-sSI",
+            "--connect-timeout", "15",
+            "-H", f"Authorization: Bearer {token}",
+            "-H", "Accept: application/vnd.github+json",
+            "-H", "User-Agent: Agent-MCP-Release-Sync",
+        ]
+        if socks_hp:
+            cmd.extend(["--socks5-hostname", socks_hp])
+        cmd.append(url)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+        for ln in proc.stdout.splitlines():
+            if ln.lower().startswith("location:"):
+                return ln.split(":", 1)[1].strip()
+        last_out = f"{proc.stdout[:160]} {proc.stderr[:160]}"
+        time.sleep(0.8 * attempt)
+    raise RuntimeError(f"Failed to get 302 Location for {art.get('name')}: {last_out}")
+
+
 def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
     token = _get_github_token()
+    socks_hp = _detect_local_socks_hostport()
+    if socks_hp:
+        print(f"[Proxy] Using SOCKS5 hostname tunnel {socks_hp}")
     _, raw_runs = _gh_request(
         "GET",
         f"https://api.github.com/repos/{REPO}/actions/runs?per_page=20",
@@ -407,36 +498,105 @@ def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
         token,
     )
     artifacts = json.loads(raw_arts.decode("utf-8")).get("artifacts") or []
-    if not artifacts:
+    valid_arts = [
+        a for a in artifacts
+        if not a.get("expired")
+        and "artifact" in str(a.get("name") or "").lower()
+        and "metadata" not in str(a.get("name") or "").lower()
+    ]
+    if not valid_arts:
         raise RuntimeError(f"Workflow run {run_id} for {tag} has no uploaded artifacts.")
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    tmp_zips = out_dir / "_tmp_ci_zips"
+    tmp_zips.mkdir(parents=True, exist_ok=True)
     extracted_files: list[pathlib.Path] = []
 
-    for art in artifacts:
-        if art.get("expired"):
-            continue
-        art_name = str(art.get("name") or "")
-        if "artifact" not in art_name.lower():
-            continue
-        print(f"[DL] Fetching CI artifact '{art_name}'...")
-        _, zip_bytes = _gh_request(
-            "GET",
-            art["archive_download_url"],
-            token,
-            accept="application/vnd.github+json",
-        )
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            for member in zf.infolist():
-                if member.is_dir():
-                    continue
-                fname = pathlib.Path(member.filename).name
-                if not (fname.startswith("AgentMCP-") or fname == "SHA256SUMS.txt"):
-                    continue
-                dest = out_dir / fname
-                with zf.open(member, "r") as src, dest.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-                extracted_files.append(dest)
+    try:
+        slice_size = 3 * 1024 * 1024  # 3 MB slices across 32 global workers with auto-refreshed SAS URLs
+        all_tasks: list[tuple[dict, int, int, pathlib.Path]] = []
+        bundle_parts: dict[str, list[pathlib.Path]] = {}
+        bundle_zips: dict[str, pathlib.Path] = {}
+
+        for idx_art, art in enumerate(valid_arts, 1):
+            art_name = str(art["name"])
+            zpath = tmp_zips / f"{art_name}.zip"
+            bundle_zips[art_name] = zpath
+            if zpath.is_file() and zpath.stat().st_size > 1024 and zipfile.is_zipfile(zpath):
+                print(f"[Cache] ({idx_art}/{len(valid_arts)}) Reusing valid '{art_name}.zip'", flush=True)
+                continue
+
+            signed_url = _get_fresh_signed_url(art, token, socks_hp)
+            hdr_cmd = ["curl.exe", "-sSLI", "--connect-timeout", "15"]
+            if socks_hp:
+                hdr_cmd.extend(["--socks5-hostname", socks_hp])
+            hdr_cmd.append(signed_url)
+            hdr_proc = subprocess.run(hdr_cmd, capture_output=True, text=True, timeout=25, check=False)
+            total_size = int(art.get("size_in_bytes") or 0)
+            for ln in hdr_proc.stdout.splitlines():
+                if ln.lower().startswith("content-length:"):
+                    try:
+                        total_size = int(ln.split(":", 1)[1].strip())
+                    except ValueError:
+                        pass
+
+            parts: list[pathlib.Path] = []
+            off = 0
+            idx = 0
+            while off < total_size:
+                end = min(off + slice_size - 1, total_size - 1)
+                part_file = tmp_zips / f"{art_name}.part{idx:03d}"
+                parts.append(part_file)
+                all_tasks.append((art, off, end, part_file))
+                off = end + 1
+                idx += 1
+            bundle_parts[art_name] = parts
+
+        if all_tasks:
+            print(f"[DL] Fetching {len(all_tasks)} slices (~{len(all_tasks)*3} MB) across 32 workers...", flush=True)
+            done_cnt = 0
+            done_bytes = 0
+            t0 = time.monotonic()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+                fut_map = {
+                    pool.submit(_download_range_slice, a, token, s, e, pf, socks_hp): a["name"]
+                    for (a, s, e, pf) in all_tasks
+                }
+                for fut in concurrent.futures.as_completed(fut_map):
+                    done_bytes += fut.result()
+                    done_cnt += 1
+                    if done_cnt % 20 == 0 or done_cnt == len(all_tasks):
+                        el = max(0.1, time.monotonic() - t0)
+                        mb = done_bytes / 1048576
+                        print(f"[Progress] {done_cnt}/{len(all_tasks)} slices ({mb:.1f} MB, {mb/el:.2f} MB/s)", flush=True)
+
+        for art_name, parts in bundle_parts.items():
+            zpath = bundle_zips[art_name]
+            tmp_out = tmp_zips / f"{art_name}.zip.assembling"
+            with tmp_out.open("wb") as out_fp:
+                for p in parts:
+                    with p.open("rb") as in_fp:
+                        shutil.copyfileobj(in_fp, out_fp)
+                    p.unlink(missing_ok=True)
+            tmp_out.replace(zpath)
+
+        for art_name, zpath in bundle_zips.items():
+            print(f"[Unpack] '{art_name}' ({zpath.stat().st_size / 1048576:.1f} MB)...", flush=True)
+            with zipfile.ZipFile(zpath, "r") as zf:
+                for member in zf.infolist():
+                    if member.is_dir():
+                        continue
+                    fname = pathlib.Path(member.filename).name
+                    if not (fname.startswith("AgentMCP-") or fname == "SHA256SUMS.txt"):
+                        continue
+                    dest = out_dir / fname
+                    with zf.open(member, "r") as src, dest.open("wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    extracted_files.append(dest)
+
+        shutil.rmtree(tmp_zips, ignore_errors=True)
+    except Exception:
+        raise
 
     checksum_lines: list[str] = []
     for pkg in sorted(out_dir.glob("AgentMCP-*")):
