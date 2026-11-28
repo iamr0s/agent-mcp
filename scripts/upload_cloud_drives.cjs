@@ -198,7 +198,10 @@ async function get139Breadcrumb(cdp) {
 async function click139Breadcrumb(cdp, titleText) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const crumbs = await get139Breadcrumb(cdp);
-    if (crumbs[crumbs.length - 1] === titleText) return true;
+    if (crumbs[crumbs.length - 1] === titleText) {
+      await sleep(800);
+      return true;
+    }
     const pos = await cdp.send('Runtime.evaluate', {
       returnByValue: true,
       expression: `(() => {
@@ -218,13 +221,62 @@ async function click139Breadcrumb(cdp, titleText) {
       for (let w = 0; w < 8; w++) {
         await sleep(500);
         const after = await get139Breadcrumb(cdp);
-        if (after[after.length - 1] === titleText) return true;
+        if (after[after.length - 1] === titleText) {
+          await sleep(1000); // allow table XHR after breadcrumb navigation to finish rendering
+          return true;
+        }
       }
     } else {
       await sleep(500);
     }
   }
   return false;
+}
+
+async function create139Folder(cdp, folderName) {
+  const btnPos = await cdp.send('Runtime.evaluate', {
+    returnByValue: true,
+    expression: `(() => {
+      const el = Array.from(document.querySelectorAll('button, span, div'))
+        .find(e => e.children.length === 0 && (e.textContent || '').trim() === '新建文件夹' && e.getBoundingClientRect().width > 0);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    })()`,
+  });
+  const pt = btnPos.result && btnPos.result.value;
+  if (!pt) return false;
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pt.x, y: pt.y });
+  await sleep(100);
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+  await sleep(900);
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const inp = Array.from(document.querySelectorAll('input'))
+        .find(i => i.type !== 'file' && i.type !== 'checkbox' && i.getBoundingClientRect().width > 0);
+      if (inp) {
+        inp.focus();
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(inp, ${JSON.stringify(folderName)});
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    })()`,
+  });
+  await sleep(300);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', windowsVirtualKeyCode: 13, code: 'Enter', key: 'Enter' });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', windowsVirtualKeyCode: 13, code: 'Enter', key: 'Enter' });
+  await sleep(400);
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const ok = Array.from(document.querySelectorAll('button, span, div, i, img'))
+        .find(e => e.children.length === 0 && ['确定', '确认'].includes((e.textContent || '').trim()) && e.getBoundingClientRect().width > 0);
+      if (ok) ok.click();
+    })()`,
+  });
+  await sleep(1400);
+  return true;
 }
 
 async function click139TableFolder(cdp, folderName) {
@@ -242,7 +294,7 @@ async function click139TableFolder(cdp, folderName) {
             return r.width > 0 && r.height > 0 && r.left > 180 && r.left < 750 && r.top > 155;
           });
         if (!el) return null;
-        const r = e.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
         return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
       })()`,
     });
@@ -660,7 +712,11 @@ async function uploadStructuredFolders(cdp, drive, osDirPaths, methodPref = 'aut
       const okRoot = await enter139AgentMcpFolder(cdp);
       if (!okRoot) throw new Error(`139 failed to return to Agent MCP before entering ${osName}`);
 
-      const enteredOs = await click139TableFolder(cdp, osName);
+      let enteredOs = await click139TableFolder(cdp, osName);
+      if (!enteredOs) {
+        await create139Folder(cdp, osName);
+        enteredOs = await click139TableFolder(cdp, osName);
+      }
       if (!enteredOs) throw new Error(`139 failed to enter OS folder ${osName}`);
 
       for (const archName of fs.readdirSync(osDir)) {
@@ -668,6 +724,10 @@ async function uploadStructuredFolders(cdp, drive, osDirPaths, methodPref = 'aut
         if (!fs.statSync(localDir).isDirectory()) continue;
         const files = fs.readdirSync(localDir).map((f) => path.join(localDir, f)).filter((p) => fs.statSync(p).isFile());
 
+        const osEntries = await list139MainTableEntries(cdp);
+        if (!osEntries.dirs.includes(archName)) {
+          await create139Folder(cdp, archName);
+        }
         const enteredArch = await click139TableFolder(cdp, archName);
         if (!enteredArch) throw new Error(`139 failed to enter arch folder ${osName}/${archName}`);
 
@@ -858,6 +918,17 @@ async function main() {
     if (!page) {
       console.log(`\n[${drive.key}] ${drive.name}: TAB NOT FOUND`);
       continue;
+    }
+    if (page.id) {
+      await new Promise((r) => {
+        const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: `/json/activate/${page.id}`, timeout: 4000 }, (res) => {
+          res.resume();
+          res.on('end', r);
+        });
+        req.on('error', r);
+        req.on('timeout', () => { req.destroy(); r(); });
+      });
+      await sleep(300);
     }
     const cdp = new CdpClient(page.webSocketDebuggerUrl);
     try {
