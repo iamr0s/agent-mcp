@@ -619,8 +619,10 @@ class RemoteHttpNodeClient {
     int? ttlMinutes,
     String? pinCode,
     int? maxDownloads,
+    int? maxUploads,
     bool spa = false,
     bool allowUpload = false,
+    bool overwriteUpload = false,
   }) =>
       _requestJson(
         'POST',
@@ -636,8 +638,10 @@ class RemoteHttpNodeClient {
             'pin_code': pinCode.trim(),
           if (maxDownloads != null && maxDownloads > 0)
             'max_downloads': maxDownloads,
+          if (maxUploads != null && maxUploads > 0) 'max_uploads': maxUploads,
           'spa': spa,
           'allow_upload': allowUpload,
+          'overwrite_upload': overwriteUpload,
         },
       );
 

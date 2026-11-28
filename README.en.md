@@ -1,4 +1,4 @@
-# Agent MCP v3.5.7
+# Agent MCP v3.5.8
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,10 +12,10 @@
 >
 > Local coding assistants already handle files on your laptop. The real friction starts when your workloads live on **headless Linux cloud servers, GPU boxes, NAS appliances, secondary Windows machines, or real Android test phones** where `localhost` `stdio` tools cannot reach.
 >
-> Built natively with **Dart & Flutter** (zero Python / Node.js runtime dependencies), **Agent MCP v3.5.7** drops onto any server, workstation, or Android device and exposes 22 surgical file, process, clipboard/screen, Universal Sub-MCP OAuth 2.1 hub, and instant link-sharing tools over standard **Streamable HTTP (`/mcp`) + SSE** with built-in **OAuth 2.1 (RFC 7591 + PKCE)**, **Bearer API keys**, and **Tailscale** integration.
+> Built natively with **Dart & Flutter** (zero Python / Node.js runtime dependencies), **Agent MCP v3.5.8** drops onto any server, workstation, or Android device and exposes 22 surgical file, process, clipboard/screen, Universal Sub-MCP OAuth 2.1 hub, and instant link-sharing + **zero-token HTTP binary upload/download (`manage_expose`)** tools over standard **Streamable HTTP (`/mcp`) + SSE** with built-in **OAuth 2.1 (RFC 7591 + PKCE)**, **Bearer API keys**, and **Tailscale / Playit.gg** integration.
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.7 Cross-Device Execution Node Overview">
+  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.8 Cross-Device Execution Node Overview">
 </p>
 
 ## Downloads & Installation
@@ -31,20 +31,20 @@ Public [GitHub Releases](https://github.com/iamr0s/agent-mcp/releases) publish r
 | **GitHub Actions** | [Open Actions Artifacts](https://github.com/iamr0s/agent-mcp/actions) | GitHub Login | Download directly from the latest `Build & Publish Releases` workflow run |
 
 <details>
-<summary><b>View Multi-Platform Package Filename Matrix (Windows / macOS / Linux / Android)</b></summary>
+<summary><b>View Cloud-Drive Folder Layout & Multi-Platform Package Matrix (windows / macos / linux / android → x64 / arm64)</b></summary>
 
 <br>
 
-| Target Platform | Release Asset | Description |
+| Target Platform | Folder Path & Release Asset | Description |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 (x64 Installer)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | Native Dart/Flutter `--installer` Prism setup wizard + Desktop Console + Web UI + `agent-mcp.exe` CLI |
-| **Windows 10 / 11 (x64 Portable)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | Portable archive storing config & logs locally |
-| **macOS Desktop (Apple Silicon)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | Native macOS desktop `.dmg` (`Agent MCP.app` + embedded `web_dashboard/` & CLI) |
-| **macOS Desktop (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | Native Intel Mac desktop `.dmg` installer |
-| **Linux Desktop (x64 / ARM64 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | Native GTK3 desktop GUI + `agent-mcp` CLI + `install-desktop.sh` (`arm64-gui` also included) |
-| **Linux Server / NAS (Headless CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer |
-| **Android (ARM64 Recommended)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | Release-signed dual-mode remote multi-node controller + 3-tier local MCP server |
-| **Android (Universal)** | `AgentMCP-v3.5.7-android-universal.apk` | Release-signed multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
+| **Windows 10 / 11 (x64 Installer)** | `windows/x64/AgentMCP-v3.5.8-windows-x64-sfx.exe` | Native Dart/Flutter `--installer` Prism setup wizard + Desktop Console + Web UI + `agent-mcp.exe` CLI |
+| **Windows 10 / 11 (x64 Portable)** | `windows/x64/AgentMCP-v3.5.8-windows-x64-portable.zip` | Portable archive storing config & logs locally (`windows/x64/*-cli.zip` & `windows/arm64/*-cli.zip` also included) |
+| **macOS Desktop (Apple Silicon)** | `macos/arm64/AgentMCP-v3.5.8-macos-arm64.dmg` | Native macOS desktop `.dmg` (`*-app.zip` & `*-cli.tar.gz` in same folder) |
+| **macOS Desktop (Intel x64)** | `macos/x64/AgentMCP-v3.5.8-macos-x64.dmg` | Native Intel Mac desktop `.dmg` installer (`*-app.zip` & `*-cli.tar.gz` in same folder) |
+| **Linux Desktop (x64 / ARM64 GUI)** | `linux/x64/AgentMCP-v3.5.8-linux-x64-gui.tar.gz` | Native GTK3 desktop GUI + `agent-mcp` CLI + `install-desktop.sh` (ARM64 under `linux/arm64/`) |
+| **Linux Server / NAS (Headless CLI)** | `linux/x64/AgentMCP-v3.5.8-linux-x64-cli.tar.gz` | Standalone native `agent-mcp` binary + bundled `web_dashboard/` UI + `systemd` installer (ARM64 under `linux/arm64/`) |
+| **Android (ARM64 Recommended)** | `android/arm64-v8a/AgentMCP-v3.5.8-android-arm64-v8a.apk` | Release-signed dual-mode remote multi-node controller + 3-tier local MCP server (`armeabi-v7a` & `x86_64` in sibling folders) |
+| **Android (Universal)** | `android/universal/AgentMCP-v3.5.8-android-universal.apk` | Release-signed multi-ABI APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) |
 
 </details>
 
@@ -66,7 +66,7 @@ If Agent MCP helps your cross-device engineering and AI workflows, optional tips
 
 ```bash
 # 1. Download the archive from a mirror listed on GitHub Releases & extract (includes `agent-mcp` binary and `/dashboard/` Web UI)
-tar -xzf AgentMCP-v3.5.7-linux-x64-cli.tar.gz
+tar -xzf AgentMCP-v3.5.8-linux-x64-cli.tar.gz
 
 # 2. One-line non-interactive setup (auto-detects LAN & Tailscale 100.x IPs + generates Bearer key)
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key

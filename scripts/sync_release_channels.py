@@ -247,7 +247,7 @@ def build_manifest_and_notes(
         table = [
             "## 快速下载与获取 / Downloads & Mirrors",
             "",
-            f"> 可通过下方网盘永久分享目录（`Agent MCP`）直接下载全平台安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/{REPO}/actions) 在对应版本工作流底部的 `Artifacts` 中获取：",
+            f"> 可通过下方网盘永久分享目录（`Agent MCP`）按 **`windows/` · `macos/` · `linux/` · `android/` → `x64/` · `arm64/`** 分类文件夹直接下载对应设备安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/{REPO}/actions) 在对应版本工作流底部的 `Artifacts` 中获取：",
             "",
             "| 下载渠道 / Channel | 说明 / Notes | 提取码 / Access Code | 获取链接 / Link |",
             "| :--- | :--- | :--- | :--- |",
@@ -338,6 +338,51 @@ def apply_to_github_release(tag: str) -> None:
     )
 
 
+def classify_package_subdir(fname: str) -> tuple[str, str] | None:
+    low = fname.lower()
+    if not low.startswith("agentmcp-") or low == "sha256sums.txt":
+        return None
+    if "-windows-" in low:
+        arch = "arm64" if "-arm64" in low else "x64"
+        return ("windows", arch)
+    if "-macos-" in low:
+        arch = "arm64" if "-arm64" in low else "x64"
+        return ("macos", arch)
+    if "-linux-" in low:
+        arch = "arm64" if "-arm64" in low else "x64"
+        return ("linux", arch)
+    if "-android-" in low:
+        if "arm64-v8a" in low:
+            return ("android", "arm64-v8a")
+        if "armeabi-v7a" in low:
+            return ("android", "armeabi-v7a")
+        if "x86_64" in low:
+            return ("android", "x86_64")
+        return ("android", "universal")
+    return None
+
+
+def organize_structured_tree(flat_dir: pathlib.Path) -> pathlib.Path:
+    structured_root = flat_dir / "structured"
+    if structured_root.exists():
+        shutil.rmtree(structured_root)
+    structured_root.mkdir(parents=True, exist_ok=True)
+    placed = 0
+    for pkg in sorted(flat_dir.glob("AgentMCP-*")):
+        if not pkg.is_file():
+            continue
+        cls = classify_package_subdir(pkg.name)
+        if not cls:
+            continue
+        os_dir, arch_dir = cls
+        dest_dir = structured_root / os_dir / arch_dir
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(pkg, dest_dir / pkg.name)
+        placed += 1
+    print(f"[OK] Organized {placed} formal packages into {structured_root} (SHA256SUMS.txt excluded).")
+    return structured_root
+
+
 def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
     token = _get_github_token()
     _, raw_runs = _gh_request(
@@ -405,6 +450,8 @@ def download_ci_bundle(tag: str, out_dir: pathlib.Path) -> None:
 
     if checksum_lines:
         (out_dir / "SHA256SUMS.txt").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+
+    organize_structured_tree(out_dir)
 
     print(f"[OK] Unpacked {len(extracted_files)} files into {out_dir}:")
     for f in sorted(out_dir.iterdir()):

@@ -199,7 +199,7 @@ abstract class ConsoleBackend {
   bool get isLinuxPlatform => false;
   bool get isMacOSPlatform => false;
   String get hostCpuArch => 'x64';
-  String get currentAppVersion => '3.5.7';
+  String get currentAppVersion => '3.5.8';
   String get initialThemeModeKey => 'system';
   String get initialAccentThemeKey => 'indigo';
   bool get initialDynamicColor => false;
@@ -418,8 +418,10 @@ abstract class ConsoleBackend {
     int? ttlMinutes,
     String? pinCode,
     int? maxDownloads,
+    int? maxUploads,
     bool spa = false,
     bool allowUpload = false,
+    bool overwriteUpload = false,
   }) async =>
       const {'ok': false, 'error': 'Unsupported'};
 

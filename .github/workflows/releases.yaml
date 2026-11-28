@@ -753,7 +753,7 @@ jobs:
               ch_table = [
                   '## 快速下载与获取 / Downloads & Mirrors',
                   '',
-                  f'> 可通过下方网盘永久分享目录（`Agent MCP`）直接下载全平台安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/{repo}/actions) 在对应版本工作流底部的 `Artifacts` 中获取：',
+                  f'> 可通过下方网盘永久分享目录（`Agent MCP`）按 **`windows/` · `macos/` · `linux/` · `android/` → `x64/` · `arm64/`** 分类文件夹直接下载对应设备安装包，或登录 GitHub 账号前往 [**GitHub Actions**](https://github.com/{repo}/actions) 在对应版本工作流底部的 `Artifacts` 中获取：',
                   '',
                   '| 下载渠道 / Channel | 说明 / Notes | 提取码 / Access Code | 获取链接 / Link |',
                   '| :--- | :--- | :--- | :--- |',

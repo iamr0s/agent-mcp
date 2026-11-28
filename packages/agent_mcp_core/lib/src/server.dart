@@ -76,8 +76,10 @@ class McpServerEngine {
     return "MCP server '${config.serverName}' on host '${Platform.localHostname}' ($modeDesc, $scopeDesc). "
         'Prefer stat_file before reading large files, use edit_file or apply_patch for '
         'surgical changes instead of rewriting whole files, use start_process + '
-        'manage_process for long-running builds or servers, use list_sub_mcps / inspect_sub_mcp / call_sub_mcp for nested Sub-MCP servers, '
-        'and use manage_expose to share generated videos, files, static websites, or local ports via Tailscale / public links.';
+        'manage_process for long-running builds or servers, and use list_sub_mcps / inspect_sub_mcp / call_sub_mcp for nested Sub-MCP servers. '
+        'BINARY & LARGE FILE TRANSFER: MCP text tools (read_file/create_file) are for UTF-8/GBK text only; '
+        'to upload binary files to this host or download binary/large files (images, PDFs, Office docs, APKs, archives, audio/video) without token bloat, '
+        'call manage_expose(action="open", target="<file_or_folder_path>", allow_upload=true) and use the HTTP GET/PUT/POST URLs in transfer_guide.';
   }
 
   void _registerAllTools() {
@@ -141,7 +143,7 @@ class McpServerEngine {
     registerFileTools(registerTool, config, undoStore);
     registerProcessTools(registerTool, config, processManager);
     registerSubMcpTools(registerTool, config);
-    registerExposureTools(registerTool, config);
+    registerExposureTools(registerTool, config, undoStore: undoStore);
     registerClipboardAndScreenTools(registerTool, config);
   }
 
@@ -677,10 +679,12 @@ class McpServerEngine {
           '',
           headers: const {
             'access-control-allow-origin': '*',
-            'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+            'access-control-allow-methods':
+                'GET, POST, PUT, DELETE, HEAD, OPTIONS',
             'access-control-allow-headers':
-                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID, X-Filename',
-            'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name',
+                'Authorization, X-API-Key, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID, X-Filename, X-Upload-Filename, X-Upload-Offset, X-Upload-Append, X-Upload-More, X-Upload-Overwrite, X-Expected-Sha256, X-Share-Pin, Range',
+            'access-control-expose-headers':
+                'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, X-Saved-Filename, X-Sha256, Content-Range',
           },
         );
       }
@@ -1751,7 +1755,8 @@ Response _withCors(Response r) {
   return r.change(
     headers: const {
       'access-control-allow-origin': '*',
-      'access-control-expose-headers': 'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name',
+      'access-control-expose-headers':
+          'Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, X-Saved-Filename, X-Sha256, Content-Range',
     },
   );
 }

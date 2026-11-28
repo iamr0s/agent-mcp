@@ -1,5 +1,25 @@
 # Changelog
 
+## [v3.5.8] — Out-of-Band HTTP Binary Data Plane (`manage_expose` Upload & Transfer Guide) & Structured Multi-Platform Cloud Mirrors
+
+### 中文更新说明
+
+- **零 Token 双向 HTTP 二进制数据平面（`manage_expose` + `/share/<id>` 全面升级）**：
+  - **双模式双向写入支持（`allow_upload: true`）**：同时支持 **`folder` 文件夹双向收件箱**（目录不存在时自动建目录、嵌套子路径自动创建与 `overwrite_upload` 同名覆盖控制）以及 **`file` 单文件接收槽 / 替换**（支持传入尚未存在的目标文件路径作为待上传槽位，网页端自动渲染单文件拖拽上传页，客户端/AI 也可直接流式写入）。
+  - **多协议流式上传与 `>100MB` 超大文件分片续传**：原生支持 **`PUT /share/<id>[/<subpath>]` 原始二进制流**、**`POST /share/<id>` 64KB 常量内存流式 `multipart/form-data` 解析器**（`curl -F` 多文件与中文文件名零边界污染，无尾斜杠请求不做 `302` 重定向避免请求体丢失）与 **`?append=1&offset=<bytes>&more=1` 分片追加**（网页端对 `>48MB` 文件自动按 `32MB` 切片上传，无缝穿透 Cloudflare Tunnel 单请求 100MB 限制）。
+  - **原子落盘、完整性校验与一键回滚**：内置 `.part` 临时文件原子替换、流式 `SHA-256` 计算、`X-Expected-Sha256` 异常 `422` 拦截、覆盖前自动写入 `UndoStore`（可直接用 `undo_edit` 秒级回滚二进制旧版本）、`max_uploads` 限次即关、提取码保护及顶层 `OPTIONS` 跨域预检。
+- **三层防误用 MCP 自说明体系与全端 Prism 同步**：
+  - **AI 开箱即会用**：在全局 MCP `initialize` `instructions`、`read_file` / `create_file` 描述、二进制读取报错自愈提示以及 `manage_expose` 返回的 `transfer_guide`（预填提取码的 `curl -fL -T` / `curl -fL -F` 命令模板）三层同步引导大模型使用带外 HTTP 通道收发二进制文件。
+  - **同源 Prism 控制台与网盘分目录归档**：桌面端、移动端与 Web 管理台同步新增「可上传替换 / 双向收件箱」胶囊徽章、已接收计数/字节统计、「`curl` 上传命令」复制项及单次即关配额；同时将四家网盘永久分享目录（`Agent MCP`）按 `windows/`、`macos/`、`linux/`、`android/` 及 `x64/`、`arm64/` 架构清晰归类。
+
+### English Release Notes
+
+- **Zero-Token Bi-Directional HTTP Binary Data Plane (`manage_expose` + `/share/<id>`)**:
+  - **Folder Inbox & Single-File Upload Slot (`allow_upload: true`)**: Supports bi-directional binary uploads on both **`folder`** shares (auto-creating missing directories and nested subpaths with optional `overwrite_upload`) and **`file`** shares (allowing non-existent target file paths as pending upload dropzones or replacing existing files).
+  - **Multi-Protocol Streaming & `>100MB` Chunked Uploads**: Supports raw **`PUT` binary streams**, constant-memory streaming **`POST multipart/form-data`** (`curl -F` multi-file & UTF-8 filenames with zero `302` redirect body loss), and **`?append=1&offset=<bytes>&more=1` chunked append** (browser UI auto-slices files `>48MB` into `32MB` chunks to bypass Cloudflare Tunnel's 100MB per-request limit), backed by atomic `.part` writes, streaming `SHA-256` (`X-Expected-Sha256`), `UndoStore` rollback (`undo_edit`), and `max_uploads` burn-after-upload quotas.
+- **3-Layer MCP Self-Documentation & Structured OS/Arch Cloud Mirrors**:
+  - Embeds clear binary-transfer instructions across MCP `initialize` `instructions`, `read_file`/`create_file` hints, and ready-to-run `transfer_guide` `curl` one-liners, paired with authentic `Prism*` upload controls across Desktop/Mobile/Web and organized `windows/`, `macos/`, `linux/`, and `android/` (`x64`/`arm64`) folders across all four cloud-drive mirrors.
+
 ## [v3.5.7] — Multi-Channel Cloud-Drive Updater (`download_channels`), Index-Only GitHub Releases & Legacy Update Compatibility
 
 ### 中文更新说明

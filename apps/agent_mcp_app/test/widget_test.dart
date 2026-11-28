@@ -1245,8 +1245,8 @@ void main() {
 
     // 1. Sidebar exposes un-hidden v3.2.1 About & Update entry directly on main shell
     expect(find.text('关于与更新'), findsOneWidget);
-    expect(find.text('v3.5.7'), findsOneWidget);
-    await tester.tap(find.text('v3.5.7'));
+    expect(find.text('v3.5.8'), findsOneWidget);
+    await tester.tap(find.text('v3.5.8'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -1346,7 +1346,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(tester.takeException(), isNull);
     final aboutRowTitleCenter = tester.getCenter(find.text('关于与更新'));
-    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.7'));
+    final aboutBadgeCenter = tester.getCenter(find.text('v3.5.8'));
     // Right badge sits to the right of title on the same horizontal row, never dropped underneath!
     expect(aboutBadgeCenter.dx, greaterThan(aboutRowTitleCenter.dx + 40));
 
@@ -2148,7 +2148,7 @@ void main() {
     expect(tier6.isUpgrade, isFalse);
 
     expect(find.text('Agent MCP 安装向导'), findsOneWidget);
-    expect(find.text('v3.5.7'), findsOneWidget);
+    expect(find.text('v3.5.8'), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-source-pill')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-dir-input')), findsOneWidget);
     expect(find.byKey(const ValueKey('installer-shortcut-switch')), findsOneWidget);
@@ -2584,4 +2584,179 @@ void main() {
     expect(find.text('前往下载'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'Out-of-Band Binary Data Plane UI: Prism upload pills, curl copy option, and single-file/folder upload quota controls',
+      (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(1280, 960);
+    tester.view.devicePixelRatio = 1.0;
+
+    Map<String, dynamic>? capturedOpenArgs;
+    final backend = _CaptureExposureBackend(
+      onOpen: (args) => capturedOpenArgs = args,
+    );
+
+    await tester.pumpWidget(AgentMcpConsoleApp(backend: backend));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('外网与分享'));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(tester.takeException(), isNull);
+
+    // Active uploadable single-file slot renders '可上传替换' PrismPill and received bytes telemetry
+    expect(find.text('可上传替换'), findsOneWidget);
+    expect(find.text('双向收件箱'), findsOneWidget);
+    expect(find.textContaining('剩上传 1 次'), findsOneWidget);
+    expect(find.textContaining('收 2 项 10.00 MB'), findsOneWidget);
+
+    // Open New Share modal (Step 1 -> tap '单个文件' -> Step 2)
+    await tester.tap(find.text('新建外网分享'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('单个文件').last);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('高级保护'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final singleUploadToggle = find.text('允许通过此链接上传或替换该文件（单文件接收槽 / 支持待创建路径）');
+    expect(singleUploadToggle, findsOneWidget);
+    await tester.tap(singleUploadToggle);
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('传1个即关'), findsOneWidget);
+    await tester.tap(find.text('传1个即关'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Switch to Folder mode -> verify overwrite toggle appears alongside upload quota
+    await tester.tap(find.text('文件夹').last);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('允许拖拽或通过 PUT/POST 上传文件到此目录（双向收件箱模式）'), findsOneWidget);
+    expect(find.text('POST 同名直接覆盖'), findsOneWidget);
+    await tester.tap(find.text('POST 同名直接覆盖'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Enter target path and submit -> verify backend receives allowUpload, maxUploads=1, overwriteUpload=true
+    await tester.tap(find.text('粘贴路径'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.enterText(
+      find.byType(TextField).first,
+      r'D:\agent_mcp_tttmp\binary_inbox',
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.tap(find.text('生成分享链接'));
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(capturedOpenArgs, isNotNull);
+    expect(capturedOpenArgs!['mode'], equals('folder'));
+    expect(capturedOpenArgs!['allow_upload'], isTrue);
+    expect(capturedOpenArgs!['max_uploads'], equals(1));
+    expect(capturedOpenArgs!['overwrite_upload'], isTrue);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _CaptureExposureBackend extends _FakeConsoleBackend {
+  _CaptureExposureBackend({required this.onOpen});
+
+  final void Function(Map<String, dynamic> args) onOpen;
+
+  @override
+  Future<Map<String, dynamic>> getStatus() async {
+    final base = await super.getStatus();
+    final exposures = Map<String, dynamic>.from(base['exposures'] as Map);
+    exposures['active_count'] = 2;
+    exposures['items'] = [
+      {
+        'id': 'sh_slotApk01',
+        'kind': 'file',
+        'label': '待接收签名安装包.apk',
+        'target': r'D:\agent_mcp_tttmp\signed.apk',
+        'scope': 'auto',
+        'allow_upload': true,
+        'max_uploads': 1,
+        'remaining_uploads': 1,
+        'upload_count': 0,
+        'bytes_received': 0,
+        'bytes_received_human': '0 B',
+        'primary_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_slotApk01',
+        'direct_file_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_slotApk01/signed.apk',
+        'public_urls': ['https://omen-mcp.iamr0s.de5.net/share/sh_slotApk01'],
+        'transfer_guide': {
+          'curl_upload_put': 'curl -X PUT --data-binary "@signed.apk" "https://omen-mcp.iamr0s.de5.net/share/sh_slotApk01"',
+        },
+        'hit_count': 1,
+        'bytes_sent_human': '1.2 KB',
+        'remaining_seconds': 3600,
+      },
+      {
+        'id': 'sh_inboxDir02',
+        'kind': 'folder',
+        'label': '跨端二进制收件箱',
+        'target': r'D:\agent_mcp_tttmp\binary_inbox',
+        'scope': 'auto',
+        'allow_upload': true,
+        'overwrite_upload': true,
+        'upload_count': 2,
+        'bytes_received': 10485760,
+        'bytes_received_human': '10.00 MB',
+        'primary_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_inboxDir02/',
+        'public_urls': ['https://omen-mcp.iamr0s.de5.net/share/sh_inboxDir02/'],
+        'transfer_guide': {
+          'curl_upload_put': 'curl -X PUT --data-binary "@local.bin" "https://omen-mcp.iamr0s.de5.net/share/sh_inboxDir02/local.bin"',
+        },
+        'hit_count': 8,
+        'bytes_sent_human': '24.5 KB',
+        'remaining_seconds': 7000,
+      },
+    ];
+    return {...base, 'exposures': exposures};
+  }
+
+  @override
+  Future<Map<String, dynamic>> openExposure({
+    required String target,
+    String mode = 'auto',
+    int? port,
+    String scope = 'auto',
+    String? label,
+    int? ttlMinutes,
+    String? pinCode,
+    int? maxDownloads,
+    int? maxUploads,
+    bool spa = false,
+    bool allowUpload = false,
+    bool overwriteUpload = false,
+  }) async {
+    final captured = {
+      'target': target,
+      'mode': mode,
+      'scope': scope,
+      'label': label,
+      'ttl_minutes': ttlMinutes,
+      'pin_code': pinCode,
+      'max_downloads': maxDownloads,
+      'max_uploads': maxUploads,
+      'spa': spa,
+      'allow_upload': allowUpload,
+      'overwrite_upload': overwriteUpload,
+    };
+    onOpen(captured);
+    return {
+      'ok': true,
+      'exposure': {
+        'id': 'sh_created99',
+        'kind': mode,
+        'label': label ?? '新建收件箱',
+        'target': target,
+        'allow_upload': allowUpload,
+        'max_uploads': maxUploads,
+        'overwrite_upload': overwriteUpload,
+        'primary_url': 'https://omen-mcp.iamr0s.de5.net/share/sh_created99/',
+      },
+    };
+  }
 }

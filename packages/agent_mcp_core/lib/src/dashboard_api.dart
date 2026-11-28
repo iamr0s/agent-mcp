@@ -436,8 +436,10 @@ class DashboardHandler {
           ttlMinutes: int.tryParse('${body['ttl_minutes'] ?? ''}'),
           pinCode: (body['pin_code'] ?? body['pin'])?.toString(),
           maxDownloads: int.tryParse('${body['max_downloads'] ?? ''}'),
+          maxUploads: int.tryParse('${body['max_uploads'] ?? ''}'),
           spa: body['spa'] == true,
           allowUpload: body['allow_upload'] == true,
+          overwriteUpload: body['overwrite_upload'] == true,
           validateWithPolicy: false,
         );
         return _json({'ok': true, 'exposure': created});

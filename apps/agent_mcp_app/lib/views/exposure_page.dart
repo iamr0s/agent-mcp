@@ -744,13 +744,22 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
     final primaryUrl = (item['primary_url'] ?? '').toString();
     final directFileUrl = (item['direct_file_url'] ?? '').toString();
     final hitCount = int.tryParse('${item['hit_count'] ?? 0}') ?? 0;
+    final uploadCount = int.tryParse('${item['upload_count'] ?? 0}') ?? 0;
     final bytesHuman = (item['bytes_sent_human'] ?? '0 B').toString();
+    final bytesRecvHuman = (item['bytes_received_human'] ?? '0 B').toString();
     final hasPin = item['has_pin'] == true;
     final allowUpload = item['allow_upload'] == true;
     final pinCode = (item['pin_code'] ?? '').toString();
+    final transferGuide = item['transfer_guide'] is Map
+        ? Map<String, dynamic>.from(item['transfer_guide'] as Map)
+        : const <String, dynamic>{};
+    final curlUploadCmd = (transferGuide['curl_upload_put'] ?? '').toString();
     final remDl = item['remaining_downloads'] is int
         ? item['remaining_downloads'] as int
         : int.tryParse('${item['remaining_downloads'] ?? ''}');
+    final remUp = item['remaining_uploads'] is int
+        ? item['remaining_uploads'] as int
+        : int.tryParse('${item['remaining_uploads'] ?? ''}');
     final remSec = item['remaining_seconds'] is int
         ? item['remaining_seconds'] as int
         : int.tryParse('${item['remaining_seconds'] ?? ''}');
@@ -805,6 +814,11 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
     if (directFileUrl.isNotEmpty) {
       copyOptions.add(
         EndpointCopyOption(badge: '原文件直链', url: directFileUrl),
+      );
+    }
+    if (allowUpload && curlUploadCmd.isNotEmpty) {
+      copyOptions.add(
+        EndpointCopyOption(badge: 'curl 上传命令', url: curlUploadCmd),
       );
     }
 
@@ -934,7 +948,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                           ),
                           if (allowUpload)
                             PrismPill(
-                              text: '双向收件箱',
+                              text: kind == 'file' ? '可上传替换' : '双向收件箱',
                               mono: false,
                               fg: c.clay,
                               bg: c.clay.withValues(alpha: 0.12),
@@ -957,7 +971,7 @@ class _ActiveExposureRowState extends State<_ActiveExposureRow> {
                               ),
                             ),
                           Text(
-                            '$scopeText · $ttlText${remDl != null ? " · 剩余 $remDl 次" : ""} · $hitCount 次访问 ($bytesHuman)',
+                            '$scopeText · $ttlText${remDl != null ? " · 剩下载 $remDl 次" : ""}${remUp != null ? " · 剩上传 $remUp 次" : ""} · $hitCount 次访问 (发 $bytesHuman${(allowUpload || uploadCount > 0) ? " · 收 $uploadCount 项 $bytesRecvHuman" : ""})',
                             style: sansStyle(
                               c,
                               size: 11.5,
@@ -1106,8 +1120,10 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
   String _scope = 'auto';
   late int _ttlMinutes = widget.defaultTtlMinutes;
   int _maxDownloads = 0;
+  int _maxUploads = 0;
   bool _spa = false;
   bool _allowUpload = false;
+  bool _overwriteUpload = false;
   bool _showAdvancedOptions = false;
   bool _editingRawPath = false;
   bool _picking = false;
@@ -1195,8 +1211,15 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
         ttlMinutes: _ttlMinutes,
         pinCode: pinText.isEmpty ? null : pinText,
         maxDownloads: _maxDownloads > 0 ? _maxDownloads : null,
+        maxUploads: ((_mode == 'folder' || _mode == 'file') &&
+                _allowUpload &&
+                _maxUploads > 0)
+            ? _maxUploads
+            : null,
         spa: _mode == 'site' && _spa,
-        allowUpload: _mode == 'folder' && _allowUpload,
+        allowUpload: (_mode == 'folder' || _mode == 'file') && _allowUpload,
+        overwriteUpload:
+            _mode == 'folder' && _allowUpload && _overwriteUpload,
       );
       if (!mounted) return;
       if (res['ok'] == true && res['exposure'] is Map) {
@@ -1980,14 +2003,47 @@ class _CreateExposureDialogState extends State<_CreateExposureDialog> {
                                       hintText: '可选备注名（留空自动按文件名或端口号生成）',
                                     ),
                                   ),
-                                  if (_mode == 'folder') ...[
+                                  if (_mode == 'folder' || _mode == 'file') ...[
                                     const SizedBox(height: 10),
                                     PrismCheckToggle(
                                       value: _allowUpload,
-                                      label: '允许访客拖拽或选择文件上传到此目录（双向收件箱模式）',
+                                      label: _mode == 'file'
+                                          ? '允许通过此链接上传或替换该文件（单文件接收槽 / 支持待创建路径）'
+                                          : '允许拖拽或通过 PUT/POST 上传文件到此目录（双向收件箱模式）',
                                       onChanged: (v) =>
                                           setState(() => _allowUpload = v),
                                     ),
+                                    if (_allowUpload) ...[
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 10,
+                                        runSpacing: 8,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          PrismSegmented<int>(
+                                            value: _maxUploads,
+                                            items: const [
+                                              (0, '不限上传数'),
+                                              (1, '传1个即关'),
+                                              (5, '限传5个'),
+                                              (20, '限传20个'),
+                                            ],
+                                            onChanged: (v) => setState(
+                                              () => _maxUploads = v,
+                                            ),
+                                          ),
+                                          if (_mode == 'folder')
+                                            PrismCheckToggle(
+                                              value: _overwriteUpload,
+                                              label: 'POST 同名直接覆盖',
+                                              onChanged: (v) => setState(
+                                                () => _overwriteUpload = v,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                   if (_mode == 'site') ...[
                                     const SizedBox(height: 10),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:agent_mcp_core/agent_mcp_core.dart';
 import 'package:archive/archive.dart';
@@ -2189,5 +2190,320 @@ void main() {
       'tunnel_protocol': 'http2',
     });
     expect(norm['tunnel_protocol'], equals('http2'));
+  });
+
+  test('Out-of-Band Binary Data Plane: PUT/POST raw + streaming multipart + pending single-file slot + chunked append + SHA-256/UndoStore + max_uploads + 3-layer MCP transfer_guide', () async {
+    final loopback = InternetAddress.loopbackIPv4.address;
+    final cfgFile = StoragePaths.instance.defaultConfigFile;
+    saveConfigFile(cfgFile, {
+      'server_name': 'binary-plane-mcp',
+      'transport': 'dual',
+      'host': loopback,
+      'port': 0,
+      'auth_mode': 'bearer',
+      'api_key': 'secret-bin-token',
+      'expose_enabled': true,
+      'expose_tailscale_enabled': false,
+      'expose_cloudflared_fallback': false,
+      'roots': [sandboxDir.path],
+    });
+    final cfg = ServerConfig.fromSavedMap(
+      loadSavedConfig(cfgFile),
+      configFile: cfgFile,
+    )..port = 0;
+    final engine = McpServerEngine(cfg);
+    final srv = await engine.serveHttp();
+    saveUpdatedConfigMap(cfgFile, {'port': srv.port});
+    final authority = '${srv.address.address}:${srv.port}';
+
+    try {
+      // Layer 1 & 2: MCP initialize instructions + read_file binary tip
+      final initRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'initialize',
+        'params': {
+          'protocolVersion': '2025-03-26',
+          'capabilities': const {},
+          'clientInfo': const {'name': 'bin-test', 'version': '1.0'},
+        },
+      });
+      final instructions =
+          ((initRpc!['result'] as Map)['instructions'] ?? '').toString();
+      expect(instructions, contains('BINARY & LARGE FILE TRANSFER'));
+      expect(instructions, contains('allow_upload=true'));
+      expect(instructions, contains('transfer_guide'));
+
+      final sampleBin = File(p.join(sandboxDir.path, 'existing_photo.png'));
+      sampleBin.writeAsBytesSync([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF, 0xFE, 0x00, 0x1A]);
+      final readBinRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 2,
+        'method': 'tools/call',
+        'params': {
+          'name': 'read_file',
+          'arguments': {'path': sampleBin.path},
+        },
+      });
+      final readBinText =
+          (((readBinRpc!['result'] as Map)['content'] as List).first as Map)['text']
+              as String;
+      expect(readBinText, startsWith('Error: '));
+      expect(readBinText, contains('appears to be a binary file.'));
+      expect(readBinText, contains('manage_expose'));
+      expect(readBinText, contains('allow_upload=true'));
+
+      // 1. Folder Bi-Directional Binary Data Plane (auto-creates missing folder!)
+      final inboxDir = Directory(p.join(sandboxDir.path, 'auto_created_inbox'));
+      expect(inboxDir.existsSync(), isFalse);
+
+      final openFolderRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 3,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {
+            'action': 'open',
+            'target': inboxDir.path,
+            'mode': 'folder',
+            'allow_upload': true,
+            'overwrite_upload': true,
+          },
+        },
+      });
+      final folderJson = jsonDecode(
+        (((openFolderRpc!['result'] as Map)['content'] as List).first as Map)['text']
+            as String,
+      ) as Map<String, dynamic>;
+      expect(folderJson['ok'], isTrue);
+      expect(inboxDir.existsSync(), isTrue);
+      final folderExp = folderJson['exposure'] as Map<String, dynamic>;
+      final folderId = folderExp['id'] as String;
+      final folderGuide = folderExp['transfer_guide'] as Map<String, dynamic>;
+      expect(folderGuide['curl_upload_put'], contains('curl -fL -T'));
+      expect(folderGuide['curl_upload_form'], contains('curl -fL -F'));
+      expect(folderGuide['chunked_upload_note'], contains('append=1'));
+
+      // CORS preflight OPTIONS check
+      final optReq = http.Request(
+        'OPTIONS',
+        Uri.parse('http://$authority/share/$folderId'),
+      );
+      final optStreamed = await optReq.send();
+      expect(optStreamed.statusCode, equals(200));
+      expect(
+        optStreamed.headers['access-control-allow-methods'] ?? '',
+        contains('PUT'),
+      );
+      expect(
+        optStreamed.headers['access-control-allow-headers'] ?? '',
+        contains('X-Expected-Sha256'),
+      );
+
+      // PUT raw binary into nested auto-created subdirectory + SHA-256 verification
+      final v1Bytes = Uint8List.fromList(List<int>.generate(512, (i) => (i * 37) & 0xFF));
+      final v1Sha = sha256.convert(v1Bytes).toString();
+      final putV1 = await http.put(
+        Uri.parse('http://$authority/share/$folderId/releases/android/app.apk'),
+        headers: {'x-expected-sha256': v1Sha},
+        body: v1Bytes,
+      );
+      expect(putV1.statusCode, equals(200));
+      final putV1Json = jsonDecode(putV1.body) as Map<String, dynamic>;
+      expect(putV1Json['ok'], isTrue);
+      expect(putV1Json['sha256'], equals(v1Sha));
+      expect(putV1Json['relative_path'], equals('releases/android/app.apk'));
+      final nestedApk = File(p.join(inboxDir.path, 'releases', 'android', 'app.apk'));
+      expect(nestedApk.readAsBytesSync(), equals(v1Bytes));
+
+      // Bad SHA-256 header -> 422 Unprocessable Entity & existing file untouched!
+      final badPut = await http.put(
+        Uri.parse('http://$authority/share/$folderId/releases/android/app.apk'),
+        headers: {'x-expected-sha256': '0' * 64},
+        body: Uint8List.fromList([1, 2, 3, 4]),
+      );
+      expect(badPut.statusCode, equals(422));
+      expect(nestedApk.readAsBytesSync(), equals(v1Bytes));
+
+      // Overwrite via PUT + verify UndoStore restores v1Bytes via `undo_edit`!
+      final v2Bytes = Uint8List.fromList(List<int>.generate(128, (i) => 255 - (i & 0xFF)));
+      final putV2 = await http.put(
+        Uri.parse('http://$authority/share/$folderId/releases/android/app.apk'),
+        body: v2Bytes,
+      );
+      expect(putV2.statusCode, equals(200));
+      expect(nestedApk.readAsBytesSync(), equals(v2Bytes));
+
+      final undoRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 4,
+        'method': 'tools/call',
+        'params': {
+          'name': 'undo_edit',
+          'arguments': {'path': nestedApk.path},
+        },
+      });
+      final undoText =
+          (((undoRpc!['result'] as Map)['content'] as List).first as Map)['text']
+              as String;
+      expect(undoText, isNot(startsWith('Error:')));
+      expect(nestedApk.readAsBytesSync(), equals(v1Bytes));
+
+      // Streaming POST multipart/form-data (NO trailing slash -> zero 302 body loss, multi-file, binary + CJK filename!)
+      final mpBytesA = Uint8List.fromList([
+        0x00, 0xFF, 0x0D, 0x0A, 0x2D, 0x2D, 0x89, 0x50, 0x4E, 0x47,
+        ...List<int>.generate(1500, (i) => i & 0xFF),
+      ]);
+      final mpBytesB = Uint8List.fromList(
+        List<int>.generate(900, (i) => (i * 13 + 7) & 0xFF),
+      );
+      final mpReq = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://$authority/share/$folderId'),
+      )
+        ..fields['note'] = 'ignored_text_field'
+        ..files.add(http.MultipartFile.fromBytes('file1', mpBytesA, filename: 'raw_icon.png'))
+        ..files.add(http.MultipartFile.fromBytes('file2', mpBytesB, filename: '手册_v2.pdf'));
+      final mpStreamed = await mpReq.send();
+      final mpResp = await http.Response.fromStream(mpStreamed);
+      expect(mpResp.statusCode, equals(200));
+      final mpJson = jsonDecode(mpResp.body) as Map<String, dynamic>;
+      expect(mpJson['ok'], isTrue);
+      expect((mpJson['files'] as List).length, equals(2));
+      expect(
+        File(p.join(inboxDir.path, 'raw_icon.png')).readAsBytesSync(),
+        equals(mpBytesA),
+      );
+      expect(
+        File(p.join(inboxDir.path, '手册_v2.pdf')).readAsBytesSync(),
+        equals(mpBytesB),
+      );
+
+      // Chunked Append Upload (3 slices + 409 offset mismatch guard + final SHA-256 check)
+      final chunk0 = Uint8List.fromList(List<int>.generate(300, (i) => i & 0xFF));
+      final chunk1 = Uint8List.fromList(List<int>.generate(400, (i) => (i + 50) & 0xFF));
+      final chunk2 = Uint8List.fromList(List<int>.generate(250, (i) => (i + 99) & 0xFF));
+      final fullChunked = Uint8List.fromList([...chunk0, ...chunk1, ...chunk2]);
+      final fullChunkedSha = sha256.convert(fullChunked).toString();
+
+      final c0Resp = await http.post(
+        Uri.parse('http://$authority/share/$folderId/big_video.mp4?overwrite=1&more=1'),
+        body: chunk0,
+      );
+      expect(c0Resp.statusCode, equals(200));
+      expect((jsonDecode(c0Resp.body) as Map)['partial'], isTrue);
+
+      // Wrong offset -> 409 Conflict without corrupting partial file
+      final badOffResp = await http.post(
+        Uri.parse('http://$authority/share/$folderId/big_video.mp4?append=1&offset=9999&more=1'),
+        body: chunk1,
+      );
+      expect(badOffResp.statusCode, equals(409));
+
+      final c1Resp = await http.post(
+        Uri.parse('http://$authority/share/$folderId/big_video.mp4?append=1&offset=300&more=1'),
+        body: chunk1,
+      );
+      expect(c1Resp.statusCode, equals(200));
+
+      final c2Resp = await http.post(
+        Uri.parse('http://$authority/share/$folderId/big_video.mp4?append=1&offset=700'),
+        headers: {'x-expected-sha256': fullChunkedSha},
+        body: chunk2,
+      );
+      expect(c2Resp.statusCode, equals(200));
+      final c2Json = jsonDecode(c2Resp.body) as Map<String, dynamic>;
+      expect(c2Json['partial'], isFalse);
+      expect(c2Json['sha256'], equals(fullChunkedSha));
+      expect(
+        File(p.join(inboxDir.path, 'big_video.mp4')).readAsBytesSync(),
+        equals(fullChunked),
+      );
+
+      // Path traversal (`..`) and read-only policy blocks
+      final travResp = await http.put(
+        Uri.parse('http://$authority/share/$folderId/?filename=..%2Fescape.bin'),
+        body: [1, 2, 3],
+      );
+      expect(travResp.statusCode, anyOf(equals(400), equals(403)));
+
+      // 2. Pending Single-File Upload Slot + PIN + max_uploads=1 burn-after-upload
+      final pendingTarget = File(p.join(sandboxDir.path, 'pending_slot', 'signed_release.apk'));
+      expect(pendingTarget.existsSync(), isFalse);
+
+      final openSlotRpc = await engine.handleJsonRpcMessage({
+        'jsonrpc': '2.0',
+        'id': 5,
+        'method': 'tools/call',
+        'params': {
+          'name': 'manage_expose',
+          'arguments': {
+            'action': 'open',
+            'target': pendingTarget.path,
+            'mode': 'file',
+            'allow_upload': true,
+            'max_uploads': 1,
+            'pin_code': '2468',
+          },
+        },
+      });
+      final slotJson = jsonDecode(
+        (((openSlotRpc!['result'] as Map)['content'] as List).first as Map)['text']
+            as String,
+      ) as Map<String, dynamic>;
+      expect(slotJson['ok'], isTrue);
+      final slotExp = slotJson['exposure'] as Map<String, dynamic>;
+      expect(slotExp['target_exists'], isFalse);
+      expect(slotExp['max_uploads'], equals(1));
+      expect(slotExp['remaining_uploads'], equals(1));
+      final slotId = slotExp['id'] as String;
+      final slotGuide = slotExp['transfer_guide'] as Map<String, dynamic>;
+      expect(slotGuide['upload_put_url'], contains('pin=2468'));
+
+      // Before upload: HTML browser visit renders pending dropzone; raw download returns 404
+      final pendingHtml = await http.get(
+        Uri.parse('http://$authority/share/$slotId?pin=2468'),
+        headers: {'accept': 'text/html'},
+      );
+      expect(pendingHtml.statusCode, equals(200));
+      expect(pendingHtml.body, contains('等待上传 signed_release.apk'));
+
+      final pendingRaw = await http.get(
+        Uri.parse('http://$authority/share/$slotId?raw=1&pin=2468'),
+      );
+      expect(pendingRaw.statusCode, equals(404));
+
+      // Upload without PIN -> 401 Unauthorized
+      final noPinPut = await http.put(
+        Uri.parse('http://$authority/share/$slotId'),
+        body: [0x50, 0x4B, 0x03, 0x04],
+      );
+      expect(noPinPut.statusCode, equals(401));
+
+      // Upload with X-Share-Pin -> 200 OK, creates target binary file, remaining_uploads == 0!
+      final apkBytes = Uint8List.fromList([0x50, 0x4B, 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF]);
+      final okSlotPut = await http.put(
+        Uri.parse('http://$authority/share/$slotId'),
+        headers: {'x-share-pin': '2468'},
+        body: apkBytes,
+      );
+      expect(okSlotPut.statusCode, equals(200));
+      final okSlotBody = jsonDecode(okSlotPut.body) as Map<String, dynamic>;
+      expect(okSlotBody['remaining_uploads'], equals(0));
+      expect(pendingTarget.existsSync(), isTrue);
+      expect(pendingTarget.readAsBytesSync(), equals(apkBytes));
+
+      // Second upload immediately rejected (burn-after-upload quota exhausted -> 404/410)
+      final secondSlotPut = await http.put(
+        Uri.parse('http://$authority/share/$slotId'),
+        headers: {'x-share-pin': '2468'},
+        body: [1, 2, 3],
+      );
+      expect(secondSlotPut.statusCode, anyOf(equals(404), equals(410)));
+    } finally {
+      await ExposureManager.instance.closeAllExposures();
+      await srv.close(force: true);
+    }
   });
 }

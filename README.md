@@ -1,4 +1,4 @@
-# Agent MCP v3.5.7
+# Agent MCP v3.5.8
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,10 +12,10 @@
 >
 > 眼前的开发电脑早已不缺本地编程助手；但当你的代码、算力、容器或测试环境位于**远端 Linux 云服务器、内网 GPU 主机、NAS 或手头的 Android 手机**上时，本地 `stdio` 工具便触碰到了物理边界。
 >
-> **Agent MCP v3.5.7** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**把远端刚生成的视频或网站端口一键映射成外部预览链接**。
+> **Agent MCP v3.5.8** 基于原生 **Dart & Flutter** 构建，**零 Python / Node.js 运行时依赖**，单文件解压即跑。把它部署到任意服务器、主机或手机上，你的主力电脑（Claude、Cursor、Gemini Web、Codex、Antigravity）以及**自研 Python / TypeScript Agent 程序**即可通过标准 **Streamable HTTP (`/mcp`)** 远程读写补丁、守护长任务、经跳板调用内网子服务，还能**通过 `manage_expose` 一键开启外部预览链接或零 Token 双向收发二进制大文件**。
 
 <p align="center">
-  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.7 跨设备远程执行节点总览">
+  <img src="assets/previews/hero_overview.png" width="96%" alt="Agent MCP v3.5.8 跨设备远程执行节点总览">
 </p>
 
 ## 快速下载与安装
@@ -31,20 +31,20 @@
 | **GitHub Actions** | [前往 Actions Artifacts 下载](https://github.com/iamr0s/agent-mcp/actions) | 需登录 GitHub | 点进最新 `Build & Publish Releases` 构建记录底部下载对应系统产物 |
 
 <details>
-<summary><b>展开查看全平台发行包文件名与适用场景对照表（Windows / macOS / Linux / Android）</b></summary>
+<summary><b>展开查看网盘分目录结构与全平台发行包对照表（windows / macos / linux / android → x64 / arm64）</b></summary>
 
 <br>
 
-| 目标设备平台 | 发行包文件名 | 适用场景说明 |
+| 目标设备平台 | 网盘子目录与发行包文件名 | 适用场景说明 |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 桌面安装版 (x64)** | `AgentMCP-v3.5.7-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
-| **Windows 10 / 11 免安装绿色版 (x64)** | `AgentMCP-v3.5.7-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录 |
-| **macOS 桌面端 (Apple Silicon M 系列)** | `AgentMCP-v3.5.7-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（内置 `web_dashboard/` 与 `agent-mcp` CLI），拖拽入 Applications 即用 |
-| **macOS 桌面端 (Intel x64)** | `AgentMCP-v3.5.7-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像 |
-| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `AgentMCP-v3.5.7-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh` 启动器一键注册（同提供 `arm64-gui`） |
-| **Linux 服务器 / GPU 机 / NAS (CLI)** | `AgentMCP-v3.5.7-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + 完整 `web_dashboard/` 网页管理台，支持 `systemd` 常驻 |
-| **Android 手机 / 平板 (ARM64 推荐)** | `AgentMCP-v3.5.7-android-arm64-v8a.apk` | 固定签名正式版，适用于主流 64 位真机，含远控多节点 + 本机三档权限引擎 |
-| **Android 全架构通用版** | `AgentMCP-v3.5.7-android-universal.apk` | 固定签名正式版，同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64` |
+| **Windows 10 / 11 桌面安装版 (x64)** | `windows/x64/AgentMCP-v3.5.8-windows-x64-sfx.exe` | 真 Dart / Flutter 同源硬件加速安装向导（`--installer`），含桌面控制台、Web 管理台与 `agent-mcp.exe` CLI |
+| **Windows 10 / 11 免安装绿色版 (x64)** | `windows/x64/AgentMCP-v3.5.8-windows-x64-portable.zip` | 解压即用，全部配置与日志收敛在当前目录（另含 `windows/x64/*-cli.zip` 与 `windows/arm64/*-cli.zip`） |
+| **macOS 桌面端 (Apple Silicon M 系列)** | `macos/arm64/AgentMCP-v3.5.8-macos-arm64.dmg` | 原生 macOS 玻璃质感桌面应用（同目录另提供免挂载 `*-app.zip` 与 `*-cli.tar.gz`） |
+| **macOS 桌面端 (Intel x64)** | `macos/x64/AgentMCP-v3.5.8-macos-x64.dmg` | 适用于 Intel 芯片 Mac 的原生桌面 `.dmg` 镜像（同目录另提供 `*-app.zip` 与 `*-cli.tar.gz`） |
+| **Linux 桌面端 (x64 / ARM64 GTK3 GUI)** | `linux/x64/AgentMCP-v3.5.8-linux-x64-gui.tar.gz` | 原生 GTK3 图形桌面控制台 + `agent-mcp` CLI + `install-desktop.sh`（ARM64 位于 `linux/arm64/`） |
+| **Linux 服务器 / GPU 机 / NAS (CLI)** | `linux/x64/AgentMCP-v3.5.8-linux-x64-cli.tar.gz` | **无头服务端首选**：零依赖原生 `agent-mcp` 单文件 + `web_dashboard/`，支持 `systemd` 常驻（ARM64 位于 `linux/arm64/`） |
+| **Android 手机 / 平板 (ARM64 推荐)** | `android/arm64-v8a/AgentMCP-v3.5.8-android-arm64-v8a.apk` | 固定签名正式版，适用于主流 64 位真机（32 位与模拟器分别位于 `android/armeabi-v7a/` 与 `android/x86_64/`） |
+| **Android 全架构通用版** | `android/universal/AgentMCP-v3.5.8-android-universal.apk` | 固定签名正式版，同时包含 `arm64-v8a`、`armeabi-v7a` 与 `x86_64` |
 
 </details>
 
@@ -62,7 +62,7 @@
 
 ## 为什么选择 Agent MCP？（典型跨设备场景）
 
-| 常见痛点场景 | 传统做法的局限 | Agent MCP v3.5.7 的解决方式 |
+| 常见痛点场景 | 传统做法的局限 | Agent MCP v3.5.8 的解决方式 |
 | :--- | :--- | :--- |
 | **电脑端 AI 调试远端 Linux 云服务器 / GPU 机** | 需在服务器配复杂 Python/Node 环境，或靠粗粒度 SSH 命令整文件覆盖，内网数据库不敢开公网 | 单文件解压 + `agent-mcp init` 10 秒上线（自带 `/dashboard/` 网页管理台与 `systemd` 守护），支持行级精准补丁、`undo_edit` 秒撤回与后台进程托管 |
 | **自研 Python / TS Agent 程序调度多台机器** | 需自己封装一套私有 RPC 接口、鉴权、命令超时回收与文件编码处理 | 原生兼容官方 MCP SDK（`streamablehttp_client` / `StreamableHTTPClientTransport`），几行代码即可安全调用远端主机与手机上的 22 项标准工具 |
@@ -77,7 +77,7 @@
 
 ```bash
 # 1. 从 GitHub Releases 发布页提供的下载渠道获取对应发行包并解压（内置 agent-mcp 单文件与 web_dashboard 网页前端）
-tar -xzf AgentMCP-v3.5.7-linux-x64-cli.tar.gz
+tar -xzf AgentMCP-v3.5.8-linux-x64-cli.tar.gz
 
 # 2. 一行初始化：监听全网卡、自动识别局域网与 Tailscale IP、生成高强 Bearer Key
 ./agent-mcp init --name gpu-server-01 --host 0.0.0.0 -p 8778 --auth bearer --generate-key
@@ -171,7 +171,8 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
   2. **文件夹目录分享 (`folder`)**：打开展示清爽云盘目录与面包屑，支持进入任意子目录与 `?zip=1` 64KB 零内存堆积流式打包下载；**点击子目录内任意文件即进入单文件预览页，顶部提供可点击层级面包屑、返回所在子目录与「上一文件 / 下一文件」快捷切换（支持键盘 `←` / `→`）**。
   3. **静态网站 / HTML 分享 (`site`)**：无论传入**单个 `.html` 文件**还是**含 `index.html` 的前端构建目录**，打开都直接全屏作为真实网页运行，并拦截软链接逃逸与敏感凭据路径。
   4. **全双工端口转发分享 (`port`)**：把本机正在运行的 `:3000` / `:5173` / `:7860` 等端口一键反向代理为外部预览链接，**原生支持 `Upgrade: websocket` 全双工升级转发（完整兼容 Vite / Next.js HMR 热更新、Gradio 与 Jupyter）**。
-- **拖拽直享、可选提取码与限次即焚**：桌面端与网页端支持把任意文件、文件夹或 `.html` 直接拖入窗口自动识别模式；可按需设置 **4–8 位访问提取码（PIN）** 与 **最大下载次数（如 1 次即焚自动收起）**。
+- **零 Token 双向二进制数据平面（`allow_upload: true`）**：针对 MCP 文本协议无法高效传输图片、PDF、Office、APK、压缩包及音视频等二进制大文件的局限，开启 `allow_upload: true` 后同时支持**文件夹双向收件箱**与**单文件待上传接收槽 / 替换**，原生兼容 HTTP **`PUT` 原始二进制流**、**`POST multipart/form-data`（`curl -F` 流式零内存堆积解析）** 与 **`?append=1` 分片续传（网页端 `>48MB` 自动按 `32MB` 切片穿透 Cloudflare 100MB 限制）**，内置 `.part` 原子落盘、`SHA-256` 完整性校验、`undo_edit` 覆盖回滚及开箱即用的 `transfer_guide` `curl` 命令指引。
+- **拖拽直享、可选提取码与限次即焚**：桌面端与网页端支持把任意文件、文件夹或 `.html` 直接拖入窗口自动识别模式；可按需设置 **4–8 位访问提取码（PIN）**、**最大下载次数（1 次即焚）** 与 **最大上传次数（传 1 个即关）**。
 - **独立管理页统一掌控**：切到 **「外网与分享」** 标签页，可点选四态快捷卡片、调用系统原生选文件/选文件夹对话框、生成手机扫码二维码、复制多通道地址或点击 **「全部关闭」** 一键收回。
 - **设置页 Tailscale 总开关**：在 **「服务配置 → Tailscale 与外网分享设置」** 中，随时一键总控 AI 映射权限、切换公网或组网私享模式，并设置默认自动到期时间（30 分钟 / 2 小时 / 24 小时 / 手动关闭）。
 
@@ -211,7 +212,7 @@ agent-mcp remote http://100.88.12.5:8778 call list_roots '{}' -k sk-mcp-你的�
 | | `file_op` / `undo_edit` | 移动、复制、删除路径，或用 `undo_edit` 一键回滚历史修改快照 |
 | **远程终端与守护** | `run_command` | 执行短时命令并返回输出，超时自动回收整棵子进程树 |
 | | `start_process` / `manage_process` | 后台启动长时训练、编译或开发服务，随时增量读日志、发输入或终止进程 |
-| **外网映射分享** | `manage_expose` | **将节点上的视频/文件、静态目录或本地端口一键映射为 Tailscale / 公网预览链接，支持列表查询与一键关闭** |
+| **外网映射与二进制快传** | `manage_expose` | **将节点上的文件、目录、静态网页或本地端口映射为 Tailscale / 公网链接，并支持 `allow_upload=true` 零 Token HTTP `PUT`/`POST` 双向传输二进制与超大文件** |
 | **内网子服务跳板** | `list_sub_mcps` / `inspect_sub_mcp` / `call_sub_mcp` | 仅用 3 个轻量入口（或切为 `direct` 直挂模式）按需发现并调用支持 OAuth 2.1 / Streamable HTTP / SSE / WS / stdio 的任意子 MCP 服务 |
 | **桌面生产力与多模态** | `manage_clipboard` / `capture_screen` | 跨平台系统剪贴板读写与桌面屏幕多模态截图（直返 MCP `image/png` 视觉块，受细粒度能力开关保护） |
 

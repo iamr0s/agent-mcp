@@ -231,6 +231,12 @@ void registerFileTools(
     try {
       decoded = await PrivFs.readText(targetPath);
     } on FormatException catch (e) {
+      if (e.message.contains('binary file')) {
+        return 'Error: ${e.message} '
+            'Tip: MCP text tools only read text; to download or transfer binary files via HTTP without token bloat, '
+            'call manage_expose(action="open", target=${jsonEncode(targetPath)}) and fetch its direct_file_url '
+            '(or pass allow_upload=true to upload/replace binary files via HTTP PUT/POST).';
+      }
       return 'Error: ${e.message}';
     } catch (e) {
       return 'Error: $e';
@@ -324,7 +330,8 @@ void registerFileTools(
   registerTool(
     name: 'read_file',
     description:
-        'Read a text file with line numbers and range slicing to save context.',
+        'Read a text file with line numbers and range slicing to save context. '
+        'Text files only; for binary/media files (PDF, images, Office, APK, ZIP, audio/video), call manage_expose(action="open", target=path) and HTTP GET direct_file_url.',
     annotations: readOnlyAnn,
     inputSchema: {
       'type': 'object',
@@ -823,7 +830,8 @@ void registerFileTools(
   registerTool(
     name: 'create_file',
     description:
-        'Create a new file (creating parent directories automatically) or overwrite if overwrite=True.',
+        'Create a new text file (creating parent directories automatically) or overwrite if overwrite=True. '
+        'Text content only; to upload binary files (PDF, images, Office, APK, ZIP, audio/video) to this host, call manage_expose(action="open", target=path, allow_upload=true) and HTTP PUT/POST raw bytes using transfer_guide.',
     annotations: safeWriteAnn,
     inputSchema: {
       'type': 'object',

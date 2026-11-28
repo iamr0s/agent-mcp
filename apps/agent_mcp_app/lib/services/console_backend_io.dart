@@ -1852,8 +1852,10 @@ class _IoConsoleBackend extends ConsoleBackend {
     int? ttlMinutes,
     String? pinCode,
     int? maxDownloads,
+    int? maxUploads,
     bool spa = false,
     bool allowUpload = false,
+    bool overwriteUpload = false,
   }) async {
     if (isRemoteNodeActive) {
       return _guardRemote(
@@ -1866,8 +1868,10 @@ class _IoConsoleBackend extends ConsoleBackend {
           ttlMinutes: ttlMinutes,
           pinCode: pinCode,
           maxDownloads: maxDownloads,
+          maxUploads: maxUploads,
           spa: spa,
           allowUpload: allowUpload,
+          overwriteUpload: overwriteUpload,
         ),
       );
     }
@@ -1885,8 +1889,10 @@ class _IoConsoleBackend extends ConsoleBackend {
         ttlMinutes: ttlMinutes,
         pinCode: pinCode,
         maxDownloads: maxDownloads,
+        maxUploads: maxUploads,
         spa: spa,
         allowUpload: allowUpload,
+        overwriteUpload: overwriteUpload,
         validateWithPolicy: false,
       );
       _refreshSignal.value++;

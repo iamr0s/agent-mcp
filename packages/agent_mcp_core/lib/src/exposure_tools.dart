@@ -11,6 +11,7 @@ import 'package:stream_channel/stream_channel.dart';
 
 import 'auth.dart';
 import 'config.dart';
+import 'file_tools.dart';
 import 'logging_utils.dart';
 import 'playit_tunnel.dart';
 import 'privileged_exec.dart';
@@ -18,6 +19,260 @@ import 'process_tools.dart';
 import 'qr_svg.dart';
 import 'tool_types.dart';
 import 'tunnel.dart';
+
+class _SingleDigestSink implements Sink<Digest> {
+  Digest? value;
+  @override
+  void add(Digest data) => value = data;
+  @override
+  void close() {}
+}
+
+const Map<String, String> _shareCorsHeaders = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, HEAD, POST, PUT, OPTIONS',
+  'access-control-allow-headers':
+      'Content-Type, Range, X-Share-Pin, X-Upload-Filename, X-Expected-Sha256, X-Upload-Offset, X-Upload-Append, X-Upload-Overwrite',
+  'access-control-expose-headers':
+      'Content-Length, Content-Range, Content-Disposition, X-Saved-Filename, X-Sha256',
+  'access-control-max-age': '86400',
+};
+
+Future<void> _ensureShareDirectory(String dirPath) async {
+  if ((await PrivFs.stat(dirPath)).isDirectory) return;
+  if (await PrivFs.useBridgeForPath(dirPath)) {
+    final marker = p.join(dirPath, '.mcp_dir_init');
+    await PrivFs.writeBytes(marker, const <int>[], createParents: true);
+    await PrivFs.delete(marker);
+  } else {
+    Directory(dirPath).createSync(recursive: true);
+  }
+}
+
+int _indexOfBytes(Uint8List haystack, List<int> needle, [int start = 0]) {
+  final nLen = needle.length;
+  if (nLen == 0) return start;
+  final maxStart = haystack.length - nLen;
+  if (start > maxStart) return -1;
+  final first = needle[0];
+  for (var i = start; i <= maxStart; i++) {
+    if (haystack[i] != first) continue;
+    var matched = true;
+    for (var j = 1; j < nLen; j++) {
+      if (haystack[i + j] != needle[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return i;
+  }
+  return -1;
+}
+
+String? _extractMultipartBoundary(String contentType) {
+  for (final rawPart in contentType.split(';').skip(1)) {
+    final part = rawPart.trim();
+    if (part.toLowerCase().startsWith('boundary=')) {
+      var b = part.substring('boundary='.length).trim();
+      if (b.length >= 2 && b.startsWith('"') && b.endsWith('"')) {
+        b = b.substring(1, b.length - 1);
+      }
+      if (b.isNotEmpty) return b;
+    }
+  }
+  return null;
+}
+
+String? _extractDispositionFilename(String headersBlock) {
+  for (final rawLine in headersBlock.split(RegExp(r'\r?\n'))) {
+    final colon = rawLine.indexOf(':');
+    if (colon <= 0) continue;
+    if (rawLine.substring(0, colon).trim().toLowerCase() !=
+        'content-disposition') {
+      continue;
+    }
+    final val = rawLine.substring(colon + 1);
+    final extMatch =
+        RegExp(r"filename\*\s*=\s*UTF-8''([^;\r\n]+)", caseSensitive: false)
+            .firstMatch(val);
+    if (extMatch != null) {
+      try {
+        return Uri.decodeComponent(extMatch.group(1)!.trim());
+      } catch (_) {}
+    }
+    final qMatch =
+        RegExp(r'filename\s*=\s*"([^"]*)"', caseSensitive: false).firstMatch(val);
+    if (qMatch != null) {
+      return qMatch.group(1)!.trim();
+    }
+    final plainMatch =
+        RegExp(r'filename\s*=\s*([^;\s\r\n]+)', caseSensitive: false)
+            .firstMatch(val);
+    if (plainMatch != null) {
+      return plainMatch.group(1)!.trim();
+    }
+  }
+  return null;
+}
+
+class _MultipartFileSink {
+  final Future<void> Function(Uint8List chunk) onChunk;
+  final Future<Map<String, dynamic>> Function() onFinish;
+  final Future<void> Function() onAbort;
+  const _MultipartFileSink({
+    required this.onChunk,
+    required this.onFinish,
+    required this.onAbort,
+  });
+}
+
+/// Streams a `multipart/form-data` request body in O(boundary_len) heap memory
+/// (~64KB per chunk), invoking [openFileSink] for each file part with a filename.
+Future<List<Map<String, dynamic>>> _streamMultipartUploads({
+  required Stream<List<int>> bodyStream,
+  required String boundary,
+  required Future<_MultipartFileSink> Function(String partFilename) openFileSink,
+}) async {
+  final firstBoundary = utf8.encode('--$boundary');
+  final partDelim = utf8.encode('\r\n--$boundary');
+  const hdrEnd = <int>[13, 10, 13, 10];
+  const lfHdrEnd = <int>[10, 10];
+
+  var buf = Uint8List(0);
+  var state = 0; // 0 = seek first boundary, 1 = headers, 2 = body, 3 = done
+  _MultipartFileSink? activeSink;
+  final savedResults = <Map<String, dynamic>>[];
+
+  Uint8List concatBytes(Uint8List a, List<int> b) {
+    if (a.isEmpty) return b is Uint8List ? b : Uint8List.fromList(b);
+    if (b.isEmpty) return a;
+    final out = Uint8List(a.length + b.length);
+    out.setRange(0, a.length, a);
+    out.setRange(a.length, out.length, b);
+    return out;
+  }
+
+  try {
+    await for (final chunk in bodyStream) {
+      if (state == 3) continue;
+      buf = concatBytes(buf, chunk);
+
+      var progressed = true;
+      while (progressed && state != 3) {
+        progressed = false;
+        if (state == 0) {
+          final idx = _indexOfBytes(buf, firstBoundary);
+          if (idx < 0) {
+            if (buf.length > 65536) {
+              throw const FormatException('Invalid multipart preamble.');
+            }
+            break;
+          }
+          final after = idx + firstBoundary.length;
+          if (buf.length < after + 2) break;
+          if (buf[after] == 45 && buf[after + 1] == 45) {
+            state = 3;
+            buf = Uint8List(0);
+            break;
+          }
+          if (buf[after] == 13 && buf[after + 1] == 10) {
+            buf = Uint8List.sublistView(buf, after + 2);
+            state = 1;
+            progressed = true;
+          } else if (buf[after] == 10) {
+            buf = Uint8List.sublistView(buf, after + 1);
+            state = 1;
+            progressed = true;
+          } else {
+            throw const FormatException('Malformed multipart boundary line.');
+          }
+        } else if (state == 1) {
+          var hIdx = _indexOfBytes(buf, hdrEnd);
+          var skip = 4;
+          if (hIdx < 0) {
+            hIdx = _indexOfBytes(buf, lfHdrEnd);
+            skip = 2;
+          }
+          if (hIdx < 0) {
+            if (buf.length > 32768) {
+              throw const FormatException('Multipart part headers too large.');
+            }
+            break;
+          }
+          final hdrStr =
+              utf8.decode(Uint8List.sublistView(buf, 0, hIdx), allowMalformed: true);
+          buf = Uint8List.sublistView(buf, hIdx + skip);
+          final fname = _extractDispositionFilename(hdrStr);
+          if (fname != null && fname.trim().isNotEmpty) {
+            activeSink = await openFileSink(fname.trim());
+          } else {
+            activeSink = null;
+          }
+          state = 2;
+          progressed = true;
+        } else if (state == 2) {
+          final dIdx = _indexOfBytes(buf, partDelim);
+          if (dIdx >= 0) {
+            final after = dIdx + partDelim.length;
+            if (buf.length < after + 2) {
+              // Wait for trailing '--' or '\r\n' bytes
+              if (dIdx > 0) {
+                if (activeSink != null) {
+                  await activeSink.onChunk(Uint8List.sublistView(buf, 0, dIdx));
+                }
+                buf = Uint8List.sublistView(buf, dIdx);
+              }
+              break;
+            }
+            if (dIdx > 0 && activeSink != null) {
+              await activeSink.onChunk(Uint8List.sublistView(buf, 0, dIdx));
+            }
+            if (activeSink != null) {
+              savedResults.add(await activeSink.onFinish());
+              activeSink = null;
+            }
+            if (buf[after] == 45 && buf[after + 1] == 45) {
+              state = 3;
+              buf = Uint8List(0);
+              break;
+            } else if (buf[after] == 13 && buf[after + 1] == 10) {
+              buf = Uint8List.sublistView(buf, after + 2);
+              state = 1;
+              progressed = true;
+            } else if (buf[after] == 10) {
+              buf = Uint8List.sublistView(buf, after + 1);
+              state = 1;
+              progressed = true;
+            } else {
+              throw const FormatException('Malformed multipart part delimiter.');
+            }
+          } else {
+            final keepTail = partDelim.length + 4;
+            if (buf.length > keepTail) {
+              final flushLen = buf.length - keepTail;
+              if (activeSink != null) {
+                await activeSink.onChunk(Uint8List.sublistView(buf, 0, flushLen));
+              }
+              buf = Uint8List.sublistView(buf, flushLen);
+            }
+          }
+        }
+      }
+    }
+
+    if (state != 3) {
+      throw const FormatException(
+        'Multipart upload stream ended before closing boundary.',
+      );
+    }
+    return savedResults;
+  } catch (_) {
+    if (activeSink != null) {
+      await activeSink.onAbort();
+    }
+    rethrow;
+  }
+}
 
 final RegExp _cfTryUrlRe =
     RegExp(r'https://[a-z0-9-]+\.trycloudflare\.com', caseSensitive: false);
@@ -631,14 +886,18 @@ class ExposureItem {
   final String scope; // 'auto' | 'tailscale' | 'public' | 'lan'
   final bool spa;
   final bool allowUpload;
+  final bool overwriteUpload;
   final String? pinCode;
   final int? maxDownloads;
+  final int? maxUploads;
   final int createdAtMs;
   final int? expiresAtMs;
 
   int hitCount = 0;
   int downloadCount = 0;
+  int uploadCount = 0;
   int bytesSent = 0;
+  int bytesReceived = 0;
   int? lastAccessAtMs;
 
   String tailscaleHttpsUrl = '';
@@ -658,8 +917,10 @@ class ExposureItem {
     required this.scope,
     this.spa = false,
     this.allowUpload = false,
+    this.overwriteUpload = false,
     this.pinCode,
     this.maxDownloads,
+    this.maxUploads,
     required this.createdAtMs,
     this.expiresAtMs,
   });
@@ -674,13 +935,17 @@ class ExposureItem {
         'scope': scope,
         'spa': spa,
         'allow_upload': allowUpload,
+        'overwrite_upload': overwriteUpload,
         if (pinCode != null && pinCode!.isNotEmpty) 'pin_code': pinCode,
         if (maxDownloads != null) 'max_downloads': maxDownloads,
+        if (maxUploads != null) 'max_uploads': maxUploads,
         'created_at_ms': createdAtMs,
         if (expiresAtMs != null) 'expires_at_ms': expiresAtMs,
         'hit_count': hitCount,
         'download_count': downloadCount,
+        'upload_count': uploadCount,
         'bytes_sent': bytesSent,
+        'bytes_received': bytesReceived,
         if (lastAccessAtMs != null) 'last_access_at_ms': lastAccessAtMs,
       };
 
@@ -695,16 +960,20 @@ class ExposureItem {
       scope: (m['scope'] ?? 'auto').toString(),
       spa: m['spa'] == true,
       allowUpload: m['allow_upload'] == true,
+      overwriteUpload: m['overwrite_upload'] == true,
       pinCode: (m['pin_code'] ?? '').toString().isEmpty
           ? null
           : m['pin_code'].toString(),
       maxDownloads: int.tryParse('${m['max_downloads'] ?? ''}'),
+      maxUploads: int.tryParse('${m['max_uploads'] ?? ''}'),
       createdAtMs: int.tryParse('${m['created_at_ms'] ?? 0}') ?? 0,
       expiresAtMs: int.tryParse('${m['expires_at_ms'] ?? ''}'),
     );
     item.hitCount = int.tryParse('${m['hit_count'] ?? 0}') ?? 0;
     item.downloadCount = int.tryParse('${m['download_count'] ?? 0}') ?? 0;
+    item.uploadCount = int.tryParse('${m['upload_count'] ?? 0}') ?? 0;
     item.bytesSent = int.tryParse('${m['bytes_sent'] ?? 0}') ?? 0;
+    item.bytesReceived = int.tryParse('${m['bytes_received'] ?? 0}') ?? 0;
     item.lastAccessAtMs = int.tryParse('${m['last_access_at_ms'] ?? ''}');
     return item;
   }
@@ -716,16 +985,26 @@ class ExposureItem {
   bool get isDownloadExhausted =>
       maxDownloads != null && maxDownloads! > 0 && downloadCount >= maxDownloads!;
 
+  bool get isUploadExhausted =>
+      maxUploads != null && maxUploads! > 0 && uploadCount >= maxUploads!;
+
   int? get remainingDownloads {
     if (maxDownloads == null || maxDownloads! <= 0) return null;
     final rem = maxDownloads! - downloadCount;
     return rem < 0 ? 0 : rem;
   }
 
+  int? get remainingUploads {
+    if (maxUploads == null || maxUploads! <= 0) return null;
+    final rem = maxUploads! - uploadCount;
+    return rem < 0 ? 0 : rem;
+  }
+
   bool get isExpired =>
       (expiresAtMs != null &&
           DateTime.now().millisecondsSinceEpoch >= expiresAtMs!) ||
-      isDownloadExhausted;
+      isDownloadExhausted ||
+      isUploadExhausted;
 
   int? get remainingSeconds {
     if (expiresAtMs == null) return null;
@@ -741,6 +1020,11 @@ class ExposureManager {
   final Map<String, ExposureItem> _items = {};
   Timer? _sweepTimer;
   String? _hydratedStatePath;
+  UndoStore? _undoStore;
+
+  void attachUndoStore(UndoStore? store) {
+    _undoStore = store;
+  }
 
   TailscaleRuntimeStatus? _cachedTsStatus;
   int _cachedTsAtMs = 0;
@@ -1227,16 +1511,28 @@ class ExposureManager {
       loopbackUrl,
     ];
 
+    final transferGuide = _buildTransferGuide(
+      item: item,
+      primaryUrl: primaryUrl,
+      directMediaUrl: directMediaUrl,
+    );
+
+    final targetExists = (item.kind == 'file' || item.kind == 'folder')
+        ? (await PrivFs.stat(item.target)).exists
+        : true;
+
     return {
       'id': item.id,
       'kind': item.kind,
       'target_is_dir': item.targetIsDirectory,
+      'target_exists': targetExists,
       'label': item.label,
       'target': item.target,
       if (item.targetPort != null) 'port': item.targetPort,
       'scope': item.scope,
       'spa': item.spa,
       'allow_upload': item.allowUpload,
+      'overwrite_upload': item.overwriteUpload,
       'has_pin': item.hasPin,
       if (item.hasPin) 'pin_code': item.pinCode,
       if (item.maxDownloads != null && item.maxDownloads! > 0) ...{
@@ -1244,23 +1540,95 @@ class ExposureManager {
         'download_count': item.downloadCount,
         'remaining_downloads': item.remainingDownloads,
       },
+      if (item.maxUploads != null && item.maxUploads! > 0) ...{
+        'max_uploads': item.maxUploads,
+        'remaining_uploads': item.remainingUploads,
+      },
       'primary_url': primaryUrl,
       'qr_svg': generateQrSvg(primaryUrl),
       if (directMediaUrl != null) 'direct_file_url': directMediaUrl,
+      if (transferGuide.isNotEmpty) 'transfer_guide': transferGuide,
       'public_urls': publicUrls,
       'tailscale_urls': tailscaleUrls,
       'lan_urls': lanUrls,
       'loopback_url': loopbackUrl,
       'all_urls': allUrls,
       'hit_count': item.hitCount,
+      'upload_count': item.uploadCount,
       'bytes_sent': item.bytesSent,
       'bytes_sent_human': _formatHumanBytes(item.bytesSent),
+      'bytes_received': item.bytesReceived,
+      'bytes_received_human': _formatHumanBytes(item.bytesReceived),
       'created_at_ms': item.createdAtMs,
       'expires_at_ms': item.expiresAtMs,
       'remaining_seconds': item.remainingSeconds,
       if (item.cloudflaredError.isNotEmpty)
         'tunnel_note': item.cloudflaredError,
     };
+  }
+
+  Map<String, dynamic> _buildTransferGuide({
+    required ExposureItem item,
+    required String primaryUrl,
+    required String? directMediaUrl,
+  }) {
+    if (item.kind != 'file' && item.kind != 'folder') {
+      return const {};
+    }
+    final cleanShareBase = primaryUrl.endsWith('/')
+        ? primaryUrl.substring(0, primaryUrl.length - 1)
+        : primaryUrl;
+    final pinQ =
+        item.hasPin ? 'pin=${Uri.encodeQueryComponent(item.pinCode!)}' : '';
+    String withPin(String url, {bool hasExistingQuery = false}) {
+      if (pinQ.isEmpty) return url;
+      return '$url${hasExistingQuery ? '&' : '?'}$pinQ';
+    }
+
+    final guide = <String, dynamic>{};
+    if (item.kind == 'file') {
+      final fileName = p.basename(item.target);
+      final rawDl = directMediaUrl ??
+          '$cleanShareBase/${Uri.encodeComponent(fileName)}?raw=1';
+      final dlUrl = withPin(rawDl, hasExistingQuery: rawDl.contains('?'));
+      guide['download_url'] = dlUrl;
+      guide['curl_download'] = 'curl -fL "$dlUrl" -o "$fileName"';
+      if (item.allowUpload) {
+        final putUrl =
+            withPin('$cleanShareBase/${Uri.encodeComponent(fileName)}');
+        final postUrl = withPin(cleanShareBase);
+        guide['upload_put_url'] = putUrl;
+        guide['upload_post_url'] = postUrl;
+        guide['curl_upload_put'] = 'curl -fL -T "./$fileName" "$putUrl"';
+        guide['curl_upload_form'] =
+            'curl -fL -F "file=@./$fileName" "$postUrl"';
+        guide['chunked_upload_note'] =
+            'For files >95MB over Cloudflare Tunnel, send <=80MB slices: '
+            'first slice PUT "$putUrl${putUrl.contains("?") ? "&" : "?"}more=1", '
+            'middle slices PUT with append=1&more=1, final slice PUT with append=1.';
+      }
+    } else if (item.kind == 'folder') {
+      guide['download_url_template'] =
+          withPin('$cleanShareBase/<relative_path>?raw=1', hasExistingQuery: true);
+      guide['download_zip_url'] =
+          withPin('$cleanShareBase/?zip=1', hasExistingQuery: true);
+      guide['curl_download_example'] =
+          'curl -fL "${withPin("$cleanShareBase/example.bin?raw=1", hasExistingQuery: true)}" -o "example.bin"';
+      if (item.allowUpload) {
+        final putTpl = withPin('$cleanShareBase/<filename_or_subpath>');
+        final putEx = withPin('$cleanShareBase/example.bin');
+        final postUrl = withPin('$cleanShareBase/');
+        guide['upload_put_url_template'] = putTpl;
+        guide['upload_post_url'] = postUrl;
+        guide['curl_upload_put'] = 'curl -fL -T "./example.bin" "$putEx"';
+        guide['curl_upload_form'] =
+            'curl -fL -F "file=@./example.bin" "$postUrl"';
+        guide['chunked_upload_note'] =
+            'For files >95MB over Cloudflare Tunnel, send <=80MB slices: '
+            'first slice PUT with overwrite=1&more=1, middle slices PUT with append=1&more=1, final slice PUT with append=1.';
+      }
+    }
+    return guide;
   }
 
   Future<Map<String, dynamic>> openExposure({
@@ -1273,8 +1641,10 @@ class ExposureManager {
     int? ttlMinutes,
     bool spa = false,
     bool allowUpload = false,
+    bool overwriteUpload = false,
     String? pinCode,
     int? maxDownloads,
+    int? maxUploads,
     bool validateWithPolicy = true,
   }) async {
     _ensureHydrated();
@@ -1298,6 +1668,8 @@ class ExposureManager {
     }
     final effMaxDl =
         (maxDownloads != null && maxDownloads > 0) ? maxDownloads.clamp(1, 100000) : null;
+    final effMaxUp =
+        (maxUploads != null && maxUploads > 0) ? maxUploads.clamp(1, 100000) : null;
 
     final reqMode = mode.trim().toLowerCase();
     final effTtl = ttlMinutes ?? defaultTtlMinutesInSaved(saved);
@@ -1334,48 +1706,76 @@ class ExposureManager {
       final policy = getEffectivePolicy(config);
       final checkedPath = normalizePath(rawPath, policy.effectiveRoots);
       if (validateWithPolicy) {
+        if (allowUpload && policy.readOnly) {
+          throw FileSystemException('当前入口处于只读模式，禁止开启文件上传接收权限。', checkedPath);
+        }
         final deny = checkAccess(checkedPath, config);
         if (deny != null) throw FileSystemException(deny, checkedPath);
-      } else if (_isSensitiveShareFile(checkedPath, config: config)) {
-        throw FileSystemException('出于安全保护，禁止直接外链分享敏感密钥或系统配置文件', checkedPath);
+      }
+      if (_isSensitiveShareFile(checkedPath, config: config)) {
+        throw FileSystemException('出于安全保护，禁止直接外链分享或上传覆盖敏感密钥与系统配置文件', checkedPath);
       }
       final st = await PrivFs.stat(checkedPath);
       if (!st.exists) {
-        throw FileSystemException('找不到目标文件或文件夹', checkedPath);
-      }
-      resolvedTarget = checkedPath;
-      targetIsDir = st.isDirectory;
-
-      if (st.isDirectory) {
-        final hasIndex =
-            (await PrivFs.stat(p.join(checkedPath, 'index.html'))).isFile;
-        if (reqMode == 'folder') {
-          kind = 'folder';
-        } else if (reqMode == 'site' || (reqMode == 'dir' && (spa || hasIndex))) {
-          kind = 'site';
-        } else if (reqMode == 'dir') {
-          kind = 'folder';
-        } else {
-          // auto: directory with index.html -> static website, otherwise folder explorer
-          kind = (spa || hasIndex) ? 'site' : 'folder';
+        if (!allowUpload) {
+          throw FileSystemException('找不到目标文件或文件夹', checkedPath);
         }
-        defaultLabel = kind == 'site'
-            ? '静态网站 ${p.basename(checkedPath)}'
-            : '文件夹 ${p.basename(checkedPath)}';
-      } else {
-        final ext = p.extension(checkedPath).toLowerCase();
-        final isHtmlFile = ext == '.html' || ext == '.htm';
-        if (reqMode == 'site' || (reqMode == 'auto' && isHtmlFile)) {
-          kind = 'site';
-          defaultLabel = '静态网页 ${p.basename(checkedPath)}';
+        final looksLikeDir = reqMode == 'folder' ||
+            reqMode == 'dir' ||
+            rawPath.endsWith('/') ||
+            rawPath.endsWith(r'\') ||
+            (reqMode == 'auto' && p.extension(checkedPath).isEmpty);
+        if (looksLikeDir) {
+          await _ensureShareDirectory(checkedPath);
+          resolvedTarget = checkedPath;
+          targetIsDir = true;
+          kind = 'folder';
+          defaultLabel = '文件夹 ${p.basename(checkedPath)}';
         } else {
+          await _ensureShareDirectory(p.dirname(checkedPath));
+          resolvedTarget = checkedPath;
+          targetIsDir = false;
           kind = 'file';
           defaultLabel = p.basename(checkedPath);
+        }
+      } else {
+        resolvedTarget = checkedPath;
+        targetIsDir = st.isDirectory;
+
+        if (st.isDirectory) {
+          final hasIndex =
+              (await PrivFs.stat(p.join(checkedPath, 'index.html'))).isFile;
+          if (reqMode == 'folder') {
+            kind = 'folder';
+          } else if (reqMode == 'site' || (reqMode == 'dir' && (spa || hasIndex))) {
+            kind = 'site';
+          } else if (reqMode == 'dir') {
+            kind = 'folder';
+          } else {
+            // auto: if allowUpload is requested without spa, prefer folder explorer so uploads work!
+            kind = (!spa && allowUpload)
+                ? 'folder'
+                : ((spa || hasIndex) ? 'site' : 'folder');
+          }
+          defaultLabel = kind == 'site'
+              ? '静态网站 ${p.basename(checkedPath)}'
+              : '文件夹 ${p.basename(checkedPath)}';
+        } else {
+          final ext = p.extension(checkedPath).toLowerCase();
+          final isHtmlFile = ext == '.html' || ext == '.htm';
+          if (reqMode == 'site' || (reqMode == 'auto' && isHtmlFile && !allowUpload)) {
+            kind = 'site';
+            defaultLabel = '静态网页 ${p.basename(checkedPath)}';
+          } else {
+            kind = 'file';
+            defaultLabel = p.basename(checkedPath);
+          }
         }
       }
     }
 
     final id = _generateShareId();
+    final effAllowUpload = (kind == 'folder' || kind == 'file') && allowUpload;
     final item = ExposureItem(
       id: id,
       kind: kind,
@@ -1386,9 +1786,11 @@ class ExposureManager {
           (label != null && label.trim().isNotEmpty) ? label.trim() : defaultLabel,
       scope: effectiveScope,
       spa: spa,
-      allowUpload: kind == 'folder' && allowUpload,
+      allowUpload: effAllowUpload,
+      overwriteUpload: overwriteUpload || kind == 'file',
       pinCode: cleanPin.isEmpty ? null : cleanPin,
       maxDownloads: effMaxDl,
+      maxUploads: effMaxUp,
       createdAtMs: nowMs,
       expiresAtMs: expMs,
     );
@@ -1580,20 +1982,25 @@ class ExposureManager {
       return Response.notFound('Share ID missing.');
     }
 
+    if (req.method == 'OPTIONS') {
+      return Response.ok('', headers: _shareCorsHeaders);
+    }
+
     final id = segments[1];
     final item = _items[id];
     if (item == null || item.isExpired) {
       if (item != null && item.isExpired) {
-        unawaited(
-          closeExposure(
-            id,
-            reason: item.isDownloadExhausted ? 'max_downloads' : 'expired',
-          ),
-        );
+        final reason = item.isDownloadExhausted
+            ? 'max_downloads'
+            : (item.isUploadExhausted ? 'max_uploads' : 'expired');
+        unawaited(closeExposure(id, reason: reason));
       }
       return Response.notFound(
         _renderExpiredHtml(),
-        headers: const {'content-type': 'text/html; charset=utf-8'},
+        headers: const {
+          'content-type': 'text/html; charset=utf-8',
+          'access-control-allow-origin': '*',
+        },
       );
     }
 
@@ -1695,8 +2102,18 @@ class ExposureManager {
       return res.change(headers: {'set-cookie': setPinCookieHeader});
     }
 
+    final isUploadRequest = req.method == 'PUT' ||
+        (req.method == 'POST' && req.url.queryParameters['__pin_unlock'] != '1');
+    if (isUploadRequest && (item.kind == 'file' || item.kind == 'folder')) {
+      return attachPinCookie(
+        await _handleShareUpload(req, item, subSegments, config: config),
+      );
+    }
+
     if (item.kind == 'file') {
-      return attachPinCookie(await _serveSingleFile(req, item, subSegments));
+      return attachPinCookie(
+        await _serveSingleFile(req, item, subSegments, config: config),
+      );
     }
     if (item.kind == 'folder') {
       final rawReqPath = req.requestedUri.path;
@@ -1752,17 +2169,35 @@ class ExposureManager {
   }
 
   /// Mode 1: Single File Share -> Rich Unified Single-File Preview Card
+  /// (or Pending Single-File Upload Dropzone when `allowUpload == true` and target file is not created yet)
   Future<Response> _serveSingleFile(
     Request req,
     ExposureItem item,
-    List<String> subSegments,
-  ) async {
+    List<String> subSegments, {
+    ServerConfig? config,
+  }) async {
     final fileName = p.basename(item.target);
     final forceDownload = req.url.queryParameters['download'] == '1';
     final wantRaw = req.url.queryParameters['raw'] == '1' ||
         forceDownload ||
         subSegments.isNotEmpty ||
         !(req.headers['accept'] ?? '').contains('text/html');
+
+    final st = await PrivFs.stat(item.target);
+    if (!st.isFile) {
+      if (item.allowUpload && !wantRaw) {
+        return _renderPendingSingleFileUploadPage(item, fileName, config: config);
+      }
+      return Response.notFound(
+        item.allowUpload
+            ? 'Target file "$fileName" has not been uploaded yet. Send HTTP PUT or POST to upload binary bytes.'
+            : 'File not found.',
+        headers: const {
+          'content-type': 'text/plain; charset=utf-8',
+          'access-control-allow-origin': '*',
+        },
+      );
+    }
 
     if (!wantRaw) {
       final rawHref =
@@ -1776,6 +2211,7 @@ class ExposureManager {
         rawHref: rawHref,
         dlHref: dlHref,
         backToFolderHref: null,
+        config: config,
       );
     }
 
@@ -1791,6 +2227,547 @@ class ExposureManager {
       item,
       item.target,
       forceDownload: forceDownload,
+    );
+  }
+
+  Response _uploadJsonResponse(int statusCode, Map<String, dynamic> payload,
+      {Map<String, String>? extraHeaders}) {
+    return Response(
+      statusCode,
+      body: jsonEncode(payload),
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        ..._shareCorsHeaders,
+        if (extraHeaders != null) ...extraHeaders,
+      },
+    );
+  }
+
+  /// Unified Out-of-Band Binary Upload Engine for `/share/<id>`:
+  /// Supports `PUT` raw stream, `POST multipart/form-data` (streaming boundary parser),
+  /// `POST` raw stream (`?filename=` / `X-Upload-Filename`), and `?append=1` / `X-Upload-Offset`
+  /// chunked uploads for both `'folder'` and `'file'` share modes.
+  Future<Response> _handleShareUpload(
+    Request req,
+    ExposureItem item,
+    List<String> subSegments, {
+    required ServerConfig config,
+  }) async {
+    if (!item.allowUpload) {
+      return _uploadJsonResponse(403, {
+        'ok': false,
+        'error':
+            '该分享链接未开启上传接收权限 (allow_upload=false)。请使用 allow_upload=true 打开分享。',
+      });
+    }
+    if (getEffectivePolicy(config).readOnly) {
+      return _uploadJsonResponse(403, {
+        'ok': false,
+        'error': '当前服务入口处于只读模式，拒绝文件写入。',
+      });
+    }
+    if (item.isUploadExhausted) {
+      unawaited(closeExposure(item.id, reason: 'max_uploads'));
+      return _uploadJsonResponse(410, {
+        'ok': false,
+        'error': '该分享已达到最大上传次数上限并自动关闭。',
+      });
+    }
+
+    final isAppend = req.url.queryParameters['append'] == '1' ||
+        req.url.queryParameters['append'] == 'true' ||
+        req.headers['x-upload-append'] == '1';
+    final hasMoreChunks = req.url.queryParameters['more'] == '1' ||
+        req.url.queryParameters['more'] == 'true' ||
+        req.headers['x-upload-more'] == '1';
+    final expectedOffset = int.tryParse(
+      req.url.queryParameters['offset'] ??
+          req.headers['x-upload-offset'] ??
+          '',
+    );
+    final expectedSha256 = (req.url.queryParameters['sha256'] ??
+            req.headers['x-expected-sha256'] ??
+            '')
+        .trim()
+        .toLowerCase();
+
+    bool resolveShouldOverwrite() {
+      if (item.kind == 'file') return true;
+      final qOw = (req.url.queryParameters['overwrite'] ??
+              req.headers['x-upload-overwrite'] ??
+              '')
+          .trim()
+          .toLowerCase();
+      if (qOw == '0' || qOw == 'false') return false;
+      if (qOw == '1' || qOw == 'true') return true;
+      if (req.method == 'PUT' || item.overwriteUpload) return true;
+      return false;
+    }
+
+    Future<String> resolveUploadDestination(String? explicitLeafName) async {
+      if (item.kind == 'file') {
+        if (_isSensitiveShareFile(item.target, config: config)) {
+          throw const FileSystemException('禁止上传覆盖敏感配置文件或密钥路径');
+        }
+        return item.target;
+      }
+
+      final cleanSub = subSegments
+          .map((s) => Uri.decodeComponent(s).trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      List<String> targetParts;
+      if (explicitLeafName != null && explicitLeafName.trim().isNotEmpty) {
+        final decodedName = (() {
+          try {
+            return Uri.decodeComponent(explicitLeafName.trim());
+          } catch (_) {
+            return explicitLeafName.trim();
+          }
+        })();
+        if (decodedName == '..' ||
+            decodedName.contains('../') ||
+            decodedName.contains(r'..\') ||
+            decodedName.endsWith('/..') ||
+            decodedName.endsWith(r'\..')) {
+          throw const FileSystemException('禁止上传包含 .. 的越界路径');
+        }
+        final leaf = p.basename(decodedName).trim();
+        if (leaf.isEmpty || leaf == '.' || leaf == '..' || leaf.startsWith('.')) {
+          throw const FormatException('无效的上传文件名（不能为空或以点号开头）');
+        }
+        targetParts = [...cleanSub, leaf];
+      } else {
+        if (cleanSub.isEmpty) {
+          throw const FormatException(
+            '缺少目标文件名：请使用 PUT /share/<id>/<filename>、?filename=<name> 或 multipart/form-data 上传。',
+          );
+        }
+        final leaf = cleanSub.last;
+        if (leaf.isEmpty || leaf == '.' || leaf == '..' || leaf.startsWith('.')) {
+          throw const FormatException('无效的上传目标文件名');
+        }
+        targetParts = cleanSub;
+      }
+
+      final safeDest = await _resolveSafeSharePath(
+        item.target,
+        targetParts,
+        config: config,
+        allowMissingLeaf: true,
+      );
+      if (safeDest == null || _isSensitiveShareFile(safeDest, config: config)) {
+        throw const FileSystemException('禁止上传至越界路径或敏感系统文件');
+      }
+      if ((await PrivFs.stat(safeDest)).isDirectory) {
+        throw const FileSystemException('上传目标路径已存在同名文件夹，请指定具体文件名');
+      }
+
+      if (!isAppend && !resolveShouldOverwrite()) {
+        if ((await PrivFs.stat(safeDest)).exists) {
+          final leaf = p.basename(safeDest);
+          final stem = p.basenameWithoutExtension(leaf);
+          final ext = p.extension(leaf);
+          final stamp = DateTime.now().millisecondsSinceEpoch % 100000;
+          return p.join(p.dirname(safeDest), '${stem}_$stamp$ext');
+        }
+      }
+      return safeDest;
+    }
+
+    Future<_MultipartFileSink> openUploadSink(
+      String? explicitLeafName, {
+      int? expectedLen,
+    }) async {
+      if (item.isUploadExhausted) {
+        throw StateError('已达到最大上传次数上限');
+      }
+      final finalDest = await resolveUploadDestination(explicitLeafName);
+      await _ensureShareDirectory(p.dirname(finalDest));
+      final useBridge = await PrivFs.useBridgeForPath(finalDest);
+
+      if (isAppend) {
+        final curStat = await PrivFs.stat(finalDest);
+        final curLen = curStat.isFile ? curStat.size : 0;
+        if (expectedOffset != null && curLen != expectedOffset) {
+          throw ArgumentError(
+            'OFFSET_MISMATCH:$expectedOffset:$curLen',
+          );
+        }
+        if (useBridge) {
+          final chunkTmp = p.join(
+            Directory.systemTemp.path,
+            'mcp_app_${randomHex(8)}.part',
+          );
+          final sink = File(chunkTmp).openWrite();
+          var chunkBytes = 0;
+          return _MultipartFileSink(
+            onChunk: (chunk) async {
+              chunkBytes += chunk.length;
+              sink.add(chunk);
+            },
+            onFinish: () async {
+              await sink.flush();
+              await sink.close();
+              try {
+                final existing = curStat.isFile
+                    ? await PrivFs.readBytes(finalDest)
+                    : Uint8List(0);
+                final added = await File(chunkTmp).readAsBytes();
+                final merged = Uint8List(existing.length + added.length);
+                merged.setRange(0, existing.length, existing);
+                merged.setRange(existing.length, merged.length, added);
+                await PrivFs.writeBytes(finalDest, merged, createParents: true);
+              } finally {
+                try {
+                  File(chunkTmp).deleteSync();
+                } catch (_) {}
+              }
+              return _finalizeCompletedUpload(
+                item: item,
+                finalDest: finalDest,
+                deltaBytes: chunkBytes,
+                totalBytes: curLen + chunkBytes,
+                computedSha256: null,
+                expectedSha256: hasMoreChunks ? '' : expectedSha256,
+                hasMoreChunks: hasMoreChunks,
+                isAppend: true,
+              );
+            },
+            onAbort: () async {
+              try {
+                await sink.close();
+              } catch (_) {}
+              try {
+                File(chunkTmp).deleteSync();
+              } catch (_) {}
+            },
+          );
+        } else {
+          final sink = File(finalDest).openWrite(mode: FileMode.append);
+          var chunkBytes = 0;
+          return _MultipartFileSink(
+            onChunk: (chunk) async {
+              chunkBytes += chunk.length;
+              sink.add(chunk);
+            },
+            onFinish: () async {
+              await sink.flush();
+              await sink.close();
+              if (expectedLen != null &&
+                  expectedLen >= 0 &&
+                  chunkBytes != expectedLen) {
+                throw FormatException(
+                  '分片流中断：预期 $expectedLen 字节，实际接收 $chunkBytes 字节',
+                );
+              }
+              final totalLen = File(finalDest).lengthSync();
+              return _finalizeCompletedUpload(
+                item: item,
+                finalDest: finalDest,
+                deltaBytes: chunkBytes,
+                totalBytes: totalLen,
+                computedSha256: null,
+                expectedSha256: hasMoreChunks ? '' : expectedSha256,
+                hasMoreChunks: hasMoreChunks,
+                isAppend: true,
+              );
+            },
+            onAbort: () async {
+              try {
+                await sink.close();
+              } catch (_) {}
+            },
+          );
+        }
+      }
+
+      // Atomic `.part` upload with streaming SHA-256 verification
+      final partPath = useBridge
+          ? p.join(Directory.systemTemp.path, 'mcp_up_${randomHex(8)}.part')
+          : p.join(p.dirname(finalDest), '.mcp_up_${randomHex(8)}.part');
+      final outSink = File(partPath).openWrite();
+      final digestOut = _SingleDigestSink();
+      final hashSink = sha256.startChunkedConversion(digestOut);
+      var writtenBytes = 0;
+
+      Future<void> cleanupPart() async {
+        try {
+          await outSink.close();
+        } catch (_) {}
+        try {
+          final pf = File(partPath);
+          if (pf.existsSync()) pf.deleteSync();
+        } catch (_) {}
+      }
+
+      return _MultipartFileSink(
+        onChunk: (chunk) async {
+          writtenBytes += chunk.length;
+          hashSink.add(chunk);
+          outSink.add(chunk);
+        },
+        onFinish: () async {
+          await outSink.flush();
+          await outSink.close();
+          hashSink.close();
+          final actualSha = digestOut.value?.toString() ?? '';
+
+          if (expectedLen != null &&
+              expectedLen >= 0 &&
+              writtenBytes != expectedLen) {
+            await cleanupPart();
+            throw FormatException(
+              '上传流未完整结束：预期 $expectedLen 字节，实际接收 $writtenBytes 字节',
+            );
+          }
+          if (!hasMoreChunks &&
+              expectedSha256.isNotEmpty &&
+              !constantTimeEquals(actualSha.toLowerCase(), expectedSha256)) {
+            await cleanupPart();
+            throw StateError('SHA256_MISMATCH:$expectedSha256:$actualSha');
+          }
+
+          if (_undoStore != null && (await PrivFs.stat(finalDest)).isFile) {
+            try {
+              await _undoStore!.savePath(finalDest, 'share_upload(${item.id})');
+            } catch (_) {}
+          }
+
+          await PrivFs.move(partPath, finalDest, overwrite: true);
+          return _finalizeCompletedUpload(
+            item: item,
+            finalDest: finalDest,
+            deltaBytes: writtenBytes,
+            totalBytes: writtenBytes,
+            computedSha256: actualSha,
+            expectedSha256: '',
+            hasMoreChunks: hasMoreChunks,
+            isAppend: false,
+          );
+        },
+        onAbort: cleanupPart,
+      );
+    }
+
+    try {
+      final contentType = (req.headers['content-type'] ?? '').trim();
+      if (req.method == 'POST' &&
+          contentType.toLowerCase().startsWith('multipart/form-data')) {
+        final boundary = _extractMultipartBoundary(contentType);
+        if (boundary == null) {
+          return _uploadJsonResponse(400, {
+            'ok': false,
+            'error': 'multipart/form-data 缺少 boundary 参数',
+          });
+        }
+        final uploadedFiles = await _streamMultipartUploads(
+          bodyStream: req.read(),
+          boundary: boundary,
+          openFileSink: (partName) => openUploadSink(partName),
+        );
+        if (uploadedFiles.isEmpty) {
+          return _uploadJsonResponse(400, {
+            'ok': false,
+            'error': '未在 multipart 表单中找到包含文件名的文件字段 (例如 -F "file=@demo.bin")',
+          });
+        }
+        final first = uploadedFiles.first;
+        return _uploadJsonResponse(
+          200,
+          {
+            'ok': true,
+            'filename': first['filename'],
+            'saved_path': first['saved_path'],
+            'relative_path': first['relative_path'],
+            'bytes': first['bytes'],
+            'sha256': first['sha256'],
+            if (uploadedFiles.length > 1) 'files': uploadedFiles,
+            if (item.remainingUploads != null)
+              'remaining_uploads': item.remainingUploads,
+          },
+          extraHeaders: {
+            'x-saved-filename': Uri.encodeComponent('${first['filename']}'),
+            if ((first['sha256'] ?? '').toString().isNotEmpty)
+              'x-sha256': '${first['sha256']}',
+          },
+        );
+      }
+
+      // Raw binary stream upload (PUT or raw POST)
+      final rawName = req.url.queryParameters['filename'] ??
+          req.headers['x-upload-filename'];
+      final sink = await openUploadSink(
+        rawName,
+        expectedLen: req.contentLength,
+      );
+      try {
+        await for (final chunk in req.read()) {
+          if (chunk.isNotEmpty) {
+            await sink.onChunk(
+              chunk is Uint8List ? chunk : Uint8List.fromList(chunk),
+            );
+          }
+        }
+        final res = await sink.onFinish();
+        return _uploadJsonResponse(
+          200,
+          {
+            'ok': true,
+            ...res,
+            if (item.remainingUploads != null)
+              'remaining_uploads': item.remainingUploads,
+          },
+          extraHeaders: {
+            'x-saved-filename': Uri.encodeComponent('${res['filename']}'),
+            if ((res['sha256'] ?? '').toString().isNotEmpty)
+              'x-sha256': '${res['sha256']}',
+          },
+        );
+      } catch (_) {
+        await sink.onAbort();
+        rethrow;
+      }
+    } on ArgumentError catch (e) {
+      final msg = e.message?.toString() ?? '$e';
+      if (msg.startsWith('OFFSET_MISMATCH:')) {
+        final parts = msg.split(':');
+        return _uploadJsonResponse(409, {
+          'ok': false,
+          'error': '分片偏移量不匹配',
+          'expected_offset': int.tryParse(parts[1]),
+          'current_bytes': int.tryParse(parts[2]),
+        });
+      }
+      return _uploadJsonResponse(400, {'ok': false, 'error': msg});
+    } on FormatException catch (e) {
+      return _uploadJsonResponse(400, {'ok': false, 'error': e.message});
+    } on FileSystemException catch (e) {
+      return _uploadJsonResponse(403, {'ok': false, 'error': e.message});
+    } on StateError catch (e) {
+      final msg = e.message;
+      if (msg.startsWith('SHA256_MISMATCH:')) {
+        final parts = msg.split(':');
+        return _uploadJsonResponse(422, {
+          'ok': false,
+          'error': 'SHA-256 校验不一致，已丢弃损坏文件',
+          'expected_sha256': parts[1],
+          'actual_sha256': parts[2],
+        });
+      }
+      return _uploadJsonResponse(410, {'ok': false, 'error': msg});
+    } catch (e) {
+      return _uploadJsonResponse(500, {'ok': false, 'error': '上传处理失败: $e'});
+    }
+  }
+
+  Future<Map<String, dynamic>> _finalizeCompletedUpload({
+    required ExposureItem item,
+    required String finalDest,
+    required int deltaBytes,
+    required int totalBytes,
+    required String? computedSha256,
+    required String expectedSha256,
+    required bool hasMoreChunks,
+    required bool isAppend,
+  }) async {
+    var finalSha = computedSha256 ?? '';
+    if (!hasMoreChunks && finalSha.isEmpty) {
+      final digestOut = _SingleDigestSink();
+      final hashSink = sha256.startChunkedConversion(digestOut);
+      final readStream = await PrivFs.openRead(finalDest);
+      await for (final blk in readStream) {
+        hashSink.add(blk);
+      }
+      hashSink.close();
+      finalSha = digestOut.value?.toString() ?? '';
+      if (expectedSha256.isNotEmpty &&
+          !constantTimeEquals(finalSha.toLowerCase(), expectedSha256)) {
+        try {
+          await PrivFs.delete(finalDest);
+        } catch (_) {}
+        throw StateError('SHA256_MISMATCH:$expectedSha256:$finalSha');
+      }
+    }
+
+    item.bytesReceived += deltaBytes;
+    if (!hasMoreChunks) {
+      item.uploadCount++;
+      if (item.isUploadExhausted) {
+        Future<void>.delayed(const Duration(milliseconds: 600), () {
+          if (_items.containsKey(item.id) && item.isUploadExhausted) {
+            unawaited(closeExposure(item.id, reason: 'max_uploads'));
+          }
+        });
+      }
+      StructuredEventBus.instance.emit({
+        'kind': 'ok',
+        'badge': '快传收件',
+        'level': 'INFO',
+        'summary':
+            '收到上传文件 ${p.basename(finalDest)} (${_formatHumanBytes(totalBytes)}) -> [${item.label}]',
+      });
+    }
+    _persistState();
+
+    final relPath = item.kind == 'folder'
+        ? p.relative(finalDest, from: item.target).replaceAll(r'\', '/')
+        : p.basename(finalDest);
+    return {
+      'filename': p.basename(finalDest),
+      'saved_path': finalDest,
+      'relative_path': relPath,
+      'bytes': totalBytes,
+      'chunk_bytes': deltaBytes,
+      if (finalSha.isNotEmpty) 'sha256': finalSha,
+      'partial': hasMoreChunks,
+      'mode': isAppend ? 'append' : 'atomic',
+    };
+  }
+
+  Response _renderPendingSingleFileUploadPage(
+    ExposureItem item,
+    String targetFileName, {
+    ServerConfig? config,
+  }) {
+    final quotaNote = item.remainingUploads != null
+        ? ' · 剩余可上传 ${item.remainingUploads} 次'
+        : '';
+    final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>${_htmlEscape(item.label)} · 文件上传槽</title>'
+        '<style>${_buildShareCss(config)}</style></head><body class="page-body">'
+        '<div class="shell preview-shell"><div class="head">'
+        '<div class="head-titles">'
+        '<div class="title">${_htmlEscape(item.label)}</div>'
+        '<div class="meta-line">目标文件：${_htmlEscape(targetFileName)}$quotaNote · 支持大文件自动分片上传</div>'
+        '</div><div class="btns">'
+        '<button type="button" class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(location.href)">复制链接</button>'
+        '</div></div>'
+        '<div class="dl-stage" id="dropStage">'
+        '<input type="file" id="upIn" style="display:none" onchange="uploadSingle(this.files)">'
+        '<div class="gate-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>'
+        '<div class="dl-name">等待上传 ${_htmlEscape(targetFileName)}</div>'
+        '<div class="dl-sub" id="upSub">点击下方按钮选择文件，或直接将二进制文件拖拽到此页面</div>'
+        '<button type="button" class="btn pri big" onclick="document.getElementById(\'upIn\').click()">'
+        '<span class="btn-spin" id="upSpin" style="display:none"></span>'
+        '<span id="upTxt">选择文件上传</span></button>'
+        '</div></div>'
+        '<script>'
+        '$_browserChunkedUploadJsHelper'
+        'async function uploadSingle(fl){if(!fl||!fl.length)return;var s=document.getElementById("upSpin"),t=document.getElementById("upTxt"),sub=document.getElementById("upSub");if(s)s.style.display="inline-block";try{var res=await sendFileWithAutoChunk(fl[0],function(pct){if(t)t.textContent="上传中 "+pct+"%...";});if(res&&res.remaining_uploads===0){if(s)s.style.display="none";if(t)t.textContent="✓ 上传已完成";if(sub)sub.textContent="文件已校验落盘（SHA-256: "+((res.sha256||"").slice(0,12))+"…），单次上传通道已自动收起。";return;}location.reload();}catch(e){if(s)s.style.display="none";if(t)t.textContent="选择文件上传";alert("上传失败: "+(e.message||e));}}'
+        'document.body.addEventListener("dragover",function(e){e.preventDefault();});'
+        'document.body.addEventListener("drop",function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files)uploadSingle(e.dataTransfer.files);});'
+        '</script></body></html>';
+    final bytes = utf8.encode(html);
+    item.bytesSent += bytes.length;
+    return Response.ok(
+      bytes,
+      headers: const {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
     );
   }
 
@@ -1813,77 +2790,6 @@ class ExposureManager {
 
     final candStat = await PrivFs.stat(safePath);
     if (candStat.isDirectory) {
-      if (req.method == 'POST' && req.url.queryParameters['__upload'] == '1') {
-        if (!item.allowUpload) {
-          return Response.forbidden(
-            jsonEncode({'ok': false, 'error': '该分享未开启访客上传权限'}),
-            headers: const {'content-type': 'application/json; charset=utf-8'},
-          );
-        }
-        final rawFileName = Uri.decodeComponent(
-          req.url.queryParameters['filename'] ??
-              req.headers['x-upload-filename'] ??
-              '',
-        ).trim();
-        final cleanLeaf = p.basename(rawFileName);
-        if (cleanLeaf.isEmpty ||
-            cleanLeaf == '.' ||
-            cleanLeaf == '..' ||
-            cleanLeaf.startsWith('.')) {
-          return Response(
-            400,
-            body: jsonEncode({'ok': false, 'error': '无效的文件名'}),
-            headers: const {'content-type': 'application/json; charset=utf-8'},
-          );
-        }
-        final uploadDest = await _resolveSafeSharePath(
-          item.target,
-          [...relParts, cleanLeaf],
-          config: config,
-          allowMissingLeaf: true,
-        );
-        if (uploadDest == null ||
-            _isSensitiveShareFile(uploadDest, config: config)) {
-          return Response.forbidden(
-            jsonEncode({'ok': false, 'error': '禁止上传敏感后缀或越界路径文件'}),
-            headers: const {'content-type': 'application/json; charset=utf-8'},
-          );
-        }
-        var finalDest = uploadDest;
-        if (File(finalDest).existsSync()) {
-          final stem = p.basenameWithoutExtension(cleanLeaf);
-          final ext = p.extension(cleanLeaf);
-          final stamp = DateTime.now().millisecondsSinceEpoch % 100000;
-          finalDest = p.join(p.dirname(uploadDest), '${stem}_$stamp$ext');
-        }
-        final outSink = File(finalDest).openWrite();
-        var writtenBytes = 0;
-        try {
-          await for (final chunk in req.read()) {
-            writtenBytes += chunk.length;
-            outSink.add(chunk);
-          }
-          await outSink.flush();
-        } finally {
-          await outSink.close();
-        }
-        _persistState();
-        StructuredEventBus.instance.emit({
-          'kind': 'ok',
-          'badge': '快传收件',
-          'level': 'INFO',
-          'summary':
-              '收到访客上传文件 ${p.basename(finalDest)} (${_formatHumanBytes(writtenBytes)}) -> [${item.label}]',
-        });
-        return Response.ok(
-          jsonEncode({
-            'ok': true,
-            'filename': p.basename(finalDest),
-            'bytes': writtenBytes,
-          }),
-          headers: const {'content-type': 'application/json; charset=utf-8'},
-        );
-      }
       final rawReqPath = req.requestedUri.path;
       if (!rawReqPath.endsWith('/')) {
         final q = req.requestedUri.hasQuery ? '?${req.requestedUri.query}' : '';
@@ -2255,7 +3161,8 @@ class ExposureManager {
             '<span id="upTxt">上传文件</span></button>'
         : '';
     final uploadScript = item.allowUpload
-        ? 'async function uploadFiles(fl){if(!fl||!fl.length)return;var s=document.getElementById("upSpin"),t=document.getElementById("upTxt");if(s)s.style.display="inline-block";for(var i=0;i<fl.length;i++){var f=fl[i];if(t)t.textContent="上传中 ("+(i+1)+"/"+fl.length+")...";var r=await fetch("?__upload=1&filename="+encodeURIComponent(f.name),{method:"POST",body:f});if(!r.ok){var e=await r.text();alert("上传失败: "+e);break;}}location.reload();}'
+        ? '$_browserChunkedUploadJsHelper'
+            'async function uploadFiles(fl){if(!fl||!fl.length)return;var s=document.getElementById("upSpin"),t=document.getElementById("upTxt");if(s)s.style.display="inline-block";try{var last=null;for(var i=0;i<fl.length;i++){var f=fl[i];last=await sendFileWithAutoChunk(f,function(pct){if(t)t.textContent="上传中 ("+(i+1)+"/"+fl.length+" · "+pct+"%)...";});if(last&&last.remaining_uploads===0)break;}if(last&&last.remaining_uploads===0){if(s)s.style.display="none";if(t)t.textContent="✓ 上传已完成 (通道已收起)";return;}location.reload();}catch(e){if(s)s.style.display="none";if(t)t.textContent="上传文件";alert("上传失败: "+(e.message||e));}}'
             'document.body.addEventListener("dragover",function(e){e.preventDefault();});'
             'document.body.addEventListener("drop",function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files)uploadFiles(e.dataTransfer.files);});'
         : '';
@@ -2313,6 +3220,7 @@ class ExposureManager {
     String? nextFileHref,
     String? nextFileName,
     String? siblingPosLabel,
+    ServerConfig? config,
   }) async {
     final fileName = p.basename(filePath);
     final ext = p.extension(fileName).toLowerCase();
@@ -2402,16 +3310,31 @@ class ExposureManager {
     final quotaMeta = item.remainingDownloads != null
         ? ' · 剩余可下载 ${item.remainingDownloads} 次'
         : '';
+    final allowSingleReplace =
+        item.kind == 'file' && item.allowUpload && backToFolderHref == null;
+    final replaceBtnHtml = allowSingleReplace
+        ? '<input type="file" id="repIn" style="display:none" onchange="replaceSingle(this.files)">'
+            '<button type="button" class="btn" onclick="document.getElementById(\'repIn\').click()">'
+            '<span class="btn-spin" id="repSpin" style="display:none"></span>'
+            '<span id="repTxt">上传替换</span></button>'
+        : '';
+    final replaceJs = allowSingleReplace
+        ? '$_browserChunkedUploadJsHelper'
+            'async function replaceSingle(fl){if(!fl||!fl.length)return;var s=document.getElementById("repSpin"),t=document.getElementById("repTxt");if(s)s.style.display="inline-block";try{var res=await sendFileWithAutoChunk(fl[0],function(pct){if(t)t.textContent="上传 "+pct+"%...";});if(res&&res.remaining_uploads===0){if(s)s.style.display="none";if(t)t.textContent="✓ 已替换 (通道已收起)";return;}location.reload();}catch(e){if(s)s.style.display="none";if(t)t.textContent="上传替换";alert("上传失败: "+(e.message||e));}}'
+            'document.body.addEventListener("dragover",function(e){e.preventDefault();});'
+            'document.body.addEventListener("drop",function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files)replaceSingle(e.dataTransfer.files);});'
+        : '';
 
     final html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>${_htmlEscape(displayTitle)} · 在线预览</title>'
-        '<style>${_buildShareCss()}</style></head><body class="page-body">'
+        '<style>${_buildShareCss(config)}</style></head><body class="page-body">'
         '<div class="shell preview-shell">$crumbBar<div class="head">'
         '<div class="head-titles">'
         '<div class="title">${_htmlEscape(displayTitle)}</div>'
-        '<div class="meta-line">${_htmlEscape(fileName)} · $sizeHuman$quotaMeta</div>'
+        '<div class="meta-line">${_htmlEscape(fileName)} · $sizeHuman$quotaMeta${allowSingleReplace ? " · 支持拖拽上传替换" : ""}</div>'
         '</div><div class="btns">$backLink'
+        '$replaceBtnHtml'
         '<button type="button" class="btn" onclick="copyShareUrl(this)">复制链接</button>'
         '<a class="btn" href="$rawHref" target="_blank">原始直链</a>'
         '<a class="btn pri" href="$dlHref">下载文件</a>'
@@ -2421,6 +3344,7 @@ class ExposureManager {
         'setTimeout(hideLoad,3500);'
         'function copyShareUrl(b){if(!navigator.clipboard)return;navigator.clipboard.writeText(location.href).then(function(){var t=b.textContent;b.textContent="已复制链接";setTimeout(function(){b.textContent=t;},1600);});}'
         '$extraCodeJs'
+        '$replaceJs'
         '</script>'
         '$keyNavScript</body></html>';
 
@@ -2823,6 +3747,29 @@ class ExposureManager {
       '</div></body></html>';
 }
 
+const String _browserChunkedUploadJsHelper =
+    'async function sendFileWithAutoChunk(f,onProg){'
+    'var CHUNK=32*1024*1024;'
+    'var base=location.pathname+(location.search?location.search+"&":"?")+"__upload=1&filename="+encodeURIComponent(f.name);'
+    'if(f.size<=48*1024*1024){'
+    'if(onProg)onProg(0);'
+    'var r=await fetch(base,{method:"POST",body:f});'
+    'if(!r.ok){throw new Error(await r.text());}'
+    'if(onProg)onProg(100);return await r.json();'
+    '}'
+    'var off=0,res=null;'
+    'while(off<f.size){'
+    'var end=Math.min(off+CHUNK,f.size);'
+    'var more=end<f.size?"&more=1":"";'
+    'var mode=off===0?"&overwrite=1":"&append=1&offset="+off;'
+    'if(onProg)onProg(Math.floor(off*100/f.size));'
+    'var r=await fetch(base+mode+more,{method:"POST",body:f.slice(off,end)});'
+    'if(!r.ok){throw new Error(await r.text());}'
+    'res=await r.json();off=end;'
+    '}'
+    'if(onProg)onProg(100);return res;'
+    '}';
+
 void registerExposureTools(
   void Function({
     required String name,
@@ -2831,8 +3778,10 @@ void registerExposureTools(
     required ToolAnnotations annotations,
     required ToolHandler handler,
   }) registerTool,
-  ServerConfig config,
-) {
+  ServerConfig config, {
+  UndoStore? undoStore,
+}) {
+  ExposureManager.instance.attachUndoStore(undoStore);
   final cmdAnn = config.relaxedCommandAnnotations
       ? readOnlyAnn
       : const ToolAnnotations(
@@ -2845,9 +3794,12 @@ void registerExposureTools(
   registerTool(
     name: 'manage_expose',
     description:
-        'Share a local single file (streaming video/PDF/APK preview), folder directory explorer (browse subfolders and click files to preview with breadcrumbs & sibling navigation), '
-        'static website / single HTML page (renders directly as a live webpage), or local port (e.g. 3000/5173 with full WebSocket HMR support) via Tailscale, gateway domain, or temporary tunnel. '
-        'Supports optional PIN code and max_downloads quota. Actions: "open", "close", "close_all", "list".',
+        'Share local files/folders/websites/ports OR open a zero-token HTTP binary upload/download channel via Tailscale, gateway domain, or public tunnel. '
+        'Because MCP text tools only carry text, ALWAYS use manage_expose to transfer binary or large files (PDF, images, Office, APK, ZIP, audio/video): '
+        '(1) Download binary from host: action="open", target="<file_or_folder>", then HTTP GET direct_file_url. '
+        '(2) Upload binary to host: action="open", target="<dest_folder_or_dest_file>", allow_upload=true (auto-creates missing folder or single-file slot), '
+        'then HTTP PUT raw bytes or POST multipart/form-data to the pre-filled URLs in transfer_guide. '
+        'Supports optional pin_code, max_downloads, max_uploads (auto-close after N uploads), overwrite_upload, and ?append=1 chunked uploads. Actions: "open", "close", "close_all", "list".',
     annotations: cmdAnn,
     inputSchema: {
       'type': 'object',
@@ -2856,19 +3808,19 @@ void registerExposureTools(
           'type': 'string',
           'enum': ['open', 'close', 'close_all', 'list'],
           'description':
-              '"open" to generate live external links, "close" to stop an active link by id, "close_all" to stop all active links, or "list" to inspect active links.',
+              '"open" to generate live external download/upload links (with ready-to-run curl commands in transfer_guide), "close" to stop an active link by id, "close_all" to stop all active links, or "list" to inspect active links.',
         },
         'target': {
           'type': 'string',
           'description':
-              'For action="open": local file path (e.g. demo.mp4 or page.html), folder path, or local port/URL (e.g. "5173").',
+              'For action="open": local file path (existing file to share, or new/existing destination file path when allow_upload=true), folder path (auto-created when allow_upload=true), or local port/URL (e.g. "5173").',
         },
         'mode': {
           'type': 'string',
           'enum': ['auto', 'file', 'folder', 'site', 'port'],
           'default': 'auto',
           'description':
-              '"file" (single file preview/download), "folder" (directory browser with subfolder navigation -> single file preview), "site" (render single .html or website folder directly as live site), "port" (reverse proxy local port + WebSocket), or "auto".',
+              '"file" (single file preview/download or single-file upload slot), "folder" (directory browser & multi-file upload inbox), "site" (render single .html or website folder directly as live site), "port" (reverse proxy local port + WebSocket), or "auto".',
         },
         'port': {
           'type': 'integer',
@@ -2898,12 +3850,17 @@ void registerExposureTools(
         'pin_code': {
           'type': 'string',
           'description':
-              'Optional 4-16 character access PIN required before viewing or downloading.',
+              'Optional 4-16 character access PIN required for viewing, downloading, or uploading (pass ?pin=<code> or X-Share-Pin header).',
         },
         'max_downloads': {
           'type': 'integer',
           'description':
               'Optional maximum download count (e.g. 1 for burn-after-download) before automatically closing the share link.',
+        },
+        'max_uploads': {
+          'type': 'integer',
+          'description':
+              'Optional maximum uploaded file count (e.g. 1 for burn-after-upload) before automatically closing the share link.',
         },
         'spa': {
           'type': 'boolean',
@@ -2915,7 +3872,13 @@ void registerExposureTools(
           'type': 'boolean',
           'default': false,
           'description':
-              'Set true on folder shares to enable bi-directional visitor drag-and-drop file upload dropzone.',
+              'Set true on folder or single-file shares to accept incoming binary uploads via HTTP PUT (raw bytes), HTTP POST (multipart/form-data or ?filename=), or browser drag-and-drop.',
+        },
+        'overwrite_upload': {
+          'type': 'boolean',
+          'default': false,
+          'description':
+              'When allow_upload=true on a folder, set true so POST uploads overwrite same-name files instead of auto-renaming (HTTP PUT and single-file mode overwrite by default).',
         },
       },
       'required': ['action'],
@@ -2949,8 +3912,12 @@ void registerExposureTools(
         final maxDl = args['max_downloads'] is int
             ? args['max_downloads'] as int
             : int.tryParse('${args['max_downloads'] ?? ''}');
+        final maxUp = args['max_uploads'] is int
+            ? args['max_uploads'] as int
+            : int.tryParse('${args['max_uploads'] ?? ''}');
         final spa = args['spa'] == true;
         final allowUpload = args['allow_upload'] == true;
+        final overwriteUpload = args['overwrite_upload'] == true;
 
         final created = await ExposureManager.instance.openExposure(
           config: config,
@@ -2962,8 +3929,10 @@ void registerExposureTools(
           ttlMinutes: ttl,
           pinCode: pinCode,
           maxDownloads: maxDl,
+          maxUploads: maxUp,
           spa: spa,
           allowUpload: allowUpload,
+          overwriteUpload: overwriteUpload,
           validateWithPolicy: true,
         );
         return const JsonEncoder.withIndent('  ').convert({

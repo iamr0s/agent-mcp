@@ -694,8 +694,10 @@ class _WebConsoleBackend extends ConsoleBackend {
     int? ttlMinutes,
     String? pinCode,
     int? maxDownloads,
+    int? maxUploads,
     bool spa = false,
     bool allowUpload = false,
+    bool overwriteUpload = false,
   }) async {
     final r = await http.post(
       _uri('/exposures/open'),
@@ -711,8 +713,10 @@ class _WebConsoleBackend extends ConsoleBackend {
           'pin_code': pinCode.trim(),
         if (maxDownloads != null && maxDownloads > 0)
           'max_downloads': maxDownloads,
+        if (maxUploads != null && maxUploads > 0) 'max_uploads': maxUploads,
         'spa': spa,
         'allow_upload': allowUpload,
+        'overwrite_upload': overwriteUpload,
       }),
     );
     return _decodeResp(r);

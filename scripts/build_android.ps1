@@ -10,7 +10,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
   if ($verDart -match "agentMcpVersion\s*=\s*'([^']+)'") {
     $Version = $Matches[1]
   } else {
-    $Version = '3.5.7'
+    $Version = '3.5.8'
   }
 }
 $AppDir = Join-Path $RootDir 'apps\agent_mcp_app'

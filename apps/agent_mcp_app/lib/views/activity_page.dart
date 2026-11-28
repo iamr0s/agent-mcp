@@ -80,8 +80,9 @@ String buildHumanSummary(Map<String, dynamic> ev) {
   }
   if (t.endsWith('manage_expose') && a['action'] != null) {
     final act = a['action'].toString();
+    final upTag = a['allow_upload'] == true ? ' (可上传)' : '';
     final tgt = (a['target'] ?? a['port'] ?? a['id'] ?? '').toString();
-    return tgt.isNotEmpty ? '$act -> $tgt' : act;
+    return tgt.isNotEmpty ? '$act$upTag -> $tgt' : '$act$upTag';
   }
   if (t.endsWith('call_sub_mcp') && a['server_name'] != null) {
     return '${a['server_name']} / ${a['tool_name'] ?? ''}';
